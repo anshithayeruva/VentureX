@@ -8,13 +8,13 @@ import {
   Sparkles,
   ArrowLeft,
   CheckCircle2,
-  Globe,
   DollarSign,
-  Cpu,
   Layers,
   Save,
+  ShieldCheck,
 } from "lucide-react";
 import { Badge } from "@/components/Badge";
+import { PortalLayout } from "@/components/PortalLayout";
 import { api, MOCK_INVESTOR_PREFERENCE } from "@/lib/api";
 import { InvestorPreference } from "@/types";
 
@@ -99,287 +99,239 @@ export default function InvestorPreferencesPage() {
   };
 
   return (
-    <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 py-10">
-      {/* Back button */}
-      <Link
-        href="/investor/dashboard"
-        className="inline-flex items-center gap-2 text-xs font-semibold text-zinc-400 hover:text-white transition-colors mb-6"
-      >
-        <ArrowLeft className="w-4 h-4" />
-        Back to Investor Dashboard
-      </Link>
+    <PortalLayout role="INVESTOR" activeItem="preferences" title="Investment Criteria">
+      <div className="max-w-4xl mx-auto space-y-6">
+        {/* Back Link */}
+        <Link
+          href="/investor/dashboard"
+          className="inline-flex items-center gap-1.5 text-xs font-semibold text-[#64748B] hover:text-[#0F172A] transition-colors"
+        >
+          <ArrowLeft className="w-3.5 h-3.5" />
+          Back to Dealflow Dashboard
+        </Link>
 
-      {/* Header */}
-      <div className="border-b border-zinc-800 pb-6 mb-8">
-        <div className="flex items-center gap-2">
-          <Badge variant="success">Investment Mandate</Badge>
-          <span className="text-xs text-zinc-500 font-mono">PUT /api/investors/preferences</span>
-        </div>
-        <h1 className="text-3xl font-extrabold text-white mt-2 tracking-tight">
-          Investor Matching Criteria
-        </h1>
-        <p className="text-sm text-zinc-400 mt-1">
-          Tune your portfolio filters. Venture X matches incoming founder projects with your preferred
-          industries, check size bracket, and stage focus.
-        </p>
-      </div>
-
-      {saveSuccess && (
-        <div className="mb-8 p-4 rounded-2xl bg-emerald-500/10 border border-emerald-500/30 text-emerald-400 text-sm flex items-center justify-between shadow-lg">
-          <div className="flex items-center gap-2.5">
-            <CheckCircle2 className="w-5 h-5 text-emerald-400" />
-            <span>Investment criteria saved! Future AI embeddings will vectorize these filters.</span>
+        {/* Header */}
+        <div className="border-b border-[#E2E8F0] pb-6">
+          <div className="flex items-center gap-2 mb-1">
+            <Badge variant="success">Investment Mandate</Badge>
+            <span className="text-xs text-[#64748B] font-mono flex items-center gap-1">
+              <ShieldCheck className="w-3.5 h-3.5 text-[#2E7D52]" /> Vector Cosine Indexing
+            </span>
           </div>
-          <button
-            onClick={() => router.push("/investor/dashboard")}
-            className="text-xs font-bold text-white underline underline-offset-4"
-          >
-            View Matched Deals →
-          </button>
+          <h1 className="text-2xl sm:text-3xl font-bold text-[#0F172A] font-display">
+            Investment Matching Criteria
+          </h1>
+          <p className="text-xs sm:text-sm text-[#64748B] mt-0.5">
+            Configure your thesis parameters. Venture X indexes incoming founder projects against your
+            target sectors, ticket sizes, and stages for high-precision semantic matching.
+          </p>
         </div>
-      )}
 
-      <form onSubmit={handleSave} className="space-y-8">
-        {/* 1. Preferred Industries */}
-        <div className="rounded-2xl border border-zinc-800 bg-zinc-900/60 p-6 space-y-4">
-          <div>
-            <h2 className="text-lg font-bold text-white flex items-center gap-2">
-              <Layers className="w-4 h-4 text-emerald-400" />
-              1. Preferred Industries & Sectors
+        {saveSuccess && (
+          <div className="p-4 rounded-xl bg-[#E8F5E9] border border-[#A3E635] text-[#2E7D52] text-xs sm:text-sm flex items-center justify-between shadow-subtle">
+            <div className="flex items-center gap-2">
+              <CheckCircle2 className="w-5 h-5 text-[#2E7D52]" />
+              <span>Investment criteria saved! Embeddings updated for semantic dealflow.</span>
+            </div>
+            <button
+              onClick={() => router.push("/investor/dashboard")}
+              className="text-xs font-bold text-[#0F172A] hover:text-[#1B3B6F] underline"
+            >
+              View Deals →
+            </button>
+          </div>
+        )}
+
+        <form onSubmit={handleSave} className="space-y-6">
+          {/* Target Industries */}
+          <div className="rounded-xl border border-[#E2E8F0] bg-white p-6 space-y-3.5 shadow-subtle">
+            <div className="flex items-center justify-between">
+              <div>
+                <h2 className="text-sm sm:text-base font-bold text-[#0F172A] font-display">
+                  1. Target Industry Sectors
+                </h2>
+                <p className="text-xs text-[#64748B]">Select industries your fund actively deploys capital into.</p>
+              </div>
+              <Badge variant="secondary">
+                {preferences.preferred_industries.length} Selected
+              </Badge>
+            </div>
+
+            <div className="flex flex-wrap gap-2 pt-2">
+              {availableIndustries.map((ind) => {
+                const isSelected = preferences.preferred_industries.includes(ind);
+                return (
+                  <button
+                    key={ind}
+                    type="button"
+                    onClick={() => toggleItem("preferred_industries", ind)}
+                    className={`px-3.5 py-1.5 rounded-lg text-xs font-medium transition-all ${
+                      isSelected
+                        ? "bg-[#1B3B6F] text-white shadow-sm"
+                        : "bg-[#F8FAFC] text-[#64748B] hover:text-[#0F172A] border border-[#E2E8F0]"
+                    }`}
+                  >
+                    {ind}
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+
+          {/* Target Stages & Check Size */}
+          <div className="rounded-xl border border-[#E2E8F0] bg-white p-6 space-y-4 shadow-subtle">
+            <h2 className="text-sm sm:text-base font-bold text-[#0F172A] font-display">
+              2. Stage & Target Ticket Bracket
             </h2>
-            <p className="text-xs text-zinc-400 mt-0.5">
-              Select all verticals where your fund holds an active mandate.
-            </p>
-          </div>
 
-          <div className="flex flex-wrap gap-2.5 pt-2">
-            {availableIndustries.map((ind) => {
-              const selected = preferences.preferred_industries.includes(ind);
-              return (
-                <button
-                  type="button"
-                  key={ind}
-                  onClick={() => toggleItem("preferred_industries", ind)}
-                  className={`px-3.5 py-2 rounded-xl text-xs font-medium transition-all ${
-                    selected
-                      ? "bg-emerald-600 text-white shadow-md shadow-emerald-600/25 border border-emerald-500"
-                      : "bg-zinc-950 text-zinc-400 border border-zinc-800 hover:border-zinc-700 hover:text-white"
-                  }`}
-                >
-                  {selected && "✓ "}
-                  {ind}
-                </button>
-              );
-            })}
-          </div>
-        </div>
-
-        {/* 2. Startup Stages */}
-        <div className="rounded-2xl border border-zinc-800 bg-zinc-900/60 p-6 space-y-4">
-          <div>
-            <h2 className="text-lg font-bold text-white flex items-center gap-2">
-              <Sparkles className="w-4 h-4 text-cyan-400" />
-              2. Target Startup Stages
-            </h2>
-            <p className="text-xs text-zinc-400 mt-0.5">
-              Which development milestones are appropriate for your first check?
-            </p>
-          </div>
-
-          <div className="flex flex-wrap gap-2.5 pt-2">
-            {availableStages.map((stg) => {
-              const selected = preferences.preferred_stages.includes(stg);
-              return (
-                <button
-                  type="button"
-                  key={stg}
-                  onClick={() => toggleItem("preferred_stages", stg)}
-                  className={`px-3.5 py-2 rounded-xl text-xs font-medium transition-all ${
-                    selected
-                      ? "bg-blue-600 text-white shadow-md shadow-blue-600/25 border border-blue-500"
-                      : "bg-zinc-950 text-zinc-400 border border-zinc-800 hover:border-zinc-700 hover:text-white"
-                  }`}
-                >
-                  {selected && "✓ "}
-                  {stg}
-                </button>
-              );
-            })}
-          </div>
-        </div>
-
-        {/* 3. Investment Range */}
-        <div className="rounded-2xl border border-zinc-800 bg-zinc-900/60 p-6 space-y-4">
-          <div>
-            <h2 className="text-lg font-bold text-white flex items-center gap-2">
-              <DollarSign className="w-4 h-4 text-emerald-400" />
-              3. Check Size & Investment Range (USD)
-            </h2>
-            <p className="text-xs text-zinc-400 mt-0.5">
-              Specify your minimum and maximum initial allocation per startup.
-            </p>
-          </div>
-
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-6 pt-2">
             <div>
-              <label className="block text-xs font-semibold text-zinc-300 mb-1.5">
-                Minimum Check Size ($)
-              </label>
-              <div className="relative">
-                <span className="absolute left-3 top-2.5 text-zinc-500 text-sm">$</span>
-                <input
-                  type="number"
-                  min={5000}
-                  step={10000}
-                  value={preferences.min_investment}
-                  onChange={(e) =>
-                    setPreferences({
-                      ...preferences,
-                      min_investment: parseFloat(e.target.value) || 0,
-                    })
-                  }
-                  className="w-full pl-8 pr-3.5 py-2.5 bg-zinc-950 border border-zinc-800 rounded-xl text-white text-sm focus:outline-none focus:border-emerald-500"
-                />
+              <label className="block text-xs font-semibold text-[#0F172A] mb-2">Stage Focus</label>
+              <div className="flex flex-wrap gap-2">
+                {availableStages.map((stg) => {
+                  const isSelected = preferences.preferred_stages.includes(stg);
+                  return (
+                    <button
+                      key={stg}
+                      type="button"
+                      onClick={() => toggleItem("preferred_stages", stg)}
+                      className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-all ${
+                        isSelected
+                          ? "bg-[#1B3B6F] text-white shadow-sm"
+                          : "bg-[#F8FAFC] text-[#64748B] hover:text-[#0F172A] border border-[#E2E8F0]"
+                      }`}
+                    >
+                      {stg}
+                    </button>
+                  );
+                })}
               </div>
             </div>
 
-            <div>
-              <label className="block text-xs font-semibold text-zinc-300 mb-1.5">
-                Maximum Check Size ($)
-              </label>
-              <div className="relative">
-                <span className="absolute left-3 top-2.5 text-zinc-500 text-sm">$</span>
-                <input
-                  type="number"
-                  min={10000}
-                  step={25000}
-                  value={preferences.max_investment}
-                  onChange={(e) =>
-                    setPreferences({
-                      ...preferences,
-                      max_investment: parseFloat(e.target.value) || 0,
-                    })
-                  }
-                  className="w-full pl-8 pr-3.5 py-2.5 bg-zinc-950 border border-zinc-800 rounded-xl text-white text-sm focus:outline-none focus:border-emerald-500"
-                />
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 pt-3 border-t border-[#E2E8F0]">
+              <div>
+                <label className="block text-xs font-semibold text-[#0F172A] mb-1">
+                  Minimum Check Size (USD)
+                </label>
+                <div className="relative">
+                  <span className="absolute left-3 top-2.5 text-[#64748B] text-sm">$</span>
+                  <input
+                    type="number"
+                    step={25000}
+                    value={preferences.min_investment}
+                    onChange={(e) =>
+                      setPreferences({ ...preferences, min_investment: parseFloat(e.target.value) || 0 })
+                    }
+                    className="w-full pl-7 pr-3.5 py-2.5 bg-[#F8FAFC] border border-[#E2E8F0] rounded-lg text-[#0F172A] text-xs sm:text-sm focus:outline-none focus:border-[#1B3B6F]"
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-xs font-semibold text-[#0F172A] mb-1">
+                  Maximum Check Size (USD)
+                </label>
+                <div className="relative">
+                  <span className="absolute left-3 top-2.5 text-[#64748B] text-sm">$</span>
+                  <input
+                    type="number"
+                    step={50000}
+                    value={preferences.max_investment}
+                    onChange={(e) =>
+                      setPreferences({ ...preferences, max_investment: parseFloat(e.target.value) || 0 })
+                    }
+                    className="w-full pl-7 pr-3.5 py-2.5 bg-[#F8FAFC] border border-[#E2E8F0] rounded-lg text-[#0F172A] text-xs sm:text-sm focus:outline-none focus:border-[#1B3B6F]"
+                  />
+                </div>
               </div>
             </div>
           </div>
-        </div>
 
-        {/* 4. Preferred Business Models */}
-        <div className="rounded-2xl border border-zinc-800 bg-zinc-900/60 p-6 space-y-4">
-          <div>
-            <h2 className="text-lg font-bold text-white flex items-center gap-2">
-              <Layers className="w-4 h-4 text-zinc-400" />
-              4. Preferred Business Models
+          {/* Business Models & Technology Focus */}
+          <div className="rounded-xl border border-[#E2E8F0] bg-white p-6 space-y-4 shadow-subtle">
+            <h2 className="text-sm sm:text-base font-bold text-[#0F172A] font-display">
+              3. Business Model & Architecture
             </h2>
-            <p className="text-xs text-zinc-400 mt-0.5">
-              Filter by how the startup captures revenue and monetizes its user base.
-            </p>
+
+            <div>
+              <label className="block text-xs font-semibold text-[#0F172A] mb-2">Preferred Business Models</label>
+              <div className="flex flex-wrap gap-2">
+                {availableBusinessModels.map((bm) => {
+                  const isSelected = preferences.preferred_business_models.includes(bm);
+                  return (
+                    <button
+                      key={bm}
+                      type="button"
+                      onClick={() => toggleItem("preferred_business_models", bm)}
+                      className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-all ${
+                        isSelected
+                          ? "bg-[#1B3B6F] text-white shadow-sm"
+                          : "bg-[#F8FAFC] text-[#64748B] hover:text-[#0F172A] border border-[#E2E8F0]"
+                      }`}
+                    >
+                      {bm}
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+
+            <div className="pt-3 border-t border-[#E2E8F0]">
+              <label className="block text-xs font-semibold text-[#0F172A] mb-2">Core Tech Paradigms</label>
+              <div className="flex flex-wrap gap-2">
+                {availableTechs.map((tech) => {
+                  const isSelected = preferences.tech_preferences.includes(tech);
+                  return (
+                    <button
+                      key={tech}
+                      type="button"
+                      onClick={() => toggleItem("tech_preferences", tech)}
+                      className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-all ${
+                        isSelected
+                          ? "bg-[#1B3B6F] text-white shadow-sm"
+                          : "bg-[#F8FAFC] text-[#64748B] hover:text-[#0F172A] border border-[#E2E8F0]"
+                      }`}
+                    >
+                      {tech}
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
           </div>
 
-          <div className="flex flex-wrap gap-2.5 pt-2">
-            {availableBusinessModels.map((bm) => {
-              const selected = preferences.preferred_business_models.includes(bm);
-              return (
-                <button
-                  type="button"
-                  key={bm}
-                  onClick={() => toggleItem("preferred_business_models", bm)}
-                  className={`px-3.5 py-2 rounded-xl text-xs font-medium transition-all ${
-                    selected
-                      ? "bg-indigo-600 text-white shadow-md shadow-indigo-600/25 border border-indigo-500"
-                      : "bg-zinc-950 text-zinc-400 border border-zinc-800 hover:border-zinc-700 hover:text-white"
-                  }`}
-                >
-                  {selected && "✓ "}
-                  {bm}
-                </button>
-              );
-            })}
-          </div>
-        </div>
-
-        {/* 5. Geography */}
-        <div className="rounded-2xl border border-zinc-800 bg-zinc-900/60 p-6 space-y-4">
-          <div>
-            <h2 className="text-lg font-bold text-white flex items-center gap-2">
-              <Globe className="w-4 h-4 text-cyan-400" />
-              5. Geographic Mandate
+          {/* Geographic Mandate */}
+          <div className="rounded-xl border border-[#E2E8F0] bg-white p-6 space-y-3 shadow-subtle">
+            <h2 className="text-sm sm:text-base font-bold text-[#0F172A] font-display">
+              4. Geographic Scope
             </h2>
-            <p className="text-xs text-zinc-400 mt-0.5">
-              Region or jurisdictions where your LP agreement permits deployment.
-            </p>
-          </div>
-
-          <div>
-            <select
+            <input
+              type="text"
               value={preferences.geography}
               onChange={(e) => setPreferences({ ...preferences, geography: e.target.value })}
-              className="w-full px-3.5 py-2.5 bg-zinc-950 border border-zinc-800 rounded-xl text-white text-sm focus:outline-none focus:border-emerald-500"
+              placeholder="e.g., North America, Europe, or Global Remote"
+              className="w-full px-3.5 py-2.5 bg-[#F8FAFC] border border-[#E2E8F0] rounded-lg text-[#0F172A] text-xs sm:text-sm focus:outline-none focus:border-[#1B3B6F]"
+            />
+          </div>
+
+          {/* Action buttons */}
+          <div className="flex items-center justify-end gap-3 pt-4 border-t border-[#E2E8F0]">
+            <Link
+              href="/investor/dashboard"
+              className="px-4 py-2 text-xs sm:text-sm font-medium text-[#64748B] hover:text-[#0F172A]"
             >
-              <option value="Global">Global Mandate (Any Jurisdiction)</option>
-              <option value="North America">North America (US & Canada)</option>
-              <option value="Europe">Europe (EU & UK)</option>
-              <option value="Asia-Pacific">Asia-Pacific (APAC)</option>
-              <option value="Latin America">Latin America (LATAM)</option>
-            </select>
+              Cancel
+            </Link>
+            <button
+              type="submit"
+              disabled={loading}
+              className="px-6 py-2.5 rounded-lg text-xs sm:text-sm font-medium text-white bg-[#1B3B6F] hover:bg-[#142C54] transition-colors shadow-sm flex items-center gap-1.5"
+            >
+              <Save className="w-4 h-4" />
+              {loading ? "Vectorizing Filters..." : "Save Mandate Preferences"}
+            </button>
           </div>
-        </div>
-
-        {/* 6. Technology Preferences */}
-        <div className="rounded-2xl border border-zinc-800 bg-zinc-900/60 p-6 space-y-4">
-          <div>
-            <h2 className="text-lg font-bold text-white flex items-center gap-2">
-              <Cpu className="w-4 h-4 text-amber-400" />
-              6. Frontier Technology Interests
-            </h2>
-            <p className="text-xs text-zinc-400 mt-0.5">
-              Specific architectural or scientific breakthroughs of interest.
-            </p>
-          </div>
-
-          <div className="flex flex-wrap gap-2.5 pt-2">
-            {availableTechs.map((tech) => {
-              const selected = preferences.tech_preferences.includes(tech);
-              return (
-                <button
-                  type="button"
-                  key={tech}
-                  onClick={() => toggleItem("tech_preferences", tech)}
-                  className={`px-3.5 py-2 rounded-xl text-xs font-medium transition-all ${
-                    selected
-                      ? "bg-amber-600 text-white shadow-md shadow-amber-600/25 border border-amber-500"
-                      : "bg-zinc-950 text-zinc-400 border border-zinc-800 hover:border-zinc-700 hover:text-white"
-                  }`}
-                >
-                  {selected && "✓ "}
-                  {tech}
-                </button>
-              );
-            })}
-          </div>
-        </div>
-
-        {/* Actions */}
-        <div className="flex items-center justify-end gap-4 pt-4 border-t border-zinc-800">
-          <Link
-            href="/investor/dashboard"
-            className="px-5 py-2.5 text-sm font-medium text-zinc-400 hover:text-white transition-colors"
-          >
-            Cancel
-          </Link>
-          <button
-            type="submit"
-            disabled={loading}
-            className="px-6 py-3 rounded-xl text-sm font-semibold text-white bg-emerald-600 hover:bg-emerald-500 shadow-lg shadow-emerald-600/30 transition-all flex items-center gap-2 disabled:opacity-50"
-          >
-            <Save className="w-4 h-4" />
-            {loading ? "Saving Preferences..." : "Save Investment Criteria"}
-          </button>
-        </div>
-      </form>
-    </div>
+        </form>
+      </div>
+    </PortalLayout>
   );
 }

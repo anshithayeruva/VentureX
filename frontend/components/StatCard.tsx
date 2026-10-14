@@ -12,26 +12,30 @@ interface StatCardProps {
 
 export function StatCard({ label, value, change, icon: Icon, subtext, trend = "up" }: StatCardProps) {
   return (
-    <div className="relative overflow-hidden rounded-2xl border border-zinc-800 bg-zinc-900/60 p-5 backdrop-blur-sm shadow-sm hover:border-zinc-700/80 transition-all">
+    <div className="relative overflow-hidden rounded-xl border border-[#E2E8F0] bg-white p-5 shadow-subtle hover:border-[#CBD5E1] transition-all">
       <div className="flex items-center justify-between">
-        <span className="text-xs font-medium uppercase tracking-wider text-zinc-400">{label}</span>
-        <div className="w-9 h-9 rounded-xl bg-blue-500/10 border border-blue-500/20 flex items-center justify-center text-blue-400">
+        <span className="text-[11px] font-semibold uppercase tracking-wider text-[#64748B]">{label}</span>
+        <div className="w-8 h-8 rounded-lg bg-[#EBF2FA] border border-[#BFD7EE] flex items-center justify-center text-[#1B3B6F]">
           <Icon className="w-4 h-4" />
         </div>
       </div>
       <div className="mt-3 flex items-baseline gap-2">
-        <span className="text-2xl sm:text-3xl font-bold tracking-tight text-white">{value}</span>
+        <span className="text-2xl sm:text-3xl font-bold tracking-tight text-[#0F172A] font-display">{value}</span>
         {change && (
           <span
-            className={`text-xs font-semibold ${
-              trend === "up" ? "text-emerald-400" : trend === "down" ? "text-rose-400" : "text-zinc-400"
+            className={`text-xs font-medium px-2 py-0.5 rounded-full ${
+              trend === "up"
+                ? "bg-[#E8F5E9] text-[#2E7D52]"
+                : trend === "down"
+                ? "bg-[#FFF7ED] text-[#C2410C]"
+                : "bg-[#F1F5F9] text-[#64748B]"
             }`}
           >
             {change}
           </span>
         )}
       </div>
-      {subtext && <p className="mt-1 text-xs text-zinc-500">{subtext}</p>}
+      {subtext && <p className="mt-1.5 text-xs text-[#64748B]">{subtext}</p>}
     </div>
   );
 }

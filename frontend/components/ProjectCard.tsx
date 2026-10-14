@@ -2,15 +2,21 @@ import React from "react";
 import Link from "next/link";
 import { Project } from "@/types";
 import { Badge } from "@/components/Badge";
-import { DollarSign, Layers, Sparkles, ArrowUpRight, TrendingUp } from "lucide-react";
+import { DollarSign, Sparkles, ArrowUpRight, Lock, CheckCircle2 } from "lucide-react";
 
 interface ProjectCardProps {
   project: Project;
   onConnect?: (project: Project) => void;
   showActions?: boolean;
+  isInvestorView?: boolean;
 }
 
-export function ProjectCard({ project, onConnect, showActions = true }: ProjectCardProps) {
+export function ProjectCard({
+  project,
+  onConnect,
+  showActions = true,
+  isInvestorView = false,
+}: ProjectCardProps) {
   const formattedFunding = new Intl.NumberFormat("en-US", {
     style: "currency",
     currency: "USD",
@@ -20,57 +26,70 @@ export function ProjectCard({ project, onConnect, showActions = true }: ProjectC
   const score = project.readiness_score ?? 85.0;
 
   return (
-    <div className="group relative flex flex-col justify-between rounded-2xl border border-zinc-800 bg-zinc-900/60 p-6 backdrop-blur-sm transition-all hover:border-zinc-700 hover:shadow-xl hover:shadow-blue-500/5">
+    <div className="group relative flex flex-col justify-between rounded-xl border border-[#E2E8F0] bg-white p-6 shadow-subtle hover:border-[#CBD5E1] hover:shadow-card transition-all">
       <div>
-        {/* Top Badges */}
-        <div className="flex flex-wrap items-center justify-between gap-2 mb-4">
+        {/* Top Badges & Privacy/Readiness indicator */}
+        <div className="flex flex-wrap items-center justify-between gap-2 mb-3.5">
           <div className="flex flex-wrap items-center gap-1.5">
-            <Badge variant="indigo">{project.industry}</Badge>
-            <Badge variant="secondary">{project.stage}</Badge>
+            <Badge variant="secondary">{project.industry}</Badge>
+            <Badge variant="outline">{project.stage}</Badge>
             <Badge variant="outline">{project.business_model}</Badge>
           </div>
 
-          {/* AI Readiness Score indicator */}
-          <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-cyan-950/60 border border-cyan-800/50 text-cyan-300 text-xs font-semibold">
-            <Sparkles className="w-3.5 h-3.5 text-cyan-400" />
-            <span>AI Score: {score.toFixed(1)}</span>
-          </div>
+          {/* Critical Privacy Rule #7: Only founders see private readiness score */}
+          {!isInvestorView ? (
+            <div
+              className="flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-[#EBF2FA] border border-[#BFD7EE] text-[#1B3B6F] text-xs font-semibold"
+              title="Confidential AI Readiness Score (Private to Founder)"
+            >
+              <Sparkles className="w-3.5 h-3.5 text-[#1B3B6F]" />
+              <span>Readiness: {score.toFixed(1)}</span>
+            </div>
+          ) : (
+            <div
+              className="flex items-center gap-1 px-2.5 py-0.5 rounded-full bg-[#E8F5E9] border border-[#C8E6C9] text-[#2E7D52] text-xs font-medium"
+              title="Founder-approved dealflow verified by Venture X"
+            >
+              <CheckCircle2 className="w-3.5 h-3.5 text-[#2E7D52]" />
+              <span>Verified Mandate</span>
+            </div>
+          )}
         </div>
 
         {/* Project Header */}
-        <h3 className="text-xl font-bold tracking-tight text-white group-hover:text-cyan-400 transition-colors">
+        <h3 className="text-lg sm:text-xl font-bold tracking-tight text-[#0F172A] font-display group-hover:text-[#1B3B6F] transition-colors">
           {project.title}
         </h3>
         {project.tagline && (
-          <p className="mt-1 text-sm font-medium text-zinc-300 line-clamp-1">{project.tagline}</p>
+          <p className="mt-1 text-xs sm:text-sm font-medium text-[#64748B] line-clamp-1">{project.tagline}</p>
         )}
 
         {/* Project Description */}
-        <p className="mt-3 text-sm text-zinc-400 line-clamp-3 leading-relaxed">
+        <p className="mt-2.5 text-xs sm:text-sm text-[#64748B] line-clamp-3 leading-relaxed">
           {project.description}
         </p>
 
         {/* Problem & Solution Snippet */}
-        <div className="mt-4 pt-3 border-t border-zinc-800/80 space-y-2 text-xs">
+        <div className="mt-4 pt-3 border-t border-[#E2E8F0] space-y-1.5 text-xs">
           <div>
-            <span className="font-semibold text-zinc-300">Problem: </span>
-            <span className="text-zinc-400 line-clamp-1">{project.problem}</span>
+            <span className="font-semibold text-[#0F172A]">Problem: </span>
+            <span className="text-[#64748B] line-clamp-1">{project.problem}</span>
           </div>
           <div>
-            <span className="font-semibold text-zinc-300">Solution: </span>
-            <span className="text-zinc-400 line-clamp-1">{project.solution}</span>
+            <span className="font-semibold text-[#0F172A]">Solution: </span>
+            <span className="text-[#64748B] line-clamp-1">{project.solution}</span>
           </div>
         </div>
       </div>
 
       {/* Footer / Metric & Action */}
-      <div className="mt-6 pt-4 border-t border-zinc-800 flex items-center justify-between">
+      <div className="mt-5 pt-4 border-t border-[#E2E8F0] flex items-center justify-between">
         <div>
-          <span className="text-[11px] font-medium uppercase tracking-wider text-zinc-500 block">
+          <span className="text-[10px] font-semibold uppercase tracking-wider text-[#64748B] block">
             Target Raise
           </span>
-          <span className="text-base font-bold text-white flex items-center gap-1">
-            <DollarSign className="w-4 h-4 text-emerald-400 -mr-1" />
+          <span className="text-base font-bold text-[#0F172A] flex items-center gap-0.5 font-display">
+            <DollarSign className="w-4 h-4 text-[#2E7D52] -mr-0.5" />
             {formattedFunding.replace("$", "")}
           </span>
         </div>
@@ -80,7 +99,7 @@ export function ProjectCard({ project, onConnect, showActions = true }: ProjectC
             {onConnect ? (
               <button
                 onClick={() => onConnect(project)}
-                className="px-3 py-1.5 text-xs font-semibold text-white bg-blue-600 hover:bg-blue-500 rounded-lg transition-colors flex items-center gap-1"
+                className="px-3.5 py-1.5 text-xs font-medium text-white bg-[#1B3B6F] hover:bg-[#142C54] rounded-lg transition-colors flex items-center gap-1 shadow-sm"
               >
                 Connect
                 <ArrowUpRight className="w-3.5 h-3.5" />
@@ -88,9 +107,9 @@ export function ProjectCard({ project, onConnect, showActions = true }: ProjectC
             ) : (
               <Link
                 href={`/founder/projects/${project.id}`}
-                className="px-3 py-1.5 text-xs font-semibold text-zinc-300 hover:text-white bg-zinc-800 hover:bg-zinc-700 rounded-lg transition-colors flex items-center gap-1"
+                className="px-3 py-1.5 text-xs font-medium text-[#0F172A] hover:text-[#1B3B6F] bg-[#F1F5F9] hover:bg-[#E2E8F0] border border-[#E2E8F0] rounded-lg transition-colors flex items-center gap-1"
               >
-                View
+                Overview
                 <ArrowUpRight className="w-3.5 h-3.5" />
               </Link>
             )}
