@@ -77,40 +77,99 @@ function FounderDashboardContent() {
   useEffect(() => {
     let mounted = true;
     api.getProjects(true).then((data) => {
-      if (mounted && data.length > 0) setProjects(data);
+      if (mounted && data.length > 0) {
+        setProjects(data);
+        const pubMap: Record<number, boolean> = {};
+        data.forEach((p: any) => {
+          pubMap[p.id] = !!p.is_published;
+        });
+        setPublishedProjects(pubMap);
+      }
     });
     api.getMatches().then((data) => {
       if (mounted && data.length > 0) setMatches(data);
+    });
+    api.getFounderProfile().then((data) => {
+      if (mounted && data) {
+        setFounderProfile((prev) => ({
+          ...prev,
+          name: data.name || prev.name,
+          company: data.company || prev.company,
+          bio: data.bio || prev.bio,
+          location: data.location || prev.location,
+          linkedin: data.linkedin || prev.linkedin,
+          website: data.website || prev.website,
+        }));
+      }
+    });
+    api.getFounderSettings().then((data) => {
+      if (mounted && data) {
+        setSettings({
+          defaultPrivate: data.default_private ?? true,
+          hideGapsFromInvestors: data.hide_gaps_from_investors ?? true,
+          emailAlerts: data.email_alerts ?? true,
+          weeklyDigest: data.weekly_digest ?? false,
+        });
+      }
     });
     return () => {
       mounted = false;
     };
   }, []);
 
-  const handleProfileSave = (e: React.FormEvent) => {
+  const handleProfileSave = async (e: React.FormEvent) => {
     e.preventDefault();
+    await api.updateFounderProfile(founderProfile);
     setSaveSuccess(true);
     setTimeout(() => setSaveSuccess(false), 3000);
   };
 
-  const handleSettingsSave = (e: React.FormEvent) => {
+  const handleSettingsSave = async (e: React.FormEvent) => {
     e.preventDefault();
+    await api.updateFounderSettings({
+      default_private: settings.defaultPrivate,
+      hide_gaps_from_investors: settings.hideGapsFromInvestors,
+      email_alerts: settings.emailAlerts,
+      weekly_digest: settings.weeklyDigest,
+    });
     setSettingsSuccess(true);
     setTimeout(() => setSettingsSuccess(false), 3000);
   };
 
-  const togglePublish = (projectId: number) => {
+  const togglePublish = async (projectId: number) => {
     setPublishedProjects((prev) => ({
       ...prev,
       [projectId]: !prev[projectId],
     }));
+    await api.togglePublishProject(projectId);
   };
 
-  const handleReanalyze = () => {
+  const handleReanalyze = async () => {
     setReanalyzing(true);
-    setTimeout(() => {
-      setReanalyzing(false);
-    }, 1200);
+    try {
+      if (projects.length > 0) {
+        const activeProj = projects[0];
+        const res = await api.reEvaluateProject(activeProj.id);
+        if (res && res.readiness_score) {
+          setProjects((prev) =>
+            prev.map((p) =>
+              p.id === activeProj.id
+                ? {
+                    ...p,
+                    readiness_score: res.readiness_score,
+                    ai_readiness_breakdown: res.ai_readiness_breakdown,
+                    ai_feedback_summary: res.ai_feedback_summary,
+                  }
+                : p
+            )
+          );
+        }
+      }
+    } finally {
+      setTimeout(() => {
+        setReanalyzing(false);
+      }, 800);
+    }
   };
 
   const filteredMatches = matches.filter(

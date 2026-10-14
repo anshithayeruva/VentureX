@@ -1,0 +1,14 @@
+{
+  "name": "venturex",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Venture X - AI-powered platform connecting early-stage founders with investors",
+  "scripts": {
+    "dev": "npm --prefix frontend run dev",
+    "dev:frontend": "npm --prefix frontend run dev",
+    "build:frontend": "npm --prefix frontend run build",
+    "start:frontend": "npm --prefix frontend run start",
+    "backend": "powershell -Command \"cd backend; .venv\\Scripts\\uvicorn app.main:app --reload --port 8000\"",
+    "install:frontend": "npm --prefix frontend install"
+  }
+}

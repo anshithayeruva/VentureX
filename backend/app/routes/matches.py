@@ -1,28 +1,20 @@
-from typing import List
-from fastapi import APIRouter, Depends
-from sqlalchemy.orm import Session
-from app.database.session import get_db
-from app.core.dependencies import require_current_user
-from app.models.user import User
+import logging
+from typing import List, Optional
+from fastapi import APIRouter, Query
 from app.schemas.match import MatchResponse
-from app.services.ai.matching import MatchingEngineService
+from app.services.match_service import MatchService
 
-router = APIRouter(prefix="/matches", tags=["Matches (AI Placeholder)"])
+logger = logging.getLogger(__name__)
+
+router = APIRouter(prefix="/matches", tags=["Matches"])
 
 
 @router.get("", response_model=List[MatchResponse])
-def get_matches(
-    current_user: User = Depends(require_current_user),
-    db: Session = Depends(get_db)
+async def list_matches(
+    search: Optional[str] = Query(None, description="Filter matches by investor, fund or project"),
+    project_id: Optional[str] = Query(None, description="Filter matches for specific project"),
+    limit: int = Query(50, ge=1, le=100),
 ):
-    """Retrieve recommended AI-generated matches.
-
-    NOTE: Returns explainable match placeholders.
-    The real ML model (Sentence Transformers + pgvector similarity)
-    will be integrated in the upcoming AI phase.
-    """
-    matches_data = MatchingEngineService.get_matches_for_user(
-        user_id=current_user.id,
-        role=current_user.role.value if hasattr(current_user.role, "value") else str(current_user.role),
-    )
-    return matches_data
+    """Retrieve AI-synthesized matches with explainable reasoning."""
+    matches = await MatchService.list_matches(search=search, project_id=project_id, limit=limit)
+    return matches

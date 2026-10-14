@@ -7,7 +7,7 @@ from app.core.config import settings
 logger = logging.getLogger(__name__)
 
 # Normalize DATABASE_URL (e.g. handle postgres:// -> postgresql://)
-db_url = settings.DATABASE_URL
+db_url = settings.DATABASE_URL or "sqlite:///./venturex.db"
 if db_url.startswith("postgres://"):
     db_url = db_url.replace("postgres://", "postgresql://", 1)
 

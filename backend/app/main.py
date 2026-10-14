@@ -4,8 +4,12 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from app.core.config import settings
 from app.routes import api_router
-from app.database.session import engine, Base
-import app.models  # Ensure all models are registered with Base metadata
+from app.database.mongodb import (
+    get_database,
+    init_db_indexes,
+    seed_initial_data_if_empty,
+    close_mongodb_connection,
+)
 
 logging.basicConfig(
     level=logging.INFO,
@@ -14,28 +18,27 @@ logging.basicConfig(
 logger = logging.getLogger("venturex.main")
 
 
-# Ensure tables exist
-try:
-    Base.metadata.create_all(bind=engine)
-except Exception as e:
-    logger.warning("Database tables will be initialized when connection is ready: %s", e)
-
-
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """Application lifespan context manager for startup and shutdown events."""
     logger.info("Starting up Venture X Backend API...")
     try:
-        # Create tables automatically on startup if database is available
-        Base.metadata.create_all(bind=engine)
-        logger.info("Database tables verified/created successfully.")
+        db = get_database()
+        if db is not None:
+            logger.info("Connected to MongoDB Atlas: %s", db.name)
+            # Safe index initialization
+            await init_db_indexes(db)
+            # Seed initial sample data if empty so UI pages work immediately
+            await seed_initial_data_if_empty(db)
+        else:
+            logger.warning("MongoDB Atlas is not configured in .env. Running in offline mode.")
     except Exception as e:
-        logger.warning(
-            "Could not connect to database on startup (%s). Tables will be created once DB is available.",
-            e
-        )
+        logger.error("Error during MongoDB initialization on startup: %s", e)
+
     yield
+
     logger.info("Shutting down Venture X Backend API...")
+    await close_mongodb_connection()
 
 
 app = FastAPI(

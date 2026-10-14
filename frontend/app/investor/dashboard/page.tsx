@@ -74,16 +74,46 @@ function InvestorDashboardContent() {
     api.getMatches().then((data) => {
       if (mounted && data.length > 0) setMatches(data);
     });
+    api.getInvestorProfile().then((data) => {
+      if (mounted && data) {
+        setInvestorProfile((prev) => ({
+          ...prev,
+          name: data.name || prev.name,
+          firm: data.firm || prev.firm,
+          title: data.title || prev.title,
+          bio: data.bio || prev.bio,
+          location: data.location || prev.location,
+          thesis: data.thesis || prev.thesis,
+          minCheck: data.min_check || prev.minCheck,
+          maxCheck: data.max_check || prev.maxCheck,
+        }));
+      }
+    });
+    api.getInvestorSettings().then((data) => {
+      if (mounted && data) {
+        setSettings({
+          autoNotifyHighConviction: data.auto_notify_high_conviction ?? true,
+          weeklyDealflowSummary: data.weekly_dealflow_summary ?? true,
+          directFounderMessaging: data.direct_founder_messaging ?? true,
+        });
+      }
+    });
+    api.getInterests().then((data) => {
+      if (mounted && Array.isArray(data) && data.length > 0) {
+        setSavedInterests(data.map((item: any) => item.project_id));
+      }
+    });
     return () => {
       mounted = false;
     };
   }, []);
 
-  const toggleInterest = (projectId: number) => {
+  const toggleInterest = async (projectId: number) => {
     if (savedInterests.includes(projectId)) {
       setSavedInterests(savedInterests.filter((id) => id !== projectId));
     } else {
       setSavedInterests([...savedInterests, projectId]);
+      await api.expressInterest({ project_id: projectId });
     }
   };
 
@@ -414,8 +444,18 @@ function InvestorDashboardContent() {
           )}
 
           <form
-            onSubmit={(e) => {
+            onSubmit={async (e) => {
               e.preventDefault();
+              await api.updateInvestorProfile({
+                name: investorProfile.name,
+                firm: investorProfile.firm,
+                title: investorProfile.title,
+                bio: investorProfile.bio,
+                location: investorProfile.location,
+                thesis: investorProfile.thesis,
+                min_check: investorProfile.minCheck,
+                max_check: investorProfile.maxCheck,
+              });
               setProfileSaved(true);
               setTimeout(() => setProfileSaved(false), 3000);
             }}
@@ -516,8 +556,13 @@ function InvestorDashboardContent() {
           )}
 
           <form
-            onSubmit={(e) => {
+            onSubmit={async (e) => {
               e.preventDefault();
+              await api.updateInvestorSettings({
+                auto_notify_high_conviction: settings.autoNotifyHighConviction,
+                weekly_dealflow_summary: settings.weeklyDealflowSummary,
+                direct_founder_messaging: settings.directFounderMessaging,
+              });
               setSettingsSaved(true);
               setTimeout(() => setSettingsSaved(false), 3000);
             }}

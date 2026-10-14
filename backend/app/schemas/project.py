@@ -1,25 +1,25 @@
 from datetime import datetime
-from typing import Optional, Dict, Any
+from typing import Optional, Dict, Any, List, Union
 from pydantic import BaseModel, Field
 
 
 class ProjectBase(BaseModel):
     title: str = Field(..., min_length=2, max_length=255)
     tagline: Optional[str] = None
-    description: str = Field(..., min_length=10)
-    problem: str = Field(..., min_length=10)
-    solution: str = Field(..., min_length=10)
+    description: str = Field(..., min_length=5)
+    problem: str = Field(..., min_length=5)
+    solution: str = Field(..., min_length=5)
     industry: str = Field(..., min_length=2, max_length=100)
     stage: str = Field(..., min_length=2, max_length=100)
     funding_required: float = Field(..., ge=0)
     business_model: str = Field(..., min_length=2, max_length=100)
-    target_market: str = Field(..., min_length=5)
+    target_market: str = Field(..., min_length=3)
     website: Optional[str] = None
     pitch_deck_url: Optional[str] = None
 
 
 class ProjectCreate(ProjectBase):
-    pass
+    is_published: bool = False
 
 
 class ProjectUpdate(BaseModel):
@@ -35,33 +35,36 @@ class ProjectUpdate(BaseModel):
     target_market: Optional[str] = None
     website: Optional[str] = None
     pitch_deck_url: Optional[str] = None
+    is_published: Optional[bool] = None
 
 
 class ProjectResponse(ProjectBase):
-    id: int
-    founder_id: int
+    id: Union[int, str]
+    founder_id: Optional[Union[int, str]] = None
+    is_published: bool = False
     readiness_score: Optional[float] = None
     ai_readiness_breakdown: Optional[Dict[str, Any]] = None
     ai_feedback_summary: Optional[str] = None
-    created_at: datetime
-    updated_at: datetime
+    strengths: Optional[List[str]] = None
+    recommendations: Optional[List[str]] = None
+    created_at: Optional[Union[datetime, str]] = None
+    updated_at: Optional[Union[datetime, str]] = None
 
     class Config:
         from_attributes = True
 
 
-class ProjectInterestCreate(BaseModel):
-    project_id: int
-    message: Optional[str] = None
+class PublishToggleInput(BaseModel):
+    is_published: bool
 
 
-class ProjectInterestResponse(BaseModel):
-    id: int
-    project_id: int
-    investor_id: int
-    status: str
-    message: Optional[str] = None
-    created_at: datetime
-
-    class Config:
-        from_attributes = True
+class ProjectReadinessResponse(BaseModel):
+    project_id: Union[int, str]
+    title: str
+    readiness_score: float
+    model_version: str = "Readiness Engine v2.4"
+    status_label: str = "Ready for Investor Presentation"
+    dimensions: List[Dict[str, Any]]
+    strengths: List[str]
+    recommendations: List[str]
+    is_confidential: bool = True
