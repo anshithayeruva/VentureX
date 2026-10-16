@@ -18,3 +18,11 @@ async def list_matches(
     """Retrieve AI-synthesized matches with explainable reasoning."""
     matches = await MatchService.list_matches(search=search, project_id=project_id, limit=limit)
     return matches
+
+
+@router.post("/recalculate")
+async def recalculate_matches():
+    """Trigger full dynamic recalculation of matches across all projects and investors."""
+    total = await MatchService.recompute_all_matches()
+    return {"status": "success", "matches_computed": total}
+

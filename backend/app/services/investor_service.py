@@ -113,6 +113,14 @@ class InvestorService:
             {"$set": update_fields},
             upsert=True
         )
+
+        # Trigger dynamic matching pipeline to refresh matches based on new criteria
+        try:
+            from app.services.match_service import MatchService
+            await MatchService.compute_matches_for_investor(investor_id)
+        except Exception as e:
+            logger.warning("Could not recompute matches for investor %s: %s", investor_id, e)
+
         return await cls.get_or_create_preferences(investor_id)
 
     @classmethod

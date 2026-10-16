@@ -90,6 +90,14 @@ class ProjectService:
 
         result = await db.projects.insert_one(doc)
         doc["_id"] = result.inserted_id
+
+        # Trigger dynamic matching pipeline for the newly created project
+        try:
+            from app.services.match_service import MatchService
+            await MatchService.compute_matches_for_project(new_id)
+        except Exception as e:
+            logger.warning("Could not auto-generate matches for project %s: %s", new_id, e)
+
         return serialize_doc(doc)
 
     @classmethod
@@ -150,6 +158,16 @@ class ProjectService:
         query = cls._parse_id(project_id)
 
         await db.projects.update_one(query, {"$set": update_fields})
+
+        # Recalculate matches if thesis-critical fields changed
+        thesis_keys = {"industry", "stage", "funding_required", "business_model", "target_market", "description"}
+        if any(k in update_fields for k in thesis_keys):
+            try:
+                from app.services.match_service import MatchService
+                await MatchService.compute_matches_for_project(project_id)
+            except Exception as e:
+                logger.warning("Could not refresh matches for project %s: %s", project_id, e)
+
         return await cls.get_by_id(project_id)
 
     @classmethod
@@ -163,6 +181,13 @@ class ProjectService:
             query,
             {"$set": {"is_published": is_published, "updated_at": datetime.now(timezone.utc)}}
         )
+
+        try:
+            from app.services.match_service import MatchService
+            await MatchService.compute_matches_for_project(project_id)
+        except Exception as e:
+            logger.warning("Could not update matches after publish toggle for %s: %s", project_id, e)
+
         return await cls.get_by_id(project_id)
 
     @classmethod
