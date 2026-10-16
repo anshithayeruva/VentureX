@@ -22,17 +22,27 @@ import {
   Settings,
   ArrowUpRight,
   UserCheck,
+  Clock,
+  Unlock,
+  Lock,
+  ExternalLink,
+  Calendar,
+  MessageSquare,
+  Mail,
+  Phone,
+  FileText,
+  CheckCheck,
 } from "lucide-react";
 import { Badge } from "@/components/Badge";
 import { ProjectCard } from "@/components/ProjectCard";
 import { StatCard } from "@/components/StatCard";
 import { PortalLayout } from "@/components/PortalLayout";
 import { api, MOCK_PROJECTS, MOCK_MATCHES } from "@/lib/api";
-import { Project, MatchItem } from "@/types";
+import { Project, MatchItem, ProjectInterest, NotificationItem } from "@/types";
 
 function InvestorDashboardContent() {
   const searchParams = useSearchParams();
-  const tabParam = searchParams.get("tab");
+  const tabParam = useSearchParams().get("tab");
 
   const [activeTab, setActiveTab] = useState<string>("overview");
   const [projects, setProjects] = useState<Project[]>(MOCK_PROJECTS);
@@ -40,6 +50,10 @@ function InvestorDashboardContent() {
   const [selectedIndustry, setSelectedIndustry] = useState<string>("All");
   const [searchQuery, setSearchQuery] = useState<string>("");
   const [savedInterests, setSavedInterests] = useState<number[]>([1]);
+  const [interestsList, setInterestsList] = useState<ProjectInterest[]>([]);
+  const [notifications, setNotifications] = useState<NotificationItem[]>([]);
+  const [unreadNotifCount, setUnreadNotifCount] = useState<number>(0);
+
 
   const [investorProfile, setInvestorProfile] = useState({
     name: "Dr. Sarah Lin",
@@ -100,7 +114,14 @@ function InvestorDashboardContent() {
     });
     api.getInterests().then((data) => {
       if (mounted && Array.isArray(data) && data.length > 0) {
-        setSavedInterests(data.map((item: any) => item.project_id));
+        setSavedInterests(data.map((item: any) => Number(item.project_id)));
+        setInterestsList(data);
+      }
+    });
+    api.getNotifications("INVESTOR").then((data) => {
+      if (mounted && Array.isArray(data)) {
+        setNotifications(data);
+        setUnreadNotifCount(data.filter((n) => !n.read).length);
       }
     });
     return () => {
@@ -108,12 +129,31 @@ function InvestorDashboardContent() {
     };
   }, []);
 
+  const handleMarkAsRead = async (id: string | number) => {
+    await api.markNotificationRead(id);
+    setNotifications((prev) =>
+      prev.map((n) => (n.id === id ? { ...n, read: true } : n))
+    );
+    setUnreadNotifCount((prev) => Math.max(0, prev - 1));
+  };
+
+  const handleMarkAllAsRead = async () => {
+    await api.markAllNotificationsRead("INVESTOR");
+    setNotifications((prev) => prev.map((n) => ({ ...n, read: true })));
+    setUnreadNotifCount(0);
+  };
+
+
   const toggleInterest = async (projectId: number) => {
     if (savedInterests.includes(projectId)) {
       setSavedInterests(savedInterests.filter((id) => id !== projectId));
+      setInterestsList(interestsList.filter((item) => Number(item.project_id) !== Number(projectId)));
     } else {
       setSavedInterests([...savedInterests, projectId]);
-      await api.expressInterest({ project_id: projectId });
+      const created = await api.expressInterest({ project_id: projectId });
+      if (created) {
+        setInterestsList((prev) => [created, ...prev]);
+      }
     }
   };
 
@@ -356,34 +396,189 @@ function InvestorDashboardContent() {
       {/* 4. My Interests Tab */}
       {activeTab === "interests" && (
         <div className="space-y-6">
-          <div>
-            <h2 className="text-lg font-bold text-[#0F172A] font-display">Expressed Founder Introductions</h2>
-            <p className="text-xs text-[#64748B]">
-              Projects you have marked for direct connection and deal room access.
-            </p>
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+            <div>
+              <h2 className="text-lg font-bold text-[#0F172A] font-display flex items-center gap-2">
+                <Heart className="w-5 h-5 text-[#1B3B6F]" />
+                Deal Rooms & Expressed Introductions
+              </h2>
+              <p className="text-xs text-[#64748B]">
+                Track introduction requests to founders. Once approved by the founding team, their confidential data room, direct messaging channel, and meeting scheduler unlock below.
+              </p>
+            </div>
+            <button
+              onClick={() => setActiveTab("browse")}
+              className="px-3.5 py-1.5 text-xs font-medium text-white bg-[#1B3B6F] hover:bg-[#142C54] rounded-lg transition-colors shadow-sm self-start sm:self-auto"
+            >
+              Browse More Startups
+            </button>
           </div>
 
-          {interestedProjectsList.length === 0 ? (
-            <div className="text-center py-16 border border-dashed border-[#E2E8F0] rounded-xl bg-white">
-              <Heart className="w-8 h-8 text-[#94A3B8] mx-auto mb-2" />
-              <p className="text-xs sm:text-sm text-[#64748B]">You haven&apos;t expressed interest in any startups yet.</p>
+          {interestsList.length === 0 ? (
+            <div className="text-center py-16 border border-dashed border-[#E2E8F0] rounded-xl bg-white shadow-subtle space-y-2">
+              <Heart className="w-8 h-8 text-[#94A3B8] mx-auto mb-1" />
+              <h4 className="text-sm font-bold text-[#0F172A] font-display">No Expressed Interests Yet</h4>
+              <p className="text-xs text-[#64748B] max-w-sm mx-auto">
+                Browse our dealflow catalog and click &quot;Request Introduction&quot; to initiate a confidential deal room dialogue.
+              </p>
               <button
                 onClick={() => setActiveTab("browse")}
-                className="mt-3 px-4 py-2 text-xs font-medium text-white bg-[#1B3B6F] hover:bg-[#142C54] rounded-lg"
+                className="mt-2 px-4 py-2 text-xs font-semibold text-white bg-[#1B3B6F] hover:bg-[#142C54] rounded-lg shadow-sm"
               >
-                Browse Startups Pipeline
+                Explore Dealflow Pipeline
               </button>
             </div>
           ) : (
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-              {interestedProjectsList.map((project) => (
-                <ProjectCard
-                  key={project.id}
-                  project={project}
-                  isInvestorView={true}
-                  onConnect={() => toggleInterest(project.id)}
-                />
-              ))}
+            <div className="space-y-4">
+              {interestsList.map((interest) => {
+                const project = projects.find((p) => Number(p.id) === Number(interest.project_id));
+                const title = interest.project_title || project?.title || `Project #${interest.project_id}`;
+                const industry = interest.project_industry || project?.industry || "Technology";
+                const isAccepted = interest.status === "accepted";
+                const isPending = interest.status === "pending";
+
+                return (
+                  <div
+                    key={interest.id}
+                    className="rounded-xl border border-[#E2E8F0] bg-white p-6 shadow-subtle hover:border-[#CBD5E1] transition-all space-y-4"
+                  >
+                    {/* Header with Title & Status */}
+                    <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-3 pb-3 border-b border-[#F1F5F9]">
+                      <div>
+                        <div className="flex items-center gap-2.5 flex-wrap">
+                          <h3 className="text-base font-bold text-[#0F172A] font-display">{title}</h3>
+                          <Badge variant="primary">{industry}</Badge>
+                          {project && <Badge variant="secondary">{project.stage}</Badge>}
+                        </div>
+                        {project && (
+                          <p className="text-xs text-[#64748B] mt-1 line-clamp-1">{project.tagline || project.description}</p>
+                        )}
+                      </div>
+
+                      <div className="flex items-center gap-2">
+                        {isPending && (
+                          <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold bg-[#FEF3C7] border border-[#FDE68A] text-[#92400E]">
+                            <Clock className="w-3.5 h-3.5" />
+                            Pending Founder Review
+                          </span>
+                        )}
+                        {isAccepted && (
+                          <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold bg-[#E8F5E9] border border-[#C8E6C9] text-[#2E7D52]">
+                            <Unlock className="w-3.5 h-3.5" />
+                            Deal Room Unlocked
+                          </span>
+                        )}
+                        {interest.status === "declined" && (
+                          <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold bg-[#F1F5F9] border border-[#E2E8F0] text-[#64748B]">
+                            <Lock className="w-3.5 h-3.5" />
+                            Declined by Founder
+                          </span>
+                        )}
+                      </div>
+                    </div>
+
+                    {/* Introductory message */}
+                    {interest.message && (
+                      <div className="space-y-1">
+                        <span className="text-[10px] font-semibold uppercase tracking-wider text-[#64748B] block">
+                          Your Introduction Message:
+                        </span>
+                        <p className="text-xs text-[#475569] italic bg-[#F8FAFC] p-3 rounded-lg border border-[#F1F5F9]">
+                          &quot;{interest.message}&quot;
+                        </p>
+                      </div>
+                    )}
+
+                    {/* Pending State Banner */}
+                    {isPending && (
+                      <div className="p-3.5 rounded-lg bg-[#FFFBEB] border border-[#FDE68A] text-xs text-[#92400E] flex items-center justify-between">
+                        <span className="flex items-center gap-2">
+                          <Clock className="w-4 h-4 text-[#D97706] shrink-0" />
+                          Founder is reviewing your firm&apos;s thesis note. Once accepted, confidential data room materials unlock here.
+                        </span>
+                        <button
+                          onClick={() => toggleInterest(Number(interest.project_id))}
+                          className="text-[11px] font-semibold text-[#92400E] hover:underline shrink-0 ml-2"
+                        >
+                          Withdraw Request
+                        </button>
+                      </div>
+                    )}
+
+                    {/* Unlocked Deal Room Panel */}
+                    {isAccepted && (
+                      <div className="rounded-xl border border-[#C8E6C9] bg-[#F4FBF6] p-4.5 space-y-3">
+                        <div className="flex items-center justify-between flex-wrap gap-2">
+                          <div className="flex items-center gap-2">
+                            <CheckCheck className="w-4 h-4 text-[#2E7D52]" />
+                            <h4 className="text-xs sm:text-sm font-bold text-[#1E5236] font-display">
+                              Confidential Deal Room Unlocked
+                            </h4>
+                            <span className="px-2 py-0.5 rounded-full text-[10px] font-semibold bg-[#2E7D52] text-white">
+                              Cap Table Verified
+                            </span>
+                          </div>
+                          <span className="text-xs text-[#2E7D52] font-semibold flex items-center gap-1">
+                            <Mail className="w-3.5 h-3.5" />
+                            {interest.founder_email || "founder@venturex.demo"}
+                          </span>
+                        </div>
+
+                        {interest.response_note && (
+                          <p className="text-xs text-[#1E5236] bg-white p-2.5 rounded-lg border border-[#C8E6C9]">
+                            <strong>Founder Note:</strong> &quot;{interest.response_note}&quot;
+                          </p>
+                        )}
+
+                        <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5 pt-1">
+                          <a
+                            href={`https://dataroom.venturex.io/room/${interest.project_id}?access=granted`}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="p-3 bg-white border border-[#C8E6C9] hover:border-[#2E7D52] rounded-lg text-xs font-medium text-[#0F172A] transition-all flex items-center justify-between shadow-subtle group"
+                          >
+                            <span className="flex items-center gap-2">
+                              <FileText className="w-4 h-4 text-[#2E7D52]" />
+                              Data Room & Cap Table
+                            </span>
+                            <ExternalLink className="w-3.5 h-3.5 text-[#94A3B8] group-hover:text-[#2E7D52]" />
+                          </a>
+
+                          <a
+                            href="https://cal.com/alexrivers/seed-intro-30min"
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="p-3 bg-white border border-[#C8E6C9] hover:border-[#2E7D52] rounded-lg text-xs font-medium text-[#0F172A] transition-all flex items-center justify-between shadow-subtle group"
+                          >
+                            <span className="flex items-center gap-2">
+                              <Calendar className="w-4 h-4 text-[#2E7D52]" />
+                              Schedule Partner Call
+                            </span>
+                            <ExternalLink className="w-3.5 h-3.5 text-[#94A3B8] group-hover:text-[#2E7D52]" />
+                          </a>
+
+                          <button
+                            onClick={() =>
+                              alert(
+                                `Direct messaging channel '#channel-dealroom-${interest.id}' is active! Live messaging connected.`
+                              )
+                            }
+                            className="p-3 bg-white border border-[#C8E6C9] hover:border-[#2E7D52] rounded-lg text-xs font-medium text-[#0F172A] transition-all flex items-center justify-between shadow-subtle group"
+                          >
+                            <span className="flex items-center gap-2">
+                              <MessageSquare className="w-4 h-4 text-[#2E7D52]" />
+                              Open Direct Chat
+                            </span>
+                            <span className="text-[10px] font-bold text-[#2E7D52] bg-[#E8F5E9] px-1.5 py-0.5 rounded">
+                              Live
+                            </span>
+                          </button>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
             </div>
           )}
         </div>
@@ -392,36 +587,94 @@ function InvestorDashboardContent() {
       {/* 5. Notifications Tab */}
       {activeTab === "notifications" && (
         <div className="max-w-3xl mx-auto space-y-4">
-          <div className="flex items-center justify-between pb-2 border-b border-[#E2E8F0]">
-            <h2 className="text-base font-bold text-[#0F172A] font-display">Investor Notifications</h2>
-            <span className="text-xs text-[#64748B]">2 new alerts</span>
+          <div className="flex items-center justify-between pb-3 border-b border-[#E2E8F0]">
+            <div className="flex items-center gap-2">
+              <h2 className="text-base font-bold text-[#0F172A] font-display">Investor Notifications</h2>
+              {unreadNotifCount > 0 ? (
+                <span className="px-2 py-0.5 rounded-full text-[11px] font-bold bg-[#EBF2FA] text-[#1B3B6F] border border-[#BFD7EE]">
+                  {unreadNotifCount} unread
+                </span>
+              ) : (
+                <span className="text-xs text-[#64748B]">All caught up</span>
+              )}
+            </div>
+            {unreadNotifCount > 0 && (
+              <button
+                onClick={handleMarkAllAsRead}
+                className="inline-flex items-center gap-1.5 text-xs font-semibold text-[#1B3B6F] hover:text-[#0F172A] transition-colors"
+              >
+                <CheckCheck className="w-4 h-4 text-[#1B3B6F]" />
+                Mark all as read
+              </button>
+            )}
           </div>
 
-          {[
-            {
-              title: "Founder Approved Dealflow Available",
-              desc: "NeuroPulse AI has made verified deck materials accessible to Apex Horizon Ventures.",
-              time: "1 hour ago",
-              badge: "Dealflow",
-              badgeVariant: "success" as const,
-            },
-            {
-              title: "New High-Cosine Match: Verdant Chain",
-              desc: "ClimateTech startup raising $1.2M matches your ESG infrastructure mandate at 93.8%.",
-              time: "4 hours ago",
-              badge: "Match",
-              badgeVariant: "primary" as const,
-            },
-          ].map((notif, idx) => (
-            <div key={idx} className="p-4 rounded-xl border border-[#E2E8F0] bg-white shadow-subtle space-y-1">
-              <div className="flex items-center gap-2">
-                <Badge variant={notif.badgeVariant}>{notif.badge}</Badge>
-                <h4 className="text-xs sm:text-sm font-bold text-[#0F172A] font-display">{notif.title}</h4>
-              </div>
-              <p className="text-xs text-[#64748B]">{notif.desc}</p>
-              <span className="text-[10px] text-[#94A3B8] block">{notif.time}</span>
+          {notifications.length === 0 ? (
+            <div className="p-8 text-center rounded-xl border border-dashed border-[#CBD5E1] bg-white">
+              <Bell className="w-8 h-8 text-[#94A3B8] mx-auto mb-2 opacity-50" />
+              <h3 className="text-sm font-bold text-[#0F172A]">No notifications yet</h3>
+              <p className="text-xs text-[#64748B] mt-1">
+                You will be notified when founders approve your deal room requests or new high-fit startups match your mandate.
+              </p>
             </div>
-          ))}
+          ) : (
+            notifications.map((notif) => {
+              const isUnread = !notif.read;
+              return (
+                <div
+                  key={notif.id}
+                  className={`p-4 rounded-xl border transition-all ${
+                    isUnread
+                      ? "border-[#BFD7EE] bg-[#F8FAFC] shadow-sm"
+                      : "border-[#E2E8F0] bg-white shadow-subtle opacity-85"
+                  } space-y-2`}
+                >
+                  <div className="flex items-center justify-between gap-3">
+                    <div className="flex items-center gap-2 flex-wrap">
+                      {isUnread && (
+                        <span className="w-2 h-2 rounded-full bg-[#1B3B6F] animate-pulse" />
+                      )}
+                      <Badge variant={(notif.badge_variant as any) || "primary"}>
+                        {notif.badge}
+                      </Badge>
+                      <h4 className="text-xs sm:text-sm font-bold text-[#0F172A] font-display">
+                        {notif.title}
+                      </h4>
+                    </div>
+                    <span className="text-[11px] font-mono text-[#94A3B8] shrink-0">
+                      {notif.time || "Recently"}
+                    </span>
+                  </div>
+
+                  <p className="text-xs text-[#475569] leading-relaxed pl-0.5">
+                    {notif.desc}
+                  </p>
+
+                  <div className="flex items-center justify-between pt-1 border-t border-[#F1F5F9] text-xs">
+                    {notif.link ? (
+                      <Link
+                        href={notif.link}
+                        className="font-semibold text-[#1B3B6F] hover:text-[#0F172A] inline-flex items-center gap-1"
+                      >
+                        Open Target View →
+                      </Link>
+                    ) : (
+                      <span />
+                    )}
+
+                    {isUnread && (
+                      <button
+                        onClick={() => handleMarkAsRead(notif.id)}
+                        className="text-[11px] text-[#64748B] hover:text-[#0F172A] font-medium"
+                      >
+                        Mark as read
+                      </button>
+                    )}
+                  </div>
+                </div>
+              );
+            })
+          )}
         </div>
       )}
 

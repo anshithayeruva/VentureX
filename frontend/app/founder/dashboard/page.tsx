@@ -26,6 +26,18 @@ import {
   RefreshCw,
   Search,
   Filter,
+  Briefcase,
+  Mail,
+  Phone,
+  ExternalLink,
+  Calendar,
+  MessageSquare,
+  Check,
+  X,
+  Unlock,
+  Building2,
+  Clock,
+  CheckCheck,
 } from "lucide-react";
 import { Badge } from "@/components/Badge";
 import { ProjectCard } from "@/components/ProjectCard";
@@ -33,7 +45,7 @@ import { InvestorCard } from "@/components/InvestorCard";
 import { StatCard } from "@/components/StatCard";
 import { PortalLayout } from "@/components/PortalLayout";
 import { api, MOCK_PROJECTS, MOCK_MATCHES } from "@/lib/api";
-import { Project, MatchItem } from "@/types";
+import { Project, MatchItem, ProjectInterest, NotificationItem } from "@/types";
 
 function FounderDashboardContent() {
   const searchParams = useSearchParams();
@@ -42,11 +54,18 @@ function FounderDashboardContent() {
   const [activeTab, setActiveTab] = useState<string>("overview");
   const [projects, setProjects] = useState<Project[]>(MOCK_PROJECTS);
   const [matches, setMatches] = useState<MatchItem[]>(MOCK_MATCHES);
+  const [interests, setInterests] = useState<ProjectInterest[]>([]);
+  const [statusProcessing, setStatusProcessing] = useState<string | null>(null);
+  const [introTabFilter, setIntroTabFilter] = useState<"all" | "pending" | "accepted" | "declined">("all");
+  const [responseNotes, setResponseNotes] = useState<Record<string, string>>({});
+  const [notifications, setNotifications] = useState<NotificationItem[]>([]);
+  const [unreadNotifCount, setUnreadNotifCount] = useState<number>(0);
   const [publishedProjects, setPublishedProjects] = useState<Record<number, boolean>>({
     1: true,
     2: false,
     3: false,
   });
+
 
   const [founderProfile, setFounderProfile] = useState({
     name: "Alex Rivers",
@@ -89,6 +108,9 @@ function FounderDashboardContent() {
     api.getMatches().then((data) => {
       if (mounted && data.length > 0) setMatches(data);
     });
+    api.getInterests().then((data) => {
+      if (mounted && Array.isArray(data)) setInterests(data);
+    });
     api.getFounderProfile().then((data) => {
       if (mounted && data) {
         setFounderProfile((prev) => ({
@@ -112,10 +134,46 @@ function FounderDashboardContent() {
         });
       }
     });
+    api.getNotifications("FOUNDER").then((data) => {
+      if (mounted && Array.isArray(data)) {
+        setNotifications(data);
+        setUnreadNotifCount(data.filter((n) => !n.read).length);
+      }
+    });
     return () => {
       mounted = false;
     };
   }, []);
+
+  const handleMarkAsRead = async (id: string | number) => {
+    await api.markNotificationRead(id);
+    setNotifications((prev) =>
+      prev.map((n) => (n.id === id ? { ...n, read: true } : n))
+    );
+    setUnreadNotifCount((prev) => Math.max(0, prev - 1));
+  };
+
+  const handleMarkAllAsRead = async () => {
+    await api.markAllNotificationsRead("FOUNDER");
+    setNotifications((prev) => prev.map((n) => ({ ...n, read: true })));
+    setUnreadNotifCount(0);
+  };
+
+
+  const handleUpdateStatus = async (interestId: string | number, status: "accepted" | "declined") => {
+    setStatusProcessing(String(interestId));
+    try {
+      const note = responseNotes[String(interestId)];
+      const res = await api.updateInterestStatus(interestId, status, note);
+      if (res) {
+        setInterests((prev) =>
+          prev.map((item) => (String(item.id) === String(interestId) ? { ...item, ...res, status } : item))
+        );
+      }
+    } finally {
+      setStatusProcessing(null);
+    }
+  };
 
   const handleProfileSave = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -189,6 +247,8 @@ function FounderDashboardContent() {
           ? "Dashboard"
           : activeTab === "projects"
           ? "My Projects"
+          : activeTab === "intros"
+          ? "Intro Requests & Deal Rooms"
           : activeTab === "readiness"
           ? "AI Readiness Report"
           : activeTab === "investors"
@@ -212,6 +272,7 @@ function FounderDashboardContent() {
           <h1 className="text-2xl sm:text-3xl font-bold text-[#0F172A] font-display">
             {activeTab === "overview" && "Founder Dashboard"}
             {activeTab === "projects" && "My Startup Projects"}
+            {activeTab === "intros" && "Introduction Requests & Deal Rooms"}
             {activeTab === "readiness" && "AI Pitch Readiness Report"}
             {activeTab === "investors" && "Semantic Investor Discovery"}
             {activeTab === "notifications" && "Founder Notifications"}
@@ -221,6 +282,7 @@ function FounderDashboardContent() {
           <p className="text-xs sm:text-sm text-[#64748B] mt-0.5">
             {activeTab === "overview" && "Track pitch deck readiness, manage confidential profiles, and review explainable matches."}
             {activeTab === "projects" && "Manage your venture profiles. Control when materials become visible to syndicate investors."}
+            {activeTab === "intros" && "Review syndicate introduction requests, approve deal room access, and communicate directly with partners."}
             {activeTab === "readiness" && "Confidential diagnostic evaluation of market sizing, defensibility, and presentation strength."}
             {activeTab === "investors" && "Discover investors whose mandates and past deals align with your sector and check size."}
             {activeTab === "notifications" && "Recent deal room activity, investor interest requests, and analysis updates."}
@@ -262,18 +324,97 @@ function FounderDashboardContent() {
             <StatCard
               label="Matched Theses"
               value={matches.length}
-              change="3 High Conviction"
+              change={`${matches.filter(m => m.match_score >= 85).length} High Conviction`}
               icon={Users}
               subtext="Exceeds 85% threshold"
             />
             <StatCard
               label="Intro Requests"
-              value="2"
-              change="Pending Review"
+              value={interests.filter((i) => i.status === "pending").length}
+              change={
+                interests.filter((i) => i.status === "pending").length > 0
+                  ? `${interests.filter((i) => i.status === "pending").length} Action Required`
+                  : "All Processed"
+              }
               icon={TrendingUp}
               subtext="Syndicate partners"
             />
           </div>
+
+          {/* Quick Inbound Intro Requests Review Banner */}
+          {interests.filter((i) => i.status === "pending").length > 0 && (
+            <div className="rounded-xl border border-[#BFD7EE] bg-[#EBF2FA] p-5 shadow-subtle space-y-3">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2.5">
+                  <div className="w-8 h-8 rounded-lg bg-[#1B3B6F] flex items-center justify-center text-white shrink-0 shadow-sm">
+                    <Briefcase className="w-4 h-4" />
+                  </div>
+                  <div>
+                    <h3 className="text-sm font-bold text-[#0F172A] font-display flex items-center gap-2">
+                      Inbound Introduction Requests
+                      <span className="px-2 py-0.5 rounded-full text-[10px] font-semibold bg-[#1B3B6F] text-white">
+                        {interests.filter((i) => i.status === "pending").length} Pending Review
+                      </span>
+                    </h3>
+                    <p className="text-xs text-[#64748B]">Accredited partners requesting confidential data room review.</p>
+                  </div>
+                </div>
+                <button
+                  onClick={() => setActiveTab("intros")}
+                  className="text-xs font-semibold text-[#1B3B6F] hover:text-[#142C54]"
+                >
+                  Manage all ({interests.length}) →
+                </button>
+              </div>
+
+              <div className="space-y-3 pt-1">
+                {interests
+                  .filter((i) => i.status === "pending")
+                  .slice(0, 2)
+                  .map((item) => (
+                    <div
+                      key={item.id}
+                      className="p-4 rounded-xl bg-white border border-[#E2E8F0] flex flex-col md:flex-row md:items-center justify-between gap-4 shadow-subtle"
+                    >
+                      <div className="space-y-1.5">
+                        <div className="flex items-center gap-2 flex-wrap">
+                          <span className="text-xs font-bold text-[#0F172A] font-display">{item.investor_name}</span>
+                          {item.investor_firm && (
+                            <span className="text-xs text-[#64748B] flex items-center gap-1">
+                              <Building2 className="w-3 h-3 text-[#94A3B8]" />
+                              {item.investor_firm}
+                            </span>
+                          )}
+                          <Badge variant="primary">{item.project_title || "Startup Project"}</Badge>
+                        </div>
+                        <p className="text-xs text-[#475569] italic bg-[#F8FAFC] p-2.5 rounded-lg border border-[#F1F5F9]">
+                          &quot;{item.message}&quot;
+                        </p>
+                      </div>
+
+                      <div className="flex items-center gap-2 shrink-0">
+                        <button
+                          disabled={statusProcessing === String(item.id)}
+                          onClick={() => handleUpdateStatus(item.id, "accepted")}
+                          className="px-3.5 py-1.5 text-xs font-medium text-white bg-[#2E7D52] hover:bg-[#256843] rounded-lg transition-colors flex items-center gap-1.5 shadow-sm"
+                        >
+                          <Unlock className="w-3.5 h-3.5" />
+                          Accept & Unlock Deal Room
+                        </button>
+                        <button
+                          disabled={statusProcessing === String(item.id)}
+                          onClick={() => handleUpdateStatus(item.id, "declined")}
+                          className="px-3 py-1.5 text-xs font-medium text-[#64748B] hover:text-[#0F172A] bg-white border border-[#E2E8F0] hover:bg-[#F8FAFC] rounded-lg transition-colors flex items-center gap-1"
+                        >
+                          <X className="w-3.5 h-3.5" />
+                          Decline
+                        </button>
+                      </div>
+                    </div>
+                  ))}
+              </div>
+            </div>
+          )}
 
           {/* Privacy Model Notice Panel */}
           <div className="rounded-xl border border-[#E2E8F0] bg-[#F1F5F9] p-4 sm:p-5 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
@@ -630,48 +771,331 @@ function FounderDashboardContent() {
         </div>
       )}
 
+      {/* 4.5 Introduction Requests & Deal Rooms Tab */}
+      {activeTab === "intros" && (
+        <div className="space-y-6">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+            <div>
+              <h2 className="text-lg font-bold text-[#0F172A] font-display flex items-center gap-2">
+                <Briefcase className="w-5 h-5 text-[#1B3B6F]" />
+                Introduction Requests & Deal Rooms
+              </h2>
+              <p className="text-xs text-[#64748B]">
+                Manage inbound interest from syndicate partners. Approving an introduction unlocks your verified data room and direct messaging.
+              </p>
+            </div>
+
+            {/* Status Filter Tabs */}
+            <div className="flex items-center gap-1.5 p-1 bg-[#F1F5F9] border border-[#E2E8F0] rounded-lg">
+              {(["all", "pending", "accepted", "declined"] as const).map((filter) => (
+                <button
+                  key={filter}
+                  onClick={() => setIntroTabFilter(filter)}
+                  className={`px-3 py-1 text-xs font-semibold rounded-md transition-all capitalize ${
+                    introTabFilter === filter
+                      ? "bg-white text-[#0F172A] shadow-subtle border border-[#E2E8F0]"
+                      : "text-[#64748B] hover:text-[#0F172A]"
+                  }`}
+                >
+                  {filter === "all"
+                    ? `All (${interests.length})`
+                    : filter === "pending"
+                    ? `Pending (${interests.filter((i) => i.status === "pending").length})`
+                    : filter === "accepted"
+                    ? `Active Rooms (${interests.filter((i) => i.status === "accepted").length})`
+                    : `Declined (${interests.filter((i) => i.status === "declined").length})`}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          {interests.filter((i) => (introTabFilter === "all" ? true : i.status === introTabFilter)).length === 0 ? (
+            <div className="text-center py-16 border border-dashed border-[#E2E8F0] rounded-xl bg-white shadow-subtle space-y-2">
+              <Briefcase className="w-8 h-8 text-[#94A3B8] mx-auto mb-1" />
+              <h4 className="text-sm font-bold text-[#0F172A] font-display">No Introduction Requests in this Filter</h4>
+              <p className="text-xs text-[#64748B] max-w-sm mx-auto">
+                Inbound requests from accredited investors will appear here when partners request introduction.
+              </p>
+            </div>
+          ) : (
+            <div className="space-y-4">
+              {interests
+                .filter((i) => (introTabFilter === "all" ? true : i.status === introTabFilter))
+                .map((item) => (
+                  <div
+                    key={item.id}
+                    className="rounded-xl border border-[#E2E8F0] bg-white p-6 shadow-subtle hover:border-[#CBD5E1] transition-all space-y-4"
+                  >
+                    {/* Header */}
+                    <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-3 pb-3 border-b border-[#F1F5F9]">
+                      <div className="flex items-center gap-3">
+                        <div className="w-10 h-10 rounded-xl bg-[#0F1E36] border border-[#1F3354] flex items-center justify-center font-bold text-white text-sm shadow-sm font-display shrink-0">
+                          {item.investor_name ? item.investor_name.slice(0, 2).toUpperCase() : "IN"}
+                        </div>
+                        <div>
+                          <div className="flex items-center gap-2">
+                            <h3 className="text-base font-bold text-[#0F172A] font-display">{item.investor_name}</h3>
+                            <span className="text-xs text-[#64748B]">({item.investor_firm || "Partner Syndicate"})</span>
+                          </div>
+                          <p className="text-xs text-[#64748B] flex items-center gap-1.5 mt-0.5">
+                            <Mail className="w-3.5 h-3.5 text-[#94A3B8]" />
+                            {item.investor_email || "verified.partner@syndicate.vc"}
+                          </p>
+                        </div>
+                      </div>
+
+                      <div className="flex items-center gap-2">
+                        <Badge variant="primary">{item.project_title || "Project"}</Badge>
+                        {item.status === "pending" && (
+                          <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-semibold bg-[#FEF3C7] border border-[#FDE68A] text-[#92400E]">
+                            <Clock className="w-3 h-3" />
+                            Pending Review
+                          </span>
+                        )}
+                        {item.status === "accepted" && (
+                          <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-semibold bg-[#E8F5E9] border border-[#C8E6C9] text-[#2E7D52]">
+                            <Unlock className="w-3 h-3" />
+                            Deal Room Active
+                          </span>
+                        )}
+                        {item.status === "declined" && (
+                          <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-semibold bg-[#F1F5F9] border border-[#E2E8F0] text-[#64748B]">
+                            <X className="w-3 h-3" />
+                            Declined
+                          </span>
+                        )}
+                      </div>
+                    </div>
+
+                    {/* Inbound Investor Note */}
+                    <div className="space-y-1">
+                      <span className="text-[10px] font-semibold uppercase tracking-wider text-[#64748B] block">
+                        Investor Message & Thesis Note:
+                      </span>
+                      <p className="text-xs text-[#334155] leading-relaxed bg-[#F8FAFC] p-3.5 rounded-lg border border-[#F1F5F9]">
+                        &quot;{item.message}&quot;
+                      </p>
+                    </div>
+
+                    {/* Action Area: Pending */}
+                    {item.status === "pending" && (
+                      <div className="pt-2 space-y-3">
+                        <div>
+                          <label className="block text-[11px] font-semibold text-[#0F172A] mb-1">
+                            Response Note for Partner (Optional):
+                          </label>
+                          <input
+                            type="text"
+                            placeholder="e.g. Welcome Dr. Lin. Thrilled to share our ICU pilot metrics and cap table."
+                            value={responseNotes[String(item.id)] || ""}
+                            onChange={(e) =>
+                              setResponseNotes({ ...responseNotes, [String(item.id)]: e.target.value })
+                            }
+                            className="w-full px-3 py-2 bg-[#FAFBFD] border border-[#E2E8F0] rounded-lg text-xs text-[#0F172A] focus:outline-none focus:border-[#1B3B6F]"
+                          />
+                        </div>
+
+                        <div className="flex items-center gap-2 pt-1">
+                          <button
+                            disabled={statusProcessing === String(item.id)}
+                            onClick={() => handleUpdateStatus(item.id, "accepted")}
+                            className="px-4 py-2 text-xs font-semibold text-white bg-[#2E7D52] hover:bg-[#256843] rounded-lg transition-colors flex items-center gap-1.5 shadow-sm"
+                          >
+                            <Unlock className="w-4 h-4" />
+                            {statusProcessing === String(item.id) ? "Unlocking..." : "Accept & Unlock Deal Room"}
+                          </button>
+                          <button
+                            disabled={statusProcessing === String(item.id)}
+                            onClick={() => handleUpdateStatus(item.id, "declined")}
+                            className="px-4 py-2 text-xs font-medium text-[#64748B] hover:text-[#0F172A] bg-white border border-[#E2E8F0] hover:bg-[#F8FAFC] rounded-lg transition-colors flex items-center gap-1.5"
+                          >
+                            <X className="w-4 h-4" />
+                            Decline Request
+                          </button>
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Unlocked Deal Room Access */}
+                    {item.status === "accepted" && (
+                      <div className="rounded-xl border border-[#C8E6C9] bg-[#F4FBF6] p-4.5 space-y-3">
+                        <div className="flex items-center justify-between flex-wrap gap-2">
+                          <div className="flex items-center gap-2">
+                            <CheckCheck className="w-4 h-4 text-[#2E7D52]" />
+                            <h4 className="text-xs sm:text-sm font-bold text-[#1E5236] font-display">
+                              Confidential Deal Room Active
+                            </h4>
+                            <span className="px-2 py-0.5 rounded-full text-[10px] font-semibold bg-[#2E7D52] text-white">
+                              Cap Table Verified
+                            </span>
+                          </div>
+                          <span className="text-[11px] text-[#2E7D52] font-mono">Status: Connected</span>
+                        </div>
+
+                        {item.response_note && (
+                          <p className="text-xs text-[#1E5236] bg-white p-2.5 rounded-lg border border-[#C8E6C9]">
+                            <strong>Your Welcome Note:</strong> &quot;{item.response_note}&quot;
+                          </p>
+                        )}
+
+                        <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5 pt-1">
+                          <a
+                            href={`https://dataroom.venturex.io/room/${item.project_id}?access=granted`}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="p-3 bg-white border border-[#C8E6C9] hover:border-[#2E7D52] rounded-lg text-xs font-medium text-[#0F172A] transition-all flex items-center justify-between shadow-subtle group"
+                          >
+                            <span className="flex items-center gap-2">
+                              <FileText className="w-4 h-4 text-[#2E7D52]" />
+                              Data Room & Cap Table
+                            </span>
+                            <ExternalLink className="w-3.5 h-3.5 text-[#94A3B8] group-hover:text-[#2E7D52]" />
+                          </a>
+
+                          <a
+                            href="https://cal.com/alexrivers/seed-intro-30min"
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="p-3 bg-white border border-[#C8E6C9] hover:border-[#2E7D52] rounded-lg text-xs font-medium text-[#0F172A] transition-all flex items-center justify-between shadow-subtle group"
+                          >
+                            <span className="flex items-center gap-2">
+                              <Calendar className="w-4 h-4 text-[#2E7D52]" />
+                              Schedule Partner Call
+                            </span>
+                            <ExternalLink className="w-3.5 h-3.5 text-[#94A3B8] group-hover:text-[#2E7D52]" />
+                          </a>
+
+                          <button
+                            onClick={() =>
+                              alert(
+                                `Direct messaging channel '#channel-dealroom-${item.id}' is active! Live messaging connected.`
+                              )
+                            }
+                            className="p-3 bg-white border border-[#C8E6C9] hover:border-[#2E7D52] rounded-lg text-xs font-medium text-[#0F172A] transition-all flex items-center justify-between shadow-subtle group"
+                          >
+                            <span className="flex items-center gap-2">
+                              <MessageSquare className="w-4 h-4 text-[#2E7D52]" />
+                              Open Direct Chat
+                            </span>
+                            <span className="text-[10px] font-bold text-[#2E7D52] bg-[#E8F5E9] px-1.5 py-0.5 rounded">
+                              Live
+                            </span>
+                          </button>
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Declined State */}
+                    {item.status === "declined" && (
+                      <div className="flex items-center justify-between pt-1">
+                        <span className="text-xs text-[#64748B]">This introduction request was declined.</span>
+                        <button
+                          disabled={statusProcessing === String(item.id)}
+                          onClick={() => handleUpdateStatus(item.id, "accepted")}
+                          className="text-xs font-semibold text-[#1B3B6F] hover:text-[#142C54]"
+                        >
+                          Reopen & Unlock Deal Room
+                        </button>
+                      </div>
+                    )}
+                  </div>
+                ))}
+            </div>
+          )}
+        </div>
+      )}
+
       {/* 5. Notifications Tab */}
       {activeTab === "notifications" && (
         <div className="max-w-3xl mx-auto space-y-4">
-          <div className="flex items-center justify-between pb-2 border-b border-[#E2E8F0]">
-            <h2 className="text-base font-bold text-[#0F172A] font-display">Recent Activity & Notifications</h2>
-            <span className="text-xs text-[#64748B]">3 unread</span>
+          <div className="flex items-center justify-between pb-3 border-b border-[#E2E8F0]">
+            <div className="flex items-center gap-2">
+              <h2 className="text-base font-bold text-[#0F172A] font-display">Recent Activity & Notifications</h2>
+              {unreadNotifCount > 0 ? (
+                <span className="px-2 py-0.5 rounded-full text-[11px] font-bold bg-[#EBF2FA] text-[#1B3B6F] border border-[#BFD7EE]">
+                  {unreadNotifCount} unread
+                </span>
+              ) : (
+                <span className="text-xs text-[#64748B]">All caught up</span>
+              )}
+            </div>
+            {unreadNotifCount > 0 && (
+              <button
+                onClick={handleMarkAllAsRead}
+                className="inline-flex items-center gap-1.5 text-xs font-semibold text-[#1B3B6F] hover:text-[#0F172A] transition-colors"
+              >
+                <CheckCheck className="w-4 h-4 text-[#1B3B6F]" />
+                Mark all as read
+              </button>
+            )}
           </div>
 
-          {[
-            {
-              title: "New 96.4% Mandate Match",
-              desc: "Dr. Sarah Lin (Apex Horizon Ventures) matches your $750k Seed ask for Healthcare AI.",
-              time: "20 minutes ago",
-              badge: "Match",
-              badgeVariant: "success" as const,
-            },
-            {
-              title: "AI Readiness Re-evaluation Complete",
-              desc: "Your readiness score improved from 88.0 to 92.4 following clinical pilot data upload.",
-              time: "2 hours ago",
-              badge: "Analysis",
-              badgeVariant: "primary" as const,
-            },
-            {
-              title: "Confidentiality Check: Private Status Active",
-              desc: "Your project 'QuantaShield' remains in private draft mode. Only you can view this report.",
-              time: "1 day ago",
-              badge: "Security",
-              badgeVariant: "secondary" as const,
-            },
-          ].map((notif, idx) => (
-            <div key={idx} className="p-4 rounded-xl border border-[#E2E8F0] bg-white shadow-subtle flex items-start justify-between gap-4">
-              <div className="space-y-1">
-                <div className="flex items-center gap-2">
-                  <Badge variant={notif.badgeVariant}>{notif.badge}</Badge>
-                  <h4 className="text-xs sm:text-sm font-bold text-[#0F172A] font-display">{notif.title}</h4>
-                </div>
-                <p className="text-xs text-[#64748B]">{notif.desc}</p>
-                <span className="text-[10px] text-[#94A3B8] block">{notif.time}</span>
-              </div>
+          {notifications.length === 0 ? (
+            <div className="p-8 text-center rounded-xl border border-dashed border-[#CBD5E1] bg-white">
+              <Bell className="w-8 h-8 text-[#94A3B8] mx-auto mb-2 opacity-50" />
+              <h3 className="text-sm font-bold text-[#0F172A]">No notifications yet</h3>
+              <p className="text-xs text-[#64748B] mt-1">
+                You will be notified when institutional investors request introductions or unlock deal rooms.
+              </p>
             </div>
-          ))}
+          ) : (
+            notifications.map((notif) => {
+              const isUnread = !notif.read;
+              return (
+                <div
+                  key={notif.id}
+                  className={`p-4 rounded-xl border transition-all ${
+                    isUnread
+                      ? "border-[#BFD7EE] bg-[#F8FAFC] shadow-sm"
+                      : "border-[#E2E8F0] bg-white shadow-subtle opacity-85"
+                  } space-y-2`}
+                >
+                  <div className="flex items-center justify-between gap-3">
+                    <div className="flex items-center gap-2 flex-wrap">
+                      {isUnread && (
+                        <span className="w-2 h-2 rounded-full bg-[#1B3B6F] animate-pulse" />
+                      )}
+                      <Badge variant={(notif.badge_variant as any) || "primary"}>
+                        {notif.badge}
+                      </Badge>
+                      <h4 className="text-xs sm:text-sm font-bold text-[#0F172A] font-display">
+                        {notif.title}
+                      </h4>
+                    </div>
+                    <span className="text-[11px] font-mono text-[#94A3B8] shrink-0">
+                      {notif.time || "Recently"}
+                    </span>
+                  </div>
+
+                  <p className="text-xs text-[#475569] leading-relaxed pl-0.5">
+                    {notif.desc}
+                  </p>
+
+                  <div className="flex items-center justify-between pt-1 border-t border-[#F1F5F9] text-xs">
+                    {notif.link ? (
+                      <Link
+                        href={notif.link}
+                        className="font-semibold text-[#1B3B6F] hover:text-[#0F172A] inline-flex items-center gap-1"
+                      >
+                        View Activity →
+                      </Link>
+                    ) : (
+                      <span />
+                    )}
+
+                    {isUnread && (
+                      <button
+                        onClick={() => handleMarkAsRead(notif.id)}
+                        className="text-[11px] text-[#64748B] hover:text-[#0F172A] font-medium"
+                      >
+                        Mark as read
+                      </button>
+                    )}
+                  </div>
+                </div>
+              );
+            })
+          )}
         </div>
       )}
 

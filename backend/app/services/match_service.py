@@ -330,6 +330,30 @@ class MatchService:
                 )
                 results.append(match_data)
 
+                # Emit automated notification for high-fit deals (> 90%)
+                if match_data.get("match_score", 0) >= 90.0:
+                    try:
+                        from app.services.notification_service import NotificationService
+                        p_title = project.get("title", "Startup")
+                        p_ind = project.get("industry", "DeepTech")
+                        score = match_data["match_score"]
+                        existing = await db.notifications.find_one({
+                            "user_id": user_id,
+                            "title": {"$regex": f".*{p_title}.*"},
+                        })
+                        if not existing:
+                            await NotificationService.create_notification(
+                                target_role="INVESTOR",
+                                user_id=user_id,
+                                title=f"High-Fit Mandate Match: {p_title} ({score}%)",
+                                desc=f"'{p_title}' in {p_ind} aligns strongly with your target sector, stage, and check size ({score}% match).",
+                                badge="Match",
+                                badge_variant="success",
+                                link="/investor/dashboard?tab=matches",
+                            )
+                    except Exception as e:
+                        logger.warning("Failed to emit high-match notification: %s", e)
+
         logger.info("Computed and stored %d dynamic matches for project %s", len(results), project_id)
         return results
 
@@ -366,6 +390,30 @@ class MatchService:
                     upsert=True
                 )
                 results.append(match_data)
+
+                # Emit automated notification for high-fit deals (> 90%)
+                if match_data.get("match_score", 0) >= 90.0:
+                    try:
+                        from app.services.notification_service import NotificationService
+                        p_title = project.get("title", "Startup")
+                        p_ind = project.get("industry", "DeepTech")
+                        score = match_data["match_score"]
+                        existing = await db.notifications.find_one({
+                            "user_id": investor_id,
+                            "title": {"$regex": f".*{p_title}.*"},
+                        })
+                        if not existing:
+                            await NotificationService.create_notification(
+                                target_role="INVESTOR",
+                                user_id=investor_id,
+                                title=f"High-Fit Mandate Match: {p_title} ({score}%)",
+                                desc=f"'{p_title}' in {p_ind} aligns strongly with your target sector, stage, and check size ({score}% match).",
+                                badge="Match",
+                                badge_variant="success",
+                                link="/investor/dashboard?tab=matches",
+                            )
+                    except Exception as e:
+                        logger.warning("Failed to emit high-match notification: %s", e)
 
         logger.info("Computed and stored %d dynamic matches for investor %s", len(results), investor_id)
         return results

@@ -1,6 +1,7 @@
-import { Project, ProjectCreateInput, InvestorPreference, MatchItem } from "@/types";
+import { Project, ProjectCreateInput, InvestorPreference, MatchItem, NotificationItem, ProjectInterest } from "@/types";
 
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000/api";
+
 
 export const MOCK_PROJECTS: Project[] = [
   {
@@ -561,24 +562,103 @@ export const api = {
     return { status: "received", ...data };
   },
 
-  async getInterests(): Promise<any[]> {
+  async getInterests(params?: { investor_id?: string; founder_id?: string; status?: string }): Promise<any[]> {
     try {
-      const res = await fetch(`${API_BASE_URL}/interests`, { cache: "no-store" });
-      if (res.ok) return await res.json();
+      const url = new URL(`${API_BASE_URL}/interests`);
+      if (params?.investor_id) url.searchParams.set("investor_id", params.investor_id);
+      if (params?.founder_id) url.searchParams.set("founder_id", params.founder_id);
+      if (params?.status) url.searchParams.set("status", params.status);
+      const res = await fetch(url.toString(), { cache: "no-store" });
+      if (res.ok) {
+        const data = await res.json();
+        if (Array.isArray(data)) return data;
+      }
     } catch {
       // Fallback
     }
     return [];
   },
 
-  async getNotifications(role: "FOUNDER" | "INVESTOR"): Promise<any[]> {
+  async updateInterestStatus(
+    interestId: string | number,
+    status: "accepted" | "declined" | "pending",
+    responseNote?: string
+  ): Promise<any> {
     try {
-      const res = await fetch(`${API_BASE_URL}/notifications?role=${role}`, { cache: "no-store" });
+      const res = await fetch(`${API_BASE_URL}/interests/${interestId}/status`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ status, response_note: responseNote }),
+      });
       if (res.ok) return await res.json();
     } catch {
       // Fallback
     }
+    return { id: interestId, status };
+  },
+
+  async getNotifications(
+    role?: "FOUNDER" | "INVESTOR",
+    userId?: string,
+    unreadOnly?: boolean
+  ): Promise<NotificationItem[]> {
+    try {
+      const params = new URLSearchParams();
+      if (role) params.append("role", role);
+      if (userId) params.append("user_id", userId);
+      if (unreadOnly) params.append("unread_only", "true");
+      const res = await fetch(`${API_BASE_URL}/notifications?${params.toString()}`, { cache: "no-store" });
+      if (res.ok) return await res.json();
+    } catch (e) {
+      console.warn("Falling back to local notification cache:", e);
+    }
     return [];
   },
+
+  async getUnreadNotificationCount(role?: "FOUNDER" | "INVESTOR", userId?: string): Promise<number> {
+    try {
+      const params = new URLSearchParams();
+      if (role) params.append("role", role);
+      if (userId) params.append("user_id", userId);
+      const res = await fetch(`${API_BASE_URL}/notifications/unread-count?${params.toString()}`, { cache: "no-store" });
+      if (res.ok) {
+        const data = await res.json();
+        return data.unread_count ?? 0;
+      }
+    } catch {
+      // Fallback
+    }
+    return 0;
+  },
+
+  async markNotificationRead(id: string | number): Promise<boolean> {
+    try {
+      const res = await fetch(`${API_BASE_URL}/notifications/${id}/read`, {
+        method: "PATCH",
+      });
+      return res.ok;
+    } catch {
+      return false;
+    }
+  },
+
+  async markAllNotificationsRead(role?: "FOUNDER" | "INVESTOR", userId?: string): Promise<number> {
+    try {
+      const params = new URLSearchParams();
+      if (role) params.append("role", role);
+      if (userId) params.append("user_id", userId);
+      const res = await fetch(`${API_BASE_URL}/notifications/mark-all-read?${params.toString()}`, {
+        method: "POST",
+      });
+      if (res.ok) {
+        const data = await res.json();
+        return data.modified_count ?? 0;
+      }
+    } catch {
+      // Fallback
+    }
+    return 0;
+  },
 };
+
 

@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import {
@@ -24,6 +24,7 @@ import {
   Sliders,
 } from "lucide-react";
 import { Badge } from "@/components/Badge";
+import { api } from "@/lib/api";
 
 interface PortalLayoutProps {
   role: "FOUNDER" | "INVESTOR";
@@ -54,14 +55,32 @@ export function PortalLayout({
 }: PortalLayoutProps) {
   const pathname = usePathname();
   const [mobileSidebarOpen, setMobileSidebarOpen] = useState(false);
+  const [unreadCount, setUnreadCount] = useState<number>(0);
+
+  useEffect(() => {
+    let mounted = true;
+    api.getUnreadNotificationCount(role).then((count) => {
+      if (mounted) setUnreadCount(count);
+    });
+    return () => {
+      mounted = false;
+    };
+  }, [role, activeItem]);
 
   const founderNav: NavItem[] = [
     { id: "overview", label: "Dashboard", href: "/founder/dashboard", icon: Layers },
     { id: "projects", label: "My Projects", href: "/founder/dashboard?tab=projects", icon: Rocket },
+    { id: "intros", label: "Intro Requests & Deal Rooms", href: "/founder/dashboard?tab=intros", icon: Briefcase, badge: "Deal Room" },
     { id: "new_project", label: "Create Project", href: "/founder/projects/new", icon: PlusCircle },
     { id: "readiness", label: "AI Readiness Report", href: "/founder/dashboard?tab=readiness", icon: Sparkles, badge: "Private" },
     { id: "investors", label: "Investor Discovery", href: "/founder/dashboard?tab=investors", icon: Users },
-    { id: "notifications", label: "Notifications", href: "/founder/dashboard?tab=notifications", icon: Bell },
+    {
+      id: "notifications",
+      label: "Notifications",
+      href: "/founder/dashboard?tab=notifications",
+      icon: Bell,
+      badge: unreadCount > 0 ? `${unreadCount} new` : undefined,
+    },
     { id: "profile", label: "Profile", href: "/founder/dashboard?tab=profile", icon: User },
     { id: "settings", label: "Settings", href: "/founder/dashboard?tab=settings", icon: Settings },
   ];
@@ -72,10 +91,17 @@ export function PortalLayout({
     { id: "browse", label: "Browse Projects", href: "/investor/dashboard?tab=browse", icon: Search },
     { id: "interests", label: "My Interests", href: "/investor/dashboard?tab=interests", icon: Heart },
     { id: "preferences", label: "Investment Criteria", href: "/investor/preferences", icon: Sliders },
-    { id: "notifications", label: "Notifications", href: "/investor/dashboard?tab=notifications", icon: Bell },
+    {
+      id: "notifications",
+      label: "Notifications",
+      href: "/investor/dashboard?tab=notifications",
+      icon: Bell,
+      badge: unreadCount > 0 ? `${unreadCount} new` : undefined,
+    },
     { id: "profile", label: "Profile", href: "/investor/dashboard?tab=profile", icon: User },
     { id: "settings", label: "Settings", href: "/investor/dashboard?tab=settings", icon: Settings },
   ];
+
 
   const navItems = role === "FOUNDER" ? founderNav : investorNav;
 

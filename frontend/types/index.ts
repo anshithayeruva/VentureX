@@ -105,3 +105,54 @@ export interface MatchItem {
   reasons: MatchReason[];
   status: string;
 }
+
+export interface DealRoomDetails {
+  unlocked: boolean;
+  unlocked_at?: string;
+  founder_name?: string;
+  founder_email?: string;
+  founder_phone?: string;
+  founder_linkedin?: string;
+  direct_messaging_channel?: string;
+  meeting_scheduler_url?: string;
+  data_room_url?: string;
+  pitch_deck_url?: string;
+  financial_model_url?: string;
+  cap_table_verified?: boolean;
+}
+
+export interface ProjectInterest {
+  id: string | number;
+  project_id: string | number;
+  project_title?: string;
+  project_industry?: string;
+  investor_id?: string | number;
+  investor_name?: string;
+  investor_firm?: string;
+  investor_email?: string;
+  founder_id?: string | number;
+  founder_name?: string;
+  founder_email?: string;
+  status: "pending" | "accepted" | "declined";
+  message?: string;
+  response_note?: string;
+  deal_room?: DealRoomDetails;
+  created_at?: string;
+  updated_at?: string;
+}
+
+export interface NotificationItem {
+  id: string | number;
+  user_id?: string | number;
+  target_role?: "FOUNDER" | "INVESTOR";
+  title: string;
+  desc: string;
+  time?: string;
+  badge: string;
+  badge_variant: "primary" | "secondary" | "success" | "warning" | "error";
+  read: boolean;
+  link?: string;
+  created_at?: string;
+}
+
+
