@@ -235,9 +235,73 @@ export const MOCK_INVESTOR_PREFERENCE: InvestorPreference = {
   tech_preferences: ["Edge Machine Learning", "Bioinformatics", "Generative AI & LLMs"],
 };
 
+export const MOCK_NOTIFICATIONS: NotificationItem[] = [
+  {
+    id: "notif-001",
+    user_id: "founder-001",
+    target_role: "FOUNDER",
+    title: "New 96.4% Mandate Match",
+    desc: "Dr. Sarah Lin (Apex Horizon Ventures) matches your $750k Seed ask for Healthcare AI.",
+    time: "20m ago",
+    badge: "Match",
+    badge_variant: "success",
+    read: false,
+    created_at: new Date(Date.now() - 20 * 60 * 1000).toISOString(),
+  },
+  {
+    id: "notif-002",
+    user_id: "founder-001",
+    target_role: "FOUNDER",
+    title: "AI Readiness Re-evaluation Complete",
+    desc: "Your readiness score improved from 88.0 to 92.4 following clinical pilot data upload.",
+    time: "2h ago",
+    badge: "Analysis",
+    badge_variant: "primary",
+    read: false,
+    created_at: new Date(Date.now() - 2 * 60 * 60 * 1000).toISOString(),
+  },
+  {
+    id: "notif-003",
+    user_id: "founder-001",
+    target_role: "FOUNDER",
+    title: "Confidentiality Check: Private Status Active",
+    desc: "Your project 'QuantaShield' remains in private draft mode. Only you can view this report.",
+    time: "1d ago",
+    badge: "Security",
+    badge_variant: "secondary",
+    read: true,
+    created_at: new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString(),
+  },
+  {
+    id: "notif-004",
+    user_id: "investor-001",
+    target_role: "INVESTOR",
+    title: "Founder Approved Dealflow Available",
+    desc: "NeuroPulse AI has made verified deck materials accessible to Apex Horizon Ventures.",
+    time: "1h ago",
+    badge: "Dealflow",
+    badge_variant: "success",
+    read: false,
+    created_at: new Date(Date.now() - 60 * 60 * 1000).toISOString(),
+  },
+  {
+    id: "notif-005",
+    user_id: "investor-001",
+    target_role: "INVESTOR",
+    title: "New High-Cosine Match: Verdant Chain",
+    desc: "ClimateTech startup raising $1.2M matches your ESG infrastructure mandate at 93.8%.",
+    time: "4h ago",
+    badge: "Match",
+    badge_variant: "primary",
+    read: false,
+    created_at: new Date(Date.now() - 4 * 60 * 60 * 1000).toISOString(),
+  },
+];
+
 // In-memory working copies for local interactive state
 let localProjects: Project[] = [...MOCK_PROJECTS];
 let localPreferences: InvestorPreference = { ...MOCK_INVESTOR_PREFERENCE };
+let localNotifications: NotificationItem[] = [...MOCK_NOTIFICATIONS];
 
 export const api = {
   async checkHealth(): Promise<{ status: string; service?: string; database?: string; version?: string }> {
@@ -608,11 +672,18 @@ export const api = {
       if (userId) params.append("user_id", userId);
       if (unreadOnly) params.append("unread_only", "true");
       const res = await fetch(`${API_BASE_URL}/notifications?${params.toString()}`, { cache: "no-store" });
-      if (res.ok) return await res.json();
-    } catch (e) {
-      console.warn("Falling back to local notification cache:", e);
+      if (res.ok) {
+        const data = await res.json();
+        if (Array.isArray(data) && data.length > 0) return data;
+      }
+    } catch {
+      // Clean fallback to in-memory notification cache without throwing console warnings
     }
-    return [];
+    return localNotifications.filter((n) => {
+      if (role && n.target_role && n.target_role !== role) return false;
+      if (unreadOnly && n.read) return false;
+      return true;
+    });
   },
 
   async getUnreadNotificationCount(role?: "FOUNDER" | "INVESTOR", userId?: string): Promise<number> {
@@ -628,7 +699,10 @@ export const api = {
     } catch {
       // Fallback
     }
-    return 0;
+    return localNotifications.filter((n) => {
+      if (role && n.target_role && n.target_role !== role) return false;
+      return !n.read;
+    }).length;
   },
 
   async markNotificationRead(id: string | number): Promise<boolean> {
@@ -636,10 +710,16 @@ export const api = {
       const res = await fetch(`${API_BASE_URL}/notifications/${id}/read`, {
         method: "PATCH",
       });
-      return res.ok;
+      if (res.ok) return true;
     } catch {
-      return false;
+      // Fallback
     }
+    const target = localNotifications.find((n) => String(n.id) === String(id));
+    if (target) {
+      target.read = true;
+      return true;
+    }
+    return false;
   },
 
   async markAllNotificationsRead(role?: "FOUNDER" | "INVESTOR", userId?: string): Promise<number> {
@@ -657,7 +737,14 @@ export const api = {
     } catch {
       // Fallback
     }
-    return 0;
+    let count = 0;
+    localNotifications.forEach((n) => {
+      if (!role || n.target_role === role) {
+        if (!n.read) count++;
+        n.read = true;
+      }
+    });
+    return count;
   },
 };
 

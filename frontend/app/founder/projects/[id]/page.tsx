@@ -31,9 +31,17 @@ export default function ProjectOverviewPage({ params }: { params: Promise<{ id: 
   const [isPublished, setIsPublished] = useState(false);
 
   useEffect(() => {
-    const found = MOCK_PROJECTS.find((p) => p.id === projectId) || MOCK_PROJECTS[0];
-    setProject(found);
-    setIsPublished(found.id === 1);
+    let mounted = true;
+    api.getProject(projectId).then((item) => {
+      if (mounted) {
+        const found = item || MOCK_PROJECTS.find((p) => p.id === projectId) || MOCK_PROJECTS[0];
+        setProject(found);
+        setIsPublished(found.id === 1);
+      }
+    });
+    return () => {
+      mounted = false;
+    };
   }, [projectId]);
 
   if (!project) {
