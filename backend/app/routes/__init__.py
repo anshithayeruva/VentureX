@@ -6,6 +6,7 @@ from app.routes.investors import router as investors_router
 from app.routes.matches import router as matches_router
 from app.routes.interests import router as interests_router
 from app.routes.notifications import router as notifications_router
+from app.routes.dealrooms import router as dealrooms_router
 
 api_router = APIRouter()
 api_router.include_router(health_router)
@@ -15,5 +16,6 @@ api_router.include_router(investors_router)
 api_router.include_router(matches_router)
 api_router.include_router(interests_router)
 api_router.include_router(notifications_router)
+api_router.include_router(dealrooms_router)
 
 __all__ = ["api_router"]

@@ -1,4 +1,16 @@
-import { Project, ProjectCreateInput, InvestorPreference, MatchItem, NotificationItem, ProjectInterest } from "@/types";
+import {
+  Project,
+  ProjectCreateInput,
+  InvestorPreference,
+  MatchItem,
+  NotificationItem,
+  ProjectInterest,
+  DealRoom,
+  DealMessage,
+  DealRoomTranscript,
+  DealRoomAuditLog,
+  MessageAttachment,
+} from "@/types";
 
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000/api";
 
@@ -745,6 +757,163 @@ export const api = {
       }
     });
     return count;
+  },
+
+  // Deal Room & Secure Messaging API
+  async getDealRooms(params?: { user_id?: string; role?: string }): Promise<DealRoom[]> {
+    try {
+      const url = new URL(`${API_BASE_URL}/dealrooms`);
+      if (params?.user_id) url.searchParams.set("user_id", params.user_id);
+      if (params?.role) url.searchParams.set("role", params.role);
+      const res = await fetch(url.toString(), { cache: "no-store" });
+      if (res.ok) {
+        const data = await res.json();
+        if (Array.isArray(data)) return data;
+      }
+    } catch {
+      // Fallback
+    }
+    return [];
+  },
+
+  async getDealRoom(roomId: string, userId?: string): Promise<DealRoom | null> {
+    try {
+      const url = new URL(`${API_BASE_URL}/dealrooms/${roomId}`);
+      if (userId) url.searchParams.set("user_id", userId);
+      const res = await fetch(url.toString(), { cache: "no-store" });
+      if (res.ok) return await res.json();
+    } catch {
+      // Fallback
+    }
+    return null;
+  },
+
+  async getDealRoomMessages(roomId: string, userId?: string): Promise<DealMessage[]> {
+    try {
+      const url = new URL(`${API_BASE_URL}/dealrooms/${roomId}/messages`);
+      if (userId) url.searchParams.set("user_id", userId);
+      const res = await fetch(url.toString(), { cache: "no-store" });
+      if (res.ok) {
+        const data = await res.json();
+        if (Array.isArray(data)) return data;
+      }
+    } catch {
+      // Fallback
+    }
+    return [];
+  },
+
+  async sendDealRoomMessage(
+    roomId: string,
+    message: {
+      sender_id: string;
+      sender_role: "FOUNDER" | "INVESTOR";
+      sender_name: string;
+      content: string;
+      attachments?: MessageAttachment[];
+    }
+  ): Promise<DealMessage | null> {
+    try {
+      const res = await fetch(`${API_BASE_URL}/dealrooms/${roomId}/messages`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(message),
+      });
+      if (res.ok) return await res.json();
+    } catch {
+      // Fallback
+    }
+    return null;
+  },
+
+  async updateDealRoomStage(
+    roomId: string,
+    stageData: {
+      stage: string;
+      note?: string;
+      sender_id: string;
+      sender_role: string;
+      sender_name: string;
+    }
+  ): Promise<DealRoom | null> {
+    try {
+      const res = await fetch(`${API_BASE_URL}/dealrooms/${roomId}/stage`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(stageData),
+      });
+      if (res.ok) return await res.json();
+    } catch {
+      // Fallback
+    }
+    return null;
+  },
+
+  async signDealRoomNDA(
+    roomId: string,
+    ndaData: { signer_id: string; signer_role: string; signer_name: string }
+  ): Promise<DealRoom | null> {
+    try {
+      const res = await fetch(`${API_BASE_URL}/dealrooms/${roomId}/nda`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(ndaData),
+      });
+      if (res.ok) return await res.json();
+    } catch {
+      // Fallback
+    }
+    return null;
+  },
+
+  async shareDealRoomDocument(
+    roomId: string,
+    docData: {
+      name: string;
+      url: string;
+      type: string;
+      size_kb?: number;
+      sender_id: string;
+      sender_role: string;
+      sender_name: string;
+    }
+  ): Promise<DealRoom | null> {
+    try {
+      const res = await fetch(`${API_BASE_URL}/dealrooms/${roomId}/documents`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(docData),
+      });
+      if (res.ok) return await res.json();
+    } catch {
+      // Fallback
+    }
+    return null;
+  },
+
+  async getDealRoomTranscript(roomId: string, userId?: string): Promise<DealRoomTranscript | null> {
+    try {
+      const url = new URL(`${API_BASE_URL}/dealrooms/${roomId}/transcript`);
+      if (userId) url.searchParams.set("user_id", userId);
+      const res = await fetch(url.toString(), { cache: "no-store" });
+      if (res.ok) return await res.json();
+    } catch {
+      // Fallback
+    }
+    return null;
+  },
+
+  async getDealRoomAuditLogs(roomId: string): Promise<DealRoomAuditLog[]> {
+    try {
+      const res = await fetch(`${API_BASE_URL}/dealrooms/${roomId}/audit-logs`, { cache: "no-store" });
+      if (res.ok) {
+        const data = await res.json();
+        if (Array.isArray(data)) return data;
+      }
+    } catch {
+      // Fallback
+    }
+    return [];
   },
 };
 

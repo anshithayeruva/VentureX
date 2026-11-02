@@ -7,7 +7,10 @@ from app.core.config import settings
 
 logger = logging.getLogger(__name__)
 
+import asyncio
+
 _mongo_client: Optional[AsyncMongoClient] = None
+_mongo_client_loop = None
 
 
 def get_mongodb_client() -> Optional[AsyncMongoClient]:
@@ -15,7 +18,7 @@ def get_mongodb_client() -> Optional[AsyncMongoClient]:
     
     Adheres to safety checks: does not attempt to connect if MONGODB_URI is not set.
     """
-    global _mongo_client
+    global _mongo_client, _mongo_client_loop
     if not settings.is_mongodb_configured:
         logger.warning(
             "MongoDB URI is not configured in environment (.env). "
@@ -23,12 +26,34 @@ def get_mongodb_client() -> Optional[AsyncMongoClient]:
         )
         return None
 
+    try:
+        current_loop = asyncio.get_running_loop()
+    except RuntimeError:
+        current_loop = None
+
+    if _mongo_client is not None and _mongo_client_loop is not None:
+        if current_loop is not None and (current_loop is not _mongo_client_loop or _mongo_client_loop.is_closed()):
+            _mongo_client = None
+
     if _mongo_client is None:
         try:
             logger.info("Initializing PyMongo AsyncMongoClient...")
+            _mongo_client_loop = current_loop
+            try:
+                import certifi
+                ca_file = certifi.where()
+            except ImportError:
+                ca_file = None
+
+            client_kwargs = {
+                "serverSelectionTimeoutMS": 5000,
+            }
+            if ca_file:
+                client_kwargs["tlsCAFile"] = ca_file
+
             _mongo_client = AsyncMongoClient(
                 settings.MONGODB_URI,
-                serverSelectionTimeoutMS=5000,
+                **client_kwargs
             )
         except Exception as e:
             logger.error("Failed to initialize AsyncMongoClient: %s", e)
@@ -124,6 +149,26 @@ async def init_db_indexes(db: AsyncDatabase):
         ])
     except Exception as e:
         logger.warning("Notice on notifications indexing: %s", e)
+
+    # 8. deal_rooms collection indexes
+    try:
+        await db.deal_rooms.create_indexes([
+            IndexModel([("id", ASCENDING)], unique=True, sparse=True),
+            IndexModel([("founder_id", ASCENDING), ("updated_at", DESCENDING)]),
+            IndexModel([("investor_id", ASCENDING), ("updated_at", DESCENDING)]),
+            IndexModel([("project_id", ASCENDING)]),
+        ])
+    except Exception as e:
+        logger.warning("Notice on deal_rooms indexing: %s", e)
+
+    # 9. deal_room_messages collection indexes
+    try:
+        await db.deal_room_messages.create_indexes([
+            IndexModel([("room_id", ASCENDING), ("sequence", ASCENDING)]),
+            IndexModel([("id", ASCENDING)], unique=True, sparse=True),
+        ])
+    except Exception as e:
+        logger.warning("Notice on deal_room_messages indexing: %s", e)
 
     logger.info("MongoDB index initialization complete.")
 

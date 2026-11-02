@@ -25,11 +25,19 @@ async def lifespan(app: FastAPI):
     try:
         db = get_database()
         if db is not None:
-            logger.info("Connected to MongoDB Atlas: %s", db.name)
-            # Safe index initialization
-            await init_db_indexes(db)
-            # Seed initial sample data if empty so UI pages work immediately
-            await seed_initial_data_if_empty(db)
+            try:
+                await db.command("ping")
+                logger.info("Successfully connected to MongoDB Atlas: %s", db.name)
+                # Safe index initialization
+                await init_db_indexes(db)
+                # Seed initial sample data if empty so UI pages work immediately
+                await seed_initial_data_if_empty(db)
+            except Exception as conn_err:
+                logger.warning(
+                    "MongoDB Atlas is reachable but TLS/Access was rejected: %s. "
+                    "Check your IP whitelist in MongoDB Atlas Network Access.",
+                    conn_err
+                )
         else:
             logger.warning("MongoDB Atlas is not configured in .env. Running in offline mode.")
     except Exception as e:

@@ -965,22 +965,19 @@ function FounderDashboardContent() {
                             <ExternalLink className="w-3.5 h-3.5 text-[#94A3B8] group-hover:text-[#2E7D52]" />
                           </a>
 
-                          <button
-                            onClick={() =>
-                              alert(
-                                `Direct messaging channel '#channel-dealroom-${item.id}' is active! Live messaging connected.`
-                              )
-                            }
+                          <Link
+                            href={`/dealroom/room-neuropulse-blueshift?role=FOUNDER`}
                             className="p-3 bg-white border border-[#C8E6C9] hover:border-[#2E7D52] rounded-lg text-xs font-medium text-[#0F172A] transition-all flex items-center justify-between shadow-subtle group"
                           >
                             <span className="flex items-center gap-2">
                               <MessageSquare className="w-4 h-4 text-[#2E7D52]" />
-                              Open Direct Chat
+                              Enter Secure Deal Room
                             </span>
-                            <span className="text-[10px] font-bold text-[#2E7D52] bg-[#E8F5E9] px-1.5 py-0.5 rounded">
-                              Live
+                            <span className="text-[10px] font-bold text-[#2E7D52] bg-[#E8F5E9] px-2 py-0.5 rounded-full flex items-center gap-1">
+                              <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
+                              Encrypted
                             </span>
-                          </button>
+                          </Link>
                         </div>
                       </div>
                     )}

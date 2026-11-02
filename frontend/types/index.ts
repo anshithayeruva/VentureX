@@ -155,4 +155,97 @@ export interface NotificationItem {
   created_at?: string;
 }
 
+export interface MessageAttachment {
+  name: string;
+  url: string;
+  type: string;
+  size_kb?: number;
+}
+
+export interface DealMessage {
+  id: string;
+  room_id: string;
+  sender_id: string;
+  sender_role: "FOUNDER" | "INVESTOR" | "SYSTEM";
+  sender_name: string;
+  content: string;
+  attachments?: MessageAttachment[];
+  sequence: number;
+  previous_hash?: string;
+  integrity_hash: string;
+  created_at: string;
+  is_read?: boolean;
+}
+
+export interface DealRoom {
+  id: string;
+  interest_id?: string;
+  project_id: number | string;
+  project_title: string;
+  project_industry?: string;
+  founder_id: string;
+  founder_name: string;
+  founder_email: string;
+  founder_company?: string;
+  investor_id: string;
+  investor_name: string;
+  investor_firm?: string;
+  investor_email?: string;
+  stage: "INTRO_ACCEPTED" | "DUE_DILIGENCE" | "TERM_SHEET" | "PARTNER_MEETING" | "CLOSED" | "PASSED";
+  nda_signed: boolean;
+  nda_signed_at?: string;
+  nda_signer_name?: string;
+  shared_documents?: MessageAttachment[];
+  created_at: string;
+  updated_at: string;
+  last_message?: string;
+  last_message_at?: string;
+  last_message_sender?: string;
+  messages_count: number;
+  audit_trail_hash: string;
+  is_secure_recording_active: boolean;
+}
+
+export interface DealRoomAuditLog {
+  id: string;
+  room_id: string;
+  event_type: string;
+  actor_id: string;
+  actor_role: string;
+  actor_name: string;
+  details: Record<string, any>;
+  tamper_hash: string;
+  timestamp: string;
+}
+
+export interface DealRoomTranscript {
+  export_id: string;
+  exported_at: string;
+  deal_room_id: string;
+  project_title: string;
+  founder: { name: string; email: string; company?: string };
+  investor: { name: string; firm?: string; email?: string };
+  deal_stage: string;
+  nda_status: string;
+  nda_signed_at?: string;
+  total_messages: number;
+  cryptographic_integrity_status: string;
+  latest_audit_hash: string;
+  conversation_records: Array<{
+    sequence: number;
+    timestamp: string;
+    sender: string;
+    content: string;
+    attachments: string[];
+    sha256_signature: string;
+  }>;
+  audit_trail_summary: Array<{
+    event: string;
+    actor: string;
+    timestamp: string;
+    hash: string;
+  }>;
+  legal_disclaimer: string;
+}
+
 

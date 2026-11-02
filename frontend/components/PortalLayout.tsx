@@ -70,7 +70,8 @@ export function PortalLayout({
   const founderNav: NavItem[] = [
     { id: "overview", label: "Dashboard", href: "/founder/dashboard", icon: Layers },
     { id: "projects", label: "My Projects", href: "/founder/dashboard?tab=projects", icon: Rocket },
-    { id: "intros", label: "Intro Requests & Deal Rooms", href: "/founder/dashboard?tab=intros", icon: Briefcase, badge: "Deal Room" },
+    { id: "dealrooms", label: "Secure Deal Rooms", href: "/dealroom?role=FOUNDER", icon: ShieldCheck, badge: "Encrypted" },
+    { id: "intros", label: "Intro Requests", href: "/founder/dashboard?tab=intros", icon: Briefcase, badge: "Deal Flow" },
     { id: "new_project", label: "Create Project", href: "/founder/projects/new", icon: PlusCircle },
     { id: "readiness", label: "AI Readiness Report", href: "/founder/dashboard?tab=readiness", icon: Sparkles, badge: "Private" },
     { id: "investors", label: "Investor Discovery", href: "/founder/dashboard?tab=investors", icon: Users },
@@ -87,6 +88,7 @@ export function PortalLayout({
 
   const investorNav: NavItem[] = [
     { id: "overview", label: "Dealflow Overview", href: "/investor/dashboard", icon: Layers },
+    { id: "dealrooms", label: "Secure Deal Rooms", href: "/dealroom?role=INVESTOR", icon: ShieldCheck, badge: "Encrypted" },
     { id: "recommended", label: "Recommended Projects", href: "/investor/dashboard?tab=recommended", icon: Sparkles },
     { id: "browse", label: "Browse Projects", href: "/investor/dashboard?tab=browse", icon: Search },
     { id: "interests", label: "My Interests", href: "/investor/dashboard?tab=interests", icon: Heart },

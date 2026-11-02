@@ -16,7 +16,7 @@ const plusJakartaSans = Plus_Jakarta_Sans({
 });
 
 export const metadata: Metadata = {
-  title: "Venture X — AI-Powered Founder & Investor Matching Platform",
+  title: "Ventre X — AI-Powered Founder & Investor Matching Platform",
   description:
     "Intelligently connect early-stage startup founders with relevant investors, syndicates, and capital opportunities via explainable AI readiness analysis and vector embeddings.",
 };
