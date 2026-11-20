@@ -78,7 +78,8 @@ def test_project_lifecycle(client):
     assert created["title"] == new_project_payload["title"]
     assert created["is_published"] is False
     assert "readiness_score" in created
-    assert created["readiness_score"] >= 80.0
+    # Baseline rule-based readiness check runs on create
+    assert 0.0 <= created["readiness_score"] <= 100.0
     assert "ai_readiness_breakdown" in created
 
     # 2. Get by ID
@@ -141,3 +142,52 @@ def test_investor_preferences(client):
     assert "preferred_stages" in prefs
     assert "min_investment" in prefs
     assert "max_investment" in prefs
+
+
+def test_project_intelligence_pipeline(client, monkeypatch):
+    """Upload materials, run the readiness analysis (rule-based engine, no API key needed), read history."""
+    from app.core.config import settings
+    monkeypatch.setattr(settings, "AI_PROVIDER", "none")
+
+    created = client.post("/api/projects", json={
+        "title": "Intelligence Test Startup",
+        "description": "Workflow automation for independent pharmacies.",
+        "problem": "Pharmacists lose hours each day to manual insurance claim rework.",
+        "solution": "Automated claim validation that catches rejections before submission.",
+        "industry": "HealthTech", "stage": "Pre-seed", "funding_required": 400000,
+        "business_model": "B2B SaaS", "target_market": "Independent pharmacies in the US",
+        "demo_url": "https://example.com/demo",
+    })
+    assert created.status_code == 201
+    project_id = created.json()["id"]
+
+    upload = client.post(
+        f"/api/projects/{project_id}/documents",
+        data={"category": "business_plan"},
+        files={"file": ("plan.md", b"# Plan\nPricing: $199/month. TAM $3B. 12 pilot pharmacies signed LOIs.", "text/markdown")},
+    )
+    assert upload.status_code == 201
+    doc = upload.json()
+    assert doc["text_chars"] > 0 and doc["category"] == "business_plan"
+
+    rejected = client.post(
+        f"/api/projects/{project_id}/documents",
+        files={"file": ("tool.exe", b"MZ", "application/octet-stream")},
+    )
+    assert rejected.status_code == 400
+
+    report = client.post(f"/api/projects/{project_id}/analyze")
+    assert report.status_code == 200
+    body = report.json()
+    assert body["engine"] == "rules" and body["is_ai_generated"] is False
+    assert 0 <= body["readiness_score"] <= 100
+    assert [d["key"] for d in body["dimensions"]] == [
+        "problem_solution_fit", "market_sizing", "business_model_clarity", "traction_feasibility", "product_technology",
+    ]
+    assert body["inputs"]["documents"][0]["name"] == "plan.md"
+
+    history = client.get(f"/api/projects/{project_id}/analyses").json()
+    assert len(history) == 2  # baseline on create + this run
+
+    assert client.delete(f"/api/projects/{project_id}/documents/{doc['id']}").status_code == 200
+    assert client.get(f"/api/projects/{project_id}/documents").json() == []

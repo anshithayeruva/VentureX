@@ -1,15 +1,19 @@
 import logging
 from typing import List, Optional
-from fastapi import APIRouter, Depends, HTTPException, status, Query
+from fastapi import APIRouter, Depends, File, Form, HTTPException, status, Query, UploadFile
 from app.core.auth import CurrentUser, get_current_user, require_founder
-from fastapi.responses import Response
+from fastapi.responses import FileResponse, Response
 from app.schemas.project import (
     ProjectCreate,
     ProjectUpdate,
     ProjectResponse,
     PublishToggleInput,
     ProjectReadinessResponse,
+    ProjectDocumentResponse,
+    AnalysisHistoryItem,
 )
+from app.services.analysis_service import AnalysisError, AnalysisService
+from app.services.document_service import DocumentService
 from app.services.project_service import ProjectService
 from app.utils.pdf_generator import PDFGenerator
 
@@ -37,6 +41,23 @@ async def _readable_project(project_id: str, user: Optional[CurrentUser]):
     if not project or (
         not project["is_published"]
         and project["founder_id"] != "founder-001"  # demo drafts stay browsable
+        and (user is None or project["founder_id"] != user.id)
+    ):
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Project with ID '{project_id}' not found",
+        )
+    return project
+
+
+DEMO_FOUNDER_ID = "founder-001"
+
+
+async def _private_report_project(project_id: str, user: Optional[CurrentUser]):
+    """Readiness reports are private to the founder (demo projects stay viewable for the demo)."""
+    project = await ProjectService.get_by_id(project_id)
+    if not project or (
+        project["founder_id"] != DEMO_FOUNDER_ID
         and (user is None or project["founder_id"] != user.id)
     ):
         raise HTTPException(
@@ -126,8 +147,8 @@ async def get_project_readiness_report(
     project_id: str,
     user: Optional[CurrentUser] = Depends(get_current_user),
 ):
-    """Retrieve the confidential AI readiness diagnostic report for a project."""
-    await _readable_project(project_id, user)
+    """Retrieve the confidential AI readiness report for a project (founder only)."""
+    await _private_report_project(project_id, user)
     report = await ProjectService.get_readiness_report(project_id)
     if not report:
         raise HTTPException(
@@ -139,9 +160,12 @@ async def get_project_readiness_report(
 
 @router.post("/{project_id}/re-evaluate", response_model=ProjectReadinessResponse)
 async def re_evaluate_project_readiness(project_id: str, user: CurrentUser = Depends(require_founder)):
-    """Recalculate AI readiness diagnostic scores."""
+    """Re-run the readiness analysis (same as POST /analyze; kept for existing clients)."""
     await _owned_project(project_id, user)
-    report = await ProjectService.re_evaluate_readiness(project_id)
+    try:
+        report = await ProjectService.re_evaluate_readiness(project_id)
+    except AnalysisError as e:
+        raise HTTPException(status_code=e.status, detail=str(e))
     if not report:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
@@ -156,7 +180,7 @@ async def export_project_readiness_pdf(
     user: Optional[CurrentUser] = Depends(get_current_user),
 ):
     """Generate and download a branded, investor-ready AI Pitch Readiness Diagnostic Report PDF."""
-    project = await _readable_project(project_id, user)
+    project = await _private_report_project(project_id, user)
 
     try:
         pdf_bytes = PDFGenerator.generate_readiness_pdf(project)
@@ -174,3 +198,75 @@ async def export_project_readiness_pdf(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Could not generate readiness PDF: {str(e)}",
         )
+
+
+# ---------------------------------------------------------------------------
+# AI project intelligence: materials and analysis
+# ---------------------------------------------------------------------------
+
+@router.post(
+    "/{project_id}/documents",
+    response_model=ProjectDocumentResponse,
+    status_code=status.HTTP_201_CREATED,
+)
+async def upload_project_document(
+    project_id: str,
+    file: UploadFile = File(...),
+    category: str = Form("supporting_document"),
+    user: CurrentUser = Depends(require_founder),
+):
+    """Upload a pitch deck, business plan, research or other material (PDF, DOCX, PPTX, TXT, MD, CSV, PNG, JPG)."""
+    project = await _owned_project(project_id, user)
+    try:
+        return await DocumentService.save(project["id"], file, category)
+    except ValueError as e:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
+
+
+@router.get("/{project_id}/documents", response_model=List[ProjectDocumentResponse])
+async def list_project_documents(project_id: str, user: Optional[CurrentUser] = Depends(get_current_user)):
+    """List a project's materials (visible to investors once the project is published)."""
+    project = await _readable_project(project_id, user)
+    return await DocumentService.list(project["id"])
+
+
+@router.get("/{project_id}/documents/{doc_id}/file")
+async def download_project_document(
+    project_id: str,
+    doc_id: int,
+    user: Optional[CurrentUser] = Depends(get_current_user),
+):
+    """Download one of a project's materials."""
+    project = await _readable_project(project_id, user)
+    found = await DocumentService.file_path(project["id"], doc_id)
+    if not found:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Document not found")
+    path, content_type, name = found
+    return FileResponse(path, media_type=content_type, filename=name)
+
+
+@router.delete("/{project_id}/documents/{doc_id}", status_code=status.HTTP_200_OK)
+async def delete_project_document(project_id: str, doc_id: int, user: CurrentUser = Depends(require_founder)):
+    """Remove one of your project's materials."""
+    project = await _owned_project(project_id, user)
+    if not await DocumentService.delete(project["id"], doc_id):
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Document not found")
+    return {"status": "deleted", "id": doc_id}
+
+
+@router.post("/{project_id}/analyze", response_model=ProjectReadinessResponse)
+async def analyze_project(project_id: str, user: CurrentUser = Depends(require_founder)):
+    """Analyze the project's profile, materials and repository; returns the new readiness report."""
+    project = await _owned_project(project_id, user)
+    try:
+        await AnalysisService.analyze(project)
+    except AnalysisError as e:
+        raise HTTPException(status_code=e.status, detail=str(e))
+    return await ProjectService.get_readiness_report(project["id"])
+
+
+@router.get("/{project_id}/analyses", response_model=List[AnalysisHistoryItem])
+async def list_project_analyses(project_id: str, user: Optional[CurrentUser] = Depends(get_current_user)):
+    """Readiness analysis history, newest first (founder only)."""
+    project = await _private_report_project(project_id, user)
+    return await AnalysisService.history(project["id"])

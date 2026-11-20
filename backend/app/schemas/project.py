@@ -16,6 +16,8 @@ class ProjectBase(BaseModel):
     target_market: str = Field(..., min_length=3)
     website: Optional[str] = None
     pitch_deck_url: Optional[str] = None
+    github_url: Optional[str] = Field(None, max_length=300)
+    demo_url: Optional[str] = Field(None, max_length=500)
 
 
 class ProjectCreate(ProjectBase):
@@ -35,6 +37,8 @@ class ProjectUpdate(BaseModel):
     target_market: Optional[str] = None
     website: Optional[str] = None
     pitch_deck_url: Optional[str] = None
+    github_url: Optional[str] = Field(None, max_length=300)
+    demo_url: Optional[str] = Field(None, max_length=500)
     is_published: Optional[bool] = None
 
 
@@ -62,9 +66,45 @@ class ProjectReadinessResponse(BaseModel):
     project_id: Union[int, str]
     title: str
     readiness_score: float
-    model_version: str = "Readiness Engine v2.4"
-    status_label: str = "Ready for Investor Presentation"
+    model_version: str
+    status_label: str
     dimensions: List[Dict[str, Any]]
     strengths: List[str]
     recommendations: List[str]
     is_confidential: bool = True
+    # AI project intelligence (latest analysis)
+    engine: Optional[str] = None            # "claude" | "rules" | None (never analyzed)
+    is_ai_generated: bool = False
+    summary: Optional[str] = None
+    gaps: List[Dict[str, Any]] = []
+    suggestions: List[Dict[str, Any]] = []
+    industry_insights: List[str] = []
+    inputs: Optional[Dict[str, Any]] = None
+    analyzed_at: Optional[datetime] = None
+    analysis_id: Optional[int] = None
+    ai_readiness_breakdown: Optional[Dict[str, Any]] = None
+    ai_feedback_summary: Optional[str] = None
+
+
+class ProjectDocumentResponse(BaseModel):
+    id: int
+    project_id: int
+    category: str
+    original_name: str
+    url: str
+    content_type: str
+    size_bytes: int
+    page_count: Optional[int] = None
+    text_chars: int = 0
+    extraction_note: Optional[str] = None
+    created_at: datetime
+
+
+class AnalysisHistoryItem(BaseModel):
+    id: int
+    engine: str
+    model: Optional[str] = None
+    overall_score: float
+    status_label: str
+    dimensions: List[Dict[str, Any]]
+    created_at: datetime

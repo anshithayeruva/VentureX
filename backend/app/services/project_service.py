@@ -1,5 +1,4 @@
 import logging
-import random
 from datetime import datetime, timezone
 from typing import List, Optional, Dict, Any, Union
 from app.database import postgres as pg
@@ -20,19 +19,6 @@ class ProjectService:
     @classmethod
     async def create(cls, data: ProjectCreate, founder_id: str) -> Dict[str, Any]:
         now = datetime.now(timezone.utc)
-        # Deterministic / heuristic preliminary AI score calculation
-        base_score = 86.0
-        # Give boosts for detailed descriptions and ICP
-        if len(data.problem) > 40:
-            base_score += 3.0
-        if len(data.solution) > 40:
-            base_score += 3.0
-        if data.website:
-            base_score += 1.5
-        if data.pitch_deck_url:
-            base_score += 1.5
-        score = min(98.0, base_score)
-
         doc = {
             "founder_id": founder_id,
             "title": data.title,
@@ -47,32 +33,23 @@ class ProjectService:
             "target_market": data.target_market,
             "website": data.website or "",
             "pitch_deck_url": data.pitch_deck_url or "",
+            "github_url": data.github_url or "",
+            "demo_url": data.demo_url or "",
             "is_published": data.is_published,
-            "readiness_score": round(score, 1),
-            "ai_readiness_breakdown": {
-                "problem_solution_fit": round(min(100.0, score + 2.0), 1),
-                "market_sizing": round(max(70.0, score - 3.0), 1),
-                "business_model_clarity": round(max(75.0, score - 1.0), 1),
-                "traction_feasibility": round(min(100.0, score + 1.0), 1),
-            },
-            "ai_feedback_summary": (
-                "AI Readiness Diagnostic: Strong problem-solution clarity with compelling technological differentiation. "
-                "Semantic embeddings generated and ready for qualified investor matching."
-            ),
-            "strengths": [
-                f"Defensible {data.industry} architecture with clear ICP",
-                "Well-articulated customer friction point and 10x solution mechanic",
-            ],
-            "recommendations": [
-                "Quantify sales cycle duration and early pilot conversion metrics in data room",
-                "Add 24-month operational burn and capital allocation slide",
-            ],
             "created_at": now,
             "updated_at": now,
         }
 
         created = await pg.insert("projects", doc)
         new_id = created["id"]
+
+        # Baseline readiness check right away (fast, no AI cost). The founder runs the
+        # full AI analysis after uploading materials.
+        try:
+            from app.services.analysis_service import AnalysisService
+            await AnalysisService.analyze(created, engine="rules")
+        except Exception as e:
+            logger.warning("Baseline analysis failed for project %s: %s", new_id, e)
 
         # Trigger dynamic matching pipeline for the newly created project
         try:
@@ -81,7 +58,7 @@ class ProjectService:
         except Exception as e:
             logger.warning("Could not auto-generate matches for project %s: %s", new_id, e)
 
-        return created
+        return await cls.get_by_id(new_id)
 
     @classmethod
     async def list_all(
@@ -177,87 +154,80 @@ class ProjectService:
 
     @classmethod
     async def get_readiness_report(cls, project_id: Union[int, str]) -> Optional[Dict[str, Any]]:
+        """The private readiness report: the latest stored analysis, or the project's seeded scores."""
         project = await cls.get_by_id(project_id)
         if not project:
             return None
 
-        score = project.get("readiness_score", 92.4)
-        breakdown = project.get("ai_readiness_breakdown") or {
-            "problem_solution_fit": 94.0,
-            "market_sizing": 88.0,
-            "business_model_clarity": 92.0,
-            "traction_feasibility": 95.0,
-        }
+        from app.services.analysis_service import AnalysisService, DIMENSIONS
+        analysis = await AnalysisService.latest(project["id"])
+        if analysis:
+            engine = analysis["engine"]
+            return {
+                "project_id": project["id"],
+                "title": project["title"],
+                "readiness_score": analysis["overall_score"],
+                "model_version": (
+                    "Claude (" + (analysis["model"] or "") + ")" if engine == "claude"
+                    else "Rule-based check (AI not configured)"
+                ),
+                "status_label": analysis["status_label"],
+                "dimensions": [
+                    {"key": d["key"], "name": d["name"], "score": d["score"],
+                     "desc": d["rationale"], "description": d["description"]}
+                    for d in analysis["dimensions"]
+                ],
+                "strengths": analysis["strengths"],
+                "recommendations": [s["title"] + ": " + s["detail"] for s in analysis["suggestions"]],
+                "is_confidential": True,
+                "engine": engine,
+                "is_ai_generated": engine == "claude",
+                "summary": analysis["summary"],
+                "gaps": analysis["gaps"],
+                "suggestions": analysis["suggestions"],
+                "industry_insights": analysis["industry_insights"],
+                "inputs": analysis["inputs"],
+                "analyzed_at": analysis["created_at"],
+                "analysis_id": analysis["id"],
+                "ai_readiness_breakdown": project.get("ai_readiness_breakdown"),
+                "ai_feedback_summary": project.get("ai_feedback_summary"),
+            }
 
-        dimensions = [
-            {
-                "name": "Problem / Solution Fit",
-                "score": breakdown.get("problem_solution_fit", 94.0),
-                "desc": "Clarity of clinical/enterprise pain point and technological defensibility",
-            },
-            {
-                "name": "Traction & Feasibility",
-                "score": breakdown.get("traction_feasibility", 95.0),
-                "desc": "Pilot validation trials, customer engagement data, and execution velocity",
-            },
-            {
-                "name": "Business Model Clarity",
-                "score": breakdown.get("business_model_clarity", 92.0),
-                "desc": "Unit economics, recurring revenue structure, and defensible margin profile",
-            },
-            {
-                "name": "Market Sizing & ICP (TAM)",
-                "score": breakdown.get("market_sizing", 88.0),
-                "desc": f"Addressable target market quantified for {project.get('target_market', 'ICP')}",
-            },
-        ]
-
-        strengths = project.get("strengths") or [
-            "Proprietary technical IP and core algorithm defensibility",
-            "Clear 10x operational improvement over legacy alternatives",
-        ]
-        recommendations = project.get("recommendations") or [
-            "Specify key regulatory and procurement milestones in narrative slides",
-            "Clarify gross margin profile vs infrastructure operational costs",
-        ]
-
+        # Seeded demo projects carry curated scores but no analysis run yet.
+        breakdown = project.get("ai_readiness_breakdown") or {}
         return {
-            "project_id": project.get("id"),
-            "title": project.get("title"),
-            "readiness_score": score,
-            "model_version": "Readiness Engine v2.4",
-            "status_label": "Ready for Investor Presentation" if score >= 85 else "Needs Refinement",
-            "dimensions": dimensions,
-            "strengths": strengths,
-            "recommendations": recommendations,
+            "project_id": project["id"],
+            "title": project["title"],
+            "readiness_score": project.get("readiness_score") or 0.0,
+            "model_version": "Not yet analyzed",
+            "status_label": "Run an analysis to get your readiness report",
+            "dimensions": [
+                {"key": key, "name": name, "score": breakdown.get(key), "desc": desc, "description": desc}
+                for key, name, desc in DIMENSIONS
+                if breakdown.get(key) is not None
+            ],
+            "strengths": project.get("strengths") or [],
+            "recommendations": project.get("recommendations") or [],
             "is_confidential": True,
+            "engine": None,
+            "is_ai_generated": False,
+            "summary": project.get("ai_feedback_summary"),
+            "gaps": [],
+            "suggestions": [],
+            "industry_insights": [],
+            "inputs": None,
+            "analyzed_at": None,
+            "analysis_id": None,
+            "ai_readiness_breakdown": breakdown,
+            "ai_feedback_summary": project.get("ai_feedback_summary"),
         }
 
     @classmethod
     async def re_evaluate_readiness(cls, project_id: Union[int, str]) -> Optional[Dict[str, Any]]:
+        """Run a fresh analysis (Claude when configured) and return the new report."""
         project = await cls.get_by_id(project_id)
         if not project:
             return None
-
-        # Re-evaluation with slight improvement
-        curr_score = project.get("readiness_score", 88.0)
-        new_score = round(min(97.5, curr_score + random.uniform(1.0, 3.5)), 1)
-
-        breakdown = {
-            "problem_solution_fit": round(min(100.0, new_score + random.uniform(0.5, 2.0)), 1),
-            "market_sizing": round(min(100.0, new_score - random.uniform(1.0, 3.0)), 1),
-            "business_model_clarity": round(min(100.0, new_score + random.uniform(-1.0, 1.0)), 1),
-            "traction_feasibility": round(min(100.0, new_score + random.uniform(0.5, 2.5)), 1),
-        }
-
-        await pg.update_where(
-            "projects",
-            {
-                "readiness_score": new_score,
-                "ai_readiness_breakdown": breakdown,
-                "updated_at": datetime.now(timezone.utc),
-            },
-            "id = %s",
-            [project["id"]],
-        )
-        return await cls.get_readiness_report(project_id)
+        from app.services.analysis_service import AnalysisService
+        await AnalysisService.analyze(project)
+        return await cls.get_readiness_report(project["id"])

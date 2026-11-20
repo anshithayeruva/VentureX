@@ -15,10 +15,12 @@ import {
   Globe,
   FileText,
   Edit,
-  Share2,
+  FolderGit2,
+  PlayCircle,
 } from "lucide-react";
 import { Badge } from "@/components/Badge";
 import { PortalLayout } from "@/components/PortalLayout";
+import { ProjectIntelligence } from "@/components/ProjectIntelligence";
 import { api, MOCK_PROJECTS } from "@/lib/api";
 import { Project } from "@/types";
 
@@ -29,6 +31,7 @@ export default function ProjectOverviewPage({ params }: { params: Promise<{ id: 
 
   const [project, setProject] = useState<Project | null>(null);
   const [isPublished, setIsPublished] = useState(false);
+  const [publishing, setPublishing] = useState(false);
 
   useEffect(() => {
     let mounted = true;
@@ -36,13 +39,24 @@ export default function ProjectOverviewPage({ params }: { params: Promise<{ id: 
       if (mounted) {
         const found = item || MOCK_PROJECTS.find((p) => p.id === projectId) || MOCK_PROJECTS[0];
         setProject(found);
-        setIsPublished(found.id === 1);
+        setIsPublished(Boolean(found.is_published));
       }
     });
     return () => {
       mounted = false;
     };
   }, [projectId]);
+
+  const handleTogglePublish = async () => {
+    const next = !isPublished;
+    setPublishing(true);
+    try {
+      const updated = await api.togglePublishProject(projectId, next);
+      setIsPublished(Boolean(updated.is_published));
+    } finally {
+      setPublishing(false);
+    }
+  };
 
   if (!project) {
     return (
@@ -106,8 +120,9 @@ export default function ProjectOverviewPage({ params }: { params: Promise<{ id: 
 
           <div className="flex flex-wrap items-center gap-2.5">
             <button
-              onClick={() => setIsPublished(!isPublished)}
-              className={`px-3.5 py-2 rounded-lg text-xs font-medium transition-colors border ${
+              onClick={handleTogglePublish}
+              disabled={publishing}
+              className={`px-3.5 py-2 rounded-lg text-xs font-medium transition-colors border disabled:opacity-60 ${
                 isPublished
                   ? "bg-white border-[#E2E8F0] text-[#64748B] hover:text-[#0F172A]"
                   : "bg-[#1B3B6F] text-white hover:bg-[#142C54] border-transparent"
@@ -147,7 +162,7 @@ export default function ProjectOverviewPage({ params }: { params: Promise<{ id: 
                 Readiness Score (Private)
               </span>
               <span className="text-xl font-bold text-[#1B3B6F] font-display mt-0.5 block">
-                {project.readiness_score?.toFixed(1) || "92.4"} / 100
+                {project.readiness_score != null ? project.readiness_score.toFixed(1) : "—"} / 100
               </span>
             </div>
             <div className="w-9 h-9 rounded-lg bg-[#EBF2FA] border border-[#BFD7EE] flex items-center justify-center text-[#1B3B6F]">
@@ -234,6 +249,36 @@ export default function ProjectOverviewPage({ params }: { params: Promise<{ id: 
                   </div>
                 )}
 
+                {project.github_url && (
+                  <div className="pt-2 border-t border-[#E2E8F0]">
+                    <span className="text-[#64748B] block">GitHub:</span>
+                    <a
+                      href={project.github_url}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="text-[#1B3B6F] font-medium hover:underline flex items-center gap-1 break-all"
+                    >
+                      <FolderGit2 className="w-3.5 h-3.5 shrink-0" />
+                      {project.github_url.replace(/^https?:\/\/(www\.)?github\.com\//, "")}
+                    </a>
+                  </div>
+                )}
+
+                {project.demo_url && (
+                  <div className="pt-2 border-t border-[#E2E8F0]">
+                    <span className="text-[#64748B] block">Demo:</span>
+                    <a
+                      href={project.demo_url}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="text-[#1B3B6F] font-medium hover:underline flex items-center gap-1 break-all"
+                    >
+                      <PlayCircle className="w-3.5 h-3.5 shrink-0" />
+                      {project.demo_url.replace(/^https?:\/\//, "")}
+                    </a>
+                  </div>
+                )}
+
                 <div className="pt-2 border-t border-[#E2E8F0]">
                   <span className="text-[#64748B] block">Created:</span>
                   <span className="text-[#0F172A] font-mono text-[11px]">
@@ -243,24 +288,14 @@ export default function ProjectOverviewPage({ params }: { params: Promise<{ id: 
               </div>
             </div>
 
-            {/* Quick Readiness Dial Link */}
-            <div className="rounded-xl border border-[#BFD7EE] bg-[#EBF2FA] p-5 shadow-subtle space-y-3">
-              <div className="flex items-center gap-2 text-xs font-bold text-[#1B3B6F]">
-                <Sparkles className="w-4 h-4 text-[#1B3B6F]" />
-                AI Diagnostic Report
-              </div>
-              <p className="text-xs text-[#18345D] leading-relaxed">
-                Review your full breakdown across Market Sizing, Problem-Solution fit, and clinical traction.
-              </p>
-              <Link
-                href="/founder/dashboard?tab=readiness"
-                className="inline-block px-3.5 py-1.5 rounded-lg text-xs font-medium text-white bg-[#1B3B6F] hover:bg-[#142C54] transition-colors"
-              >
-                Open Full Report
-              </Link>
-            </div>
           </div>
         </div>
+
+        {/* AI project intelligence: materials + private readiness analysis */}
+        <ProjectIntelligence
+          projectId={project.id}
+          onScoreChange={(score) => setProject((prev) => (prev ? { ...prev, readiness_score: score } : prev))}
+        />
       </div>
     </PortalLayout>
   );

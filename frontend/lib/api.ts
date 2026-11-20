@@ -10,6 +10,9 @@ import {
   DealRoomTranscript,
   DealRoomAuditLog,
   MessageAttachment,
+  ProjectDocument,
+  ReadinessReport,
+  AnalysisHistoryItem,
 } from "@/types";
 import { getApiToken } from "@/lib/auth/client";
 
@@ -26,6 +29,14 @@ async function apiFetch(input: string, init: RequestInit = {}): Promise<Response
     if (token) headers.set("Authorization", `Bearer ${token}`);
   }
   return fetch(input, { ...init, headers });
+}
+
+/** Throw an Error carrying the API's `detail` message for a failed response. */
+async function throwForStatus(res: Response, fallback: string): Promise<void> {
+  if (res.ok) return;
+  const body = await res.json().catch(() => null);
+  const detail = body?.detail;
+  throw new Error(typeof detail === "string" ? detail : `${fallback} (HTTP ${res.status})`);
 }
 
 export type MeResponse = {
@@ -416,13 +427,13 @@ export const api = {
         headers,
         body: JSON.stringify(data),
       });
-      if (res.ok) {
-        const created = await res.json();
-        localProjects.unshift(created);
-        return created;
-      }
-    } catch {
-      // Fallback
+      await throwForStatus(res, "Could not create the project");
+      const created = await res.json();
+      localProjects.unshift(created);
+      return created;
+    } catch (err) {
+      // Real API errors (validation, auth) surface to the form; only a down backend uses local mode.
+      if (!(err instanceof TypeError)) throw err;
     }
 
     // Local simulation with AI analysis scoring
@@ -473,10 +484,15 @@ export const api = {
     throw new Error(`Project ${id} not found`);
   },
 
-  async togglePublishProject(id: number | string): Promise<{ id: string | number; is_published: boolean }> {
+  async togglePublishProject(
+    id: number | string,
+    isPublished: boolean = true
+  ): Promise<{ id: string | number; is_published: boolean }> {
     try {
       const res = await apiFetch(`${API_BASE_URL}/projects/${id}/publish`, {
         method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ is_published: isPublished }),
       });
       if (res.ok) {
         return await res.json();
@@ -484,7 +500,68 @@ export const api = {
     } catch {
       // Fallback
     }
-    return { id, is_published: true };
+    return { id, is_published: isPublished };
+  },
+
+  // ---- AI project intelligence -------------------------------------------
+
+  async getProjectDocuments(projectId: number | string): Promise<ProjectDocument[]> {
+    const res = await apiFetch(`${API_BASE_URL}/projects/${projectId}/documents`, { cache: "no-store" });
+    await throwForStatus(res, "Could not load project materials");
+    return res.json();
+  },
+
+  async uploadProjectDocument(
+    projectId: number | string,
+    file: File,
+    category: string = "supporting_document"
+  ): Promise<ProjectDocument> {
+    const form = new FormData();
+    form.append("file", file);
+    form.append("category", category);
+    const res = await apiFetch(`${API_BASE_URL}/projects/${projectId}/documents`, { method: "POST", body: form });
+    await throwForStatus(res, `Could not upload ${file.name}`);
+    return res.json();
+  },
+
+  async deleteProjectDocument(projectId: number | string, docId: number): Promise<void> {
+    const res = await apiFetch(`${API_BASE_URL}/projects/${projectId}/documents/${docId}`, { method: "DELETE" });
+    await throwForStatus(res, "Could not remove the document");
+  },
+
+  /** Download a private project document (it needs the auth header, so a plain link would not work). */
+  async downloadProjectDocument(doc: ProjectDocument): Promise<void> {
+    const base = API_BASE_URL.replace(/\/api$/, "");
+    const res = await apiFetch(`${base}${doc.url}`);
+    await throwForStatus(res, "Could not download the document");
+    const url = URL.createObjectURL(await res.blob());
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = doc.original_name;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+  },
+
+  async getReadinessReport(projectId: number | string): Promise<ReadinessReport | null> {
+    const res = await apiFetch(`${API_BASE_URL}/projects/${projectId}/readiness`, { cache: "no-store" });
+    if (res.status === 404) return null;
+    await throwForStatus(res, "Could not load the readiness report");
+    return res.json();
+  },
+
+  /** Run a fresh analysis of the profile, materials and repository. Takes a minute or two with Claude. */
+  async analyzeProject(projectId: number | string): Promise<ReadinessReport> {
+    const res = await apiFetch(`${API_BASE_URL}/projects/${projectId}/analyze`, { method: "POST" });
+    await throwForStatus(res, "The analysis could not be completed");
+    return res.json();
+  },
+
+  async getProjectAnalyses(projectId: number | string): Promise<AnalysisHistoryItem[]> {
+    const res = await apiFetch(`${API_BASE_URL}/projects/${projectId}/analyses`, { cache: "no-store" });
+    await throwForStatus(res, "Could not load analysis history");
+    return res.json();
   },
 
   async getProjectReadiness(id: number | string): Promise<any> {

@@ -196,11 +196,12 @@ function FounderDashboardContent() {
   };
 
   const togglePublish = async (projectId: number) => {
+    const next = !publishedProjects[projectId];
     setPublishedProjects((prev) => ({
       ...prev,
-      [projectId]: !prev[projectId],
+      [projectId]: next,
     }));
-    await api.togglePublishProject(projectId);
+    await api.togglePublishProject(projectId, next);
   };
 
   const handleReanalyze = async () => {

@@ -197,3 +197,47 @@ CREATE TABLE IF NOT EXISTS deal_room_audit_logs (
     "timestamp"  TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 CREATE INDEX IF NOT EXISTS deal_room_audit_logs_room_idx ON deal_room_audit_logs (room_id, "timestamp");
+
+-- AI project intelligence -------------------------------------------------
+
+ALTER TABLE projects ADD COLUMN IF NOT EXISTS github_url TEXT NOT NULL DEFAULT '';
+ALTER TABLE projects ADD COLUMN IF NOT EXISTS demo_url TEXT NOT NULL DEFAULT '';
+
+-- Materials a founder uploads for a project (pitch deck, business plan, ...).
+-- The file lives in storage (`storage_path`); its extracted text is kept here
+-- so analysis and search never have to re-parse it.
+CREATE TABLE IF NOT EXISTS project_documents (
+    id              BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+    project_id      BIGINT NOT NULL REFERENCES projects (id) ON DELETE CASCADE,
+    category        TEXT NOT NULL DEFAULT 'supporting_document',
+    original_name   TEXT NOT NULL,
+    storage_path    TEXT NOT NULL,
+    url             TEXT NOT NULL,
+    content_type    TEXT NOT NULL,
+    size_bytes      BIGINT NOT NULL,
+    page_count      INTEGER,
+    extracted_text  TEXT NOT NULL DEFAULT '',
+    extraction_note TEXT,
+    created_at      TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS project_documents_project_idx ON project_documents (project_id, created_at);
+
+-- Every readiness analysis run, newest last. projects.readiness_score and
+-- friends mirror the latest row so list views stay a single query.
+CREATE TABLE IF NOT EXISTS project_analyses (
+    id               BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+    project_id       BIGINT NOT NULL REFERENCES projects (id) ON DELETE CASCADE,
+    engine           TEXT NOT NULL,             -- 'claude' | 'rules'
+    model            TEXT,
+    overall_score    DOUBLE PRECISION NOT NULL,
+    status_label     TEXT NOT NULL,
+    summary          TEXT NOT NULL,
+    dimensions       JSONB NOT NULL DEFAULT '[]',
+    strengths        JSONB NOT NULL DEFAULT '[]',
+    gaps             JSONB NOT NULL DEFAULT '[]',
+    suggestions      JSONB NOT NULL DEFAULT '[]',
+    industry_insights JSONB NOT NULL DEFAULT '[]',
+    inputs           JSONB NOT NULL DEFAULT '{}', -- what the analysis saw (docs, github, ...)
+    created_at       TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS project_analyses_project_idx ON project_analyses (project_id, created_at DESC);

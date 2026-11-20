@@ -22,3 +22,8 @@ __pycache__/
 dist/
 build/
 *.egg-info/
+
+# Private project documents (pitch decks etc.)
+private_uploads/
+uploads/
+logs/
