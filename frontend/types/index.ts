@@ -133,7 +133,7 @@ export interface ReadinessReport {
   strengths: string[];
   recommendations: string[];
   is_confidential: boolean;
-  engine?: "claude" | "rules" | null;
+  engine?: "claude" | "gemini" | "rules" | null;
   is_ai_generated: boolean;
   summary?: string | null;
   gaps: { area: string; issue: string; severity: Severity }[];
@@ -151,7 +151,7 @@ export interface ReadinessReport {
 
 export interface AnalysisHistoryItem {
   id: number;
-  engine: "claude" | "rules";
+  engine: "claude" | "gemini" | "rules";
   model?: string | null;
   overall_score: number;
   status_label: string;

@@ -9,8 +9,10 @@ prioritized improvement suggestions and industry-specific insights.
 Engines (settings.analysis_engine):
 * "claude" - Claude reads all materials (PDF decks and images natively,
   other documents as extracted text) and returns schema-constrained JSON.
+* "gemini" - Google Gemini, same inputs and the same JSON contract (free
+  tier available; free-tier inputs may be used by Google to improve products).
 * "rules"  - a transparent completeness/coverage checker used when no
-  Anthropic API key is configured. Results are labelled as rule-based.
+  AI key is configured. Results are labelled as rule-based.
 
 Every run is stored in project_analyses; the latest one is mirrored onto the
 project row (readiness_score, ai_readiness_breakdown, ...).
@@ -46,8 +48,13 @@ DIMENSIONS: List[Tuple[str, str, str]] = [
 ]
 DIMENSION_KEYS = [d[0] for d in DIMENSIONS]
 
-MAX_REQUEST_BYTES = 30 * 1024 * 1024  # stay under the API's 32 MB request limit
+MAX_REQUEST_BYTES = 30 * 1024 * 1024  # stay under Claude's 32 MB request limit
 MAX_PDF_PAGES = 600
+# Gemini inline data: keep the whole request comfortably small; larger sets would need
+# the Files API (which keeps uploads on Google's side for 48 hours).
+GEMINI_MAX_INLINE_BYTES = 20 * 1024 * 1024
+
+AI_ENGINES = ("claude", "gemini")
 
 
 class AnalysisError(RuntimeError):
@@ -185,6 +192,56 @@ def _inputs_summary(project: Dict[str, Any], gathered: Dict[str, Any]) -> Dict[s
 
 
 # ---------------------------------------------------------------------------
+# Shared AI request pieces
+# ---------------------------------------------------------------------------
+
+def _doc_label(doc: Dict[str, Any]) -> str:
+    return f"{doc['original_name']} ({doc['category'].replace('_', ' ')})"
+
+
+def _check_pdf_pages(doc: Dict[str, Any]) -> None:
+    if (doc["page_count"] or 0) > MAX_PDF_PAGES:
+        raise AnalysisError(
+            f"'{doc['original_name']}' has {doc['page_count']} pages; the analysis can read at most "
+            f"{MAX_PDF_PAGES}. Upload a shorter version or split it.", status=422,
+        )
+
+
+def _too_large(total_bytes: int, limit: int) -> AnalysisError:
+    return AnalysisError(
+        f"The uploaded materials total about {total_bytes // (1024 * 1024)} MB, above the "
+        f"{limit // (1024 * 1024)} MB the analysis can send in one request. "
+        "Remove or compress some documents and try again.", status=422,
+    )
+
+
+def _brief(project: Dict[str, Any], gathered: Dict[str, Any]) -> str:
+    """The closing instruction with the project profile and repository summary."""
+    github_text = (
+        github_service.describe_for_prompt(gathered["github"]) if gathered["github"]
+        else "No GitHub repository was provided."
+    )
+    materials = [d["original_name"] for d in gathered["documents"]] or ["(none uploaded)"]
+    return (
+        "Assess this project's investment readiness.\n\n"
+        f"<project_profile>\n{_project_profile(project)}\n</project_profile>\n\n"
+        f"<github>\n{github_text}\n</github>\n\n"
+        f"Uploaded materials: {', '.join(materials)}.\n"
+        "The demo link, if any, was not opened; judge the product from the materials and repository."
+    )
+
+
+def _parse_output(text: Optional[str], request_ref: str) -> AnalysisOutput:
+    if not text:
+        raise AnalysisError("The AI returned no analysis.", status=502)
+    try:
+        return AnalysisOutput.model_validate(json.loads(text))
+    except (json.JSONDecodeError, ValidationError) as e:
+        logger.error("Unparseable analysis (%s): %s", request_ref, e)
+        raise AnalysisError("The AI returned an analysis in an unexpected format. Try again.", status=502)
+
+
+# ---------------------------------------------------------------------------
 # Claude engine
 # ---------------------------------------------------------------------------
 
@@ -193,14 +250,10 @@ def _claude_content(project: Dict[str, Any], gathered: Dict[str, Any]) -> List[D
     blocks: List[Dict[str, Any]] = []
     total_bytes = 0
     for doc in gathered["documents"]:
-        label = f"{doc['original_name']} ({doc['category'].replace('_', ' ')})"
+        label = _doc_label(doc)
         content = doc.get("content")
         if doc["content_type"] == "application/pdf" and content:
-            if (doc["page_count"] or 0) > MAX_PDF_PAGES:
-                raise AnalysisError(
-                    f"'{doc['original_name']}' has {doc['page_count']} pages; the analysis can read at most "
-                    f"{MAX_PDF_PAGES}. Upload a shorter version or split it.", status=422,
-                )
+            _check_pdf_pages(doc)
             data = base64.standard_b64encode(content).decode("ascii")
             total_bytes += len(data)
             blocks.append({
@@ -220,27 +273,9 @@ def _claude_content(project: Dict[str, Any], gathered: Dict[str, Any]) -> List[D
             blocks.append({"type": "text", "text": f"Document {label}: no readable content ({doc.get('extraction_note') or 'empty'})."})
 
     if total_bytes > MAX_REQUEST_BYTES:
-        raise AnalysisError(
-            f"The uploaded materials total about {total_bytes // (1024 * 1024)} MB once encoded, above the "
-            f"{MAX_REQUEST_BYTES // (1024 * 1024)} MB the analysis can send in one request. "
-            "Remove or compress some documents and try again.", status=422,
-        )
+        raise _too_large(total_bytes, MAX_REQUEST_BYTES)
 
-    github_text = (
-        github_service.describe_for_prompt(gathered["github"]) if gathered["github"]
-        else "No GitHub repository was provided."
-    )
-    materials = [d["original_name"] for d in gathered["documents"]] or ["(none uploaded)"]
-    blocks.append({
-        "type": "text",
-        "text": (
-            "Assess this project's investment readiness.\n\n"
-            f"<project_profile>\n{_project_profile(project)}\n</project_profile>\n\n"
-            f"<github>\n{github_text}\n</github>\n\n"
-            f"Uploaded materials: {', '.join(materials)}.\n"
-            "The demo link, if any, was not opened; judge the product from the materials and repository."
-        ),
-    })
+    blocks.append({"type": "text", "text": _brief(project, gathered)})
     return blocks
 
 
@@ -299,14 +334,135 @@ async def _analyze_with_claude(project: Dict[str, Any], gathered: Dict[str, Any]
         raise AnalysisError("The analysis was cut off before it finished. Try again.", status=502)
 
     text = next((b.text for b in response.content if b.type == "text"), None)
-    if not text:
-        raise AnalysisError("The AI returned no analysis.", status=502)
-    try:
-        output = AnalysisOutput.model_validate(json.loads(text))
-    except (json.JSONDecodeError, ValidationError) as e:
-        logger.error("Unparseable analysis (request %s): %s", getattr(response, "_request_id", "?"), e)
-        raise AnalysisError("The AI returned an analysis in an unexpected format. Try again.", status=502)
+    output = _parse_output(text, f"Claude request {getattr(response, '_request_id', '?')}")
     return output, response.model
+
+
+# ---------------------------------------------------------------------------
+# Gemini engine
+# ---------------------------------------------------------------------------
+
+def _gemini_contents(project: Dict[str, Any], gathered: Dict[str, Any]) -> List[Any]:
+    """Gemini parts: PDFs and images inline as bytes, other documents as text, then the brief."""
+    from google.genai import types
+
+    parts: List[Any] = []
+    total_bytes = 0
+    for doc in gathered["documents"]:
+        label = _doc_label(doc)
+        content = doc.get("content")
+        if content and (doc["content_type"] == "application/pdf" or doc["content_type"].startswith("image/")):
+            if doc["content_type"] == "application/pdf":
+                _check_pdf_pages(doc)
+            total_bytes += len(content)
+            parts.append(f"Document: {label}")
+            parts.append(types.Part.from_bytes(data=content, mime_type=doc["content_type"]))
+        elif doc["extracted_text"]:
+            total_bytes += len(doc["extracted_text"].encode("utf-8"))
+            parts.append(f"<document name=\"{label}\">\n{doc['extracted_text']}\n</document>")
+        else:
+            parts.append(f"Document {label}: no readable content ({doc.get('extraction_note') or 'empty'}).")
+
+    if total_bytes > GEMINI_MAX_INLINE_BYTES:
+        raise _too_large(total_bytes, GEMINI_MAX_INLINE_BYTES)
+
+    parts.append(_brief(project, gathered))
+    return parts
+
+
+async def _analyze_with_gemini(project: Dict[str, Any], gathered: Dict[str, Any]) -> Tuple[AnalysisOutput, str]:
+    from google import genai
+    from google.genai import errors, types
+
+    api_key = settings.gemini_api_key
+    if not api_key:
+        raise AnalysisError(
+            "Gemini is not configured: set GEMINI_API_KEY (free at aistudio.google.com), "
+            "or set AI_PROVIDER=none for the rule-based check.",
+            status=503,
+        )
+
+    contents = _gemini_contents(project, gathered)
+    config = types.GenerateContentConfig(
+        system_instruction=SYSTEM_PROMPT,
+        response_mime_type="application/json",
+        response_json_schema=_strict_schema(),
+        max_output_tokens=16000,
+        http_options=types.HttpOptions(timeout=settings.GEMINI_TIMEOUT_SECONDS * 1000),
+    )
+    # Free-tier capacity varies by model: when one is overloaded (503) or out of quota
+    # (429), try the next configured model instead of failing the founder's request.
+    models = [settings.GEMINI_MODEL] + [m for m in settings.gemini_fallback_models if m != settings.GEMINI_MODEL]
+    client = genai.Client(api_key=api_key)
+    response = None
+    model_used = None
+    try:
+        for index, model in enumerate(models):
+            last = index == len(models) - 1
+            try:
+                response = await client.aio.models.generate_content(model=model, contents=contents, config=config)
+                model_used = model
+                break
+            except errors.ClientError as e:  # 4xx
+                if e.code in (401, 403):
+                    raise AnalysisError("The Gemini API key was rejected. Check GEMINI_API_KEY.", status=503)
+                if e.code == 429:
+                    if not last:
+                        logger.warning("Gemini %s is out of quota; trying %s", model, models[index + 1])
+                        continue
+                    raise AnalysisError(
+                        "Gemini's free-tier rate limit was reached. Wait a minute (or until tomorrow for the "
+                        "daily limit) and try again.", status=429,
+                    )
+                if e.code == 404:
+                    if not last:
+                        logger.warning("Gemini model %s not found; trying %s", model, models[index + 1])
+                        continue
+                    raise AnalysisError(f"Gemini model '{model}' was not found. Check GEMINI_MODEL.", status=503)
+                logger.error("Gemini rejected the analysis request: %s", e.message)
+                raise AnalysisError(f"Gemini rejected the request: {e.message}", status=422)
+            except errors.ServerError as e:  # 5xx, e.g. 503 "experiencing high demand"
+                if not last:
+                    logger.warning("Gemini %s unavailable (%s); trying %s", model, e.code, models[index + 1])
+                    continue
+                raise AnalysisError(
+                    "Gemini is overloaded right now (all configured models are busy). Try again in a few minutes.",
+                    status=503,
+                )
+            except errors.APIError:
+                raise
+            except Exception as e:  # timeouts and network errors from the HTTP layer
+                if not last:
+                    logger.warning("Gemini %s failed (%s); trying %s", model, type(e).__name__, models[index + 1])
+                    continue
+                logger.error("Gemini request failed: %s", e)
+                raise AnalysisError(
+                    f"Gemini did not respond within {settings.GEMINI_TIMEOUT_SECONDS} seconds or could not be "
+                    "reached. Try again in a few minutes.", status=503,
+                )
+    except AnalysisError:
+        raise
+    except errors.APIError as e:
+        raise AnalysisError(f"Gemini request failed: {e.message}", status=502)
+    except Exception as e:  # network failures surface as transport exceptions
+        logger.error("Gemini request failed: %s", e)
+        raise AnalysisError("Could not reach Gemini. Check the network and try again.", status=503)
+    finally:
+        await client.aio.aclose()
+
+    feedback = getattr(response, "prompt_feedback", None)
+    if feedback is not None and getattr(feedback, "block_reason", None):
+        raise AnalysisError(f"Gemini declined to analyze these materials ({feedback.block_reason}).", status=422)
+    candidate = (response.candidates or [None])[0]
+    finish = getattr(candidate, "finish_reason", None)
+    finish_name = getattr(finish, "name", str(finish)) if finish is not None else None
+    if finish_name == "MAX_TOKENS":
+        raise AnalysisError("The analysis was cut off before it finished. Try again.", status=502)
+    if finish_name and finish_name not in ("STOP", "FINISH_REASON_UNSPECIFIED"):
+        raise AnalysisError(f"Gemini stopped without finishing the analysis ({finish_name}).", status=422)
+
+    output = _parse_output(response.text, f"Gemini {model_used}")
+    return output, getattr(response, "model_version", None) or model_used
 
 
 # ---------------------------------------------------------------------------
@@ -493,6 +649,8 @@ class AnalysisService:
         model = None
         if engine == "claude":
             output, model = await _analyze_with_claude(project, gathered)
+        elif engine == "gemini":
+            output, model = await _analyze_with_gemini(project, gathered)
         else:
             output = _analyze_with_rules(project, gathered)
 

@@ -191,3 +191,23 @@ def test_project_intelligence_pipeline(client, monkeypatch):
 
     assert client.delete(f"/api/projects/{project_id}/documents/{doc['id']}").status_code == 200
     assert client.get(f"/api/projects/{project_id}/documents").json() == []
+
+
+def test_gemini_engine_without_key_reports_clearly(client, monkeypatch):
+    """Choosing Gemini without GEMINI_API_KEY must fail with a 503 that says how to fix it."""
+    from app.core.config import settings
+    monkeypatch.setattr(settings, "AI_PROVIDER", "gemini")
+    monkeypatch.setattr(settings, "GEMINI_API_KEY", None)
+    monkeypatch.delenv("GEMINI_API_KEY", raising=False)
+    monkeypatch.delenv("GOOGLE_API_KEY", raising=False)
+
+    created = client.post("/api/projects", json={
+        "title": "Gemini Config Test", "description": "Testing engine configuration.",
+        "problem": "Engine selection must be explicit.", "solution": "Clear configuration errors.",
+        "industry": "DevTools", "stage": "Idea", "funding_required": 1000,
+        "business_model": "SaaS", "target_market": "Developers",
+    })
+    assert created.status_code == 201
+    response = client.post(f"/api/projects/{created.json()['id']}/analyze")
+    assert response.status_code == 503
+    assert "GEMINI_API_KEY" in response.json()["detail"]

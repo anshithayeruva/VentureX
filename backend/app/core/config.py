@@ -45,27 +45,51 @@ class Settings(BaseSettings):
     CORS_ORIGINS: str = "http://localhost:3000"
     ALLOWED_ORIGINS: Optional[str] = None  # Backward-compatibility alias
 
-    # AI project analysis.
-    # AI_PROVIDER: "auto" = Claude when ANTHROPIC_API_KEY is set, else the rule-based checker;
-    # "anthropic" = always Claude (errors if no key); "none" = always the rule-based checker.
+    # AI project analysis. AI_PROVIDER picks the engine:
+    #   "auto"      = Claude if ANTHROPIC_API_KEY is set, else Gemini if GEMINI_API_KEY is set,
+    #                 else the rule-based checker
+    #   "anthropic" = always Claude;  "gemini" = always Gemini (errors if the key is missing)
+    #   "none"      = always the rule-based checker
     AI_PROVIDER: str = "auto"
     ANTHROPIC_API_KEY: Optional[str] = None
     ANTHROPIC_MODEL: str = "claude-opus-5-5"
     ANTHROPIC_EFFORT: str = "high"
+    # Google Gemini (free tier available at aistudio.google.com). Free-tier inputs may be
+    # used by Google to improve its products - avoid confidential material on the free tier.
+    GEMINI_API_KEY: Optional[str] = None
+    GEMINI_MODEL: str = "gemini-3.8-flash"
+    # Comma-separated models tried in order when GEMINI_MODEL is overloaded (503) or out of quota (429).
+    GEMINI_FALLBACK_MODELS: str = "gemini-3.5-flash-lite"
+    # Per-model time limit; a slower model is skipped in favour of the next fallback.
+    GEMINI_TIMEOUT_SECONDS: int = 150
+
+    @property
+    def gemini_fallback_models(self) -> List[str]:
+        return [m.strip() for m in (self.GEMINI_FALLBACK_MODELS or "").split(",") if m.strip()]
     # Optional: raises GitHub's unauthenticated limit (60 requests/hour) for repo intake.
     GITHUB_TOKEN: Optional[str] = None
 
     @property
+    def gemini_api_key(self) -> str:
+        import os
+        return (self.GEMINI_API_KEY or os.environ.get("GEMINI_API_KEY") or os.environ.get("GOOGLE_API_KEY") or "").strip()
+
+    @property
     def analysis_engine(self) -> str:
-        """Which engine analyzes projects: 'claude' or 'rules'."""
+        """Which engine analyzes projects: 'claude', 'gemini' or 'rules'."""
         provider = (self.AI_PROVIDER or "auto").strip().lower()
         if provider in ("none", "rules", "off"):
             return "rules"
         if provider in ("anthropic", "claude"):
             return "claude"
+        if provider in ("gemini", "google"):
+            return "gemini"
         import os
-        has_key = bool((self.ANTHROPIC_API_KEY or os.environ.get("ANTHROPIC_API_KEY") or "").strip())
-        return "claude" if has_key else "rules"
+        if (self.ANTHROPIC_API_KEY or os.environ.get("ANTHROPIC_API_KEY") or "").strip():
+            return "claude"
+        if self.gemini_api_key:
+            return "gemini"
+        return "rules"
 
     @property
     def environment_name(self) -> str:

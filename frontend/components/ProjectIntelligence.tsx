@@ -334,6 +334,12 @@ export function ProjectIntelligence({
                   )}
                   {report.analyzed_at && <span>Analyzed {new Date(report.analyzed_at).toLocaleString()}</span>}
                 </div>
+                {report.engine === "gemini" && (
+                  <p className="text-[11px] text-[#9A3412]">
+                    Analyzed with Gemini. On Google&apos;s free tier, submitted materials may be used to improve
+                    Google&apos;s products, so avoid uploading confidential decks.
+                  </p>
+                )}
               </div>
             </div>
 
@@ -463,7 +469,7 @@ export function ProjectIntelligence({
               {history.map((h) => (
                 <li key={h.id} className="flex items-center justify-between text-[11px] text-[#475569]">
                   <span>{new Date(h.created_at).toLocaleString()}</span>
-                  <span className="text-[#94A3B8]">{h.engine === "claude" ? "AI" : "Rule-based"}</span>
+                  <span className="text-[#94A3B8]">{h.engine === "rules" ? "Rule-based" : h.engine === "gemini" ? "Gemini" : "Claude"}</span>
                   <span className="font-mono font-semibold" style={{ color: scoreColor(h.overall_score) }}>
                     {h.overall_score.toFixed(0)}
                   </span>
