@@ -38,6 +38,8 @@ export default function EditProjectPage({ params }: { params: Promise<{ id: stri
     target_market: "",
     website: "",
     pitch_deck_url: "",
+    github_url: "",
+    demo_url: "",
   });
 
   const industries = [
@@ -88,6 +90,8 @@ export default function EditProjectPage({ params }: { params: Promise<{ id: stri
         target_market: found.target_market,
         website: found.website || "",
         pitch_deck_url: found.pitch_deck_url || "",
+        github_url: found.github_url || "",
+        demo_url: found.demo_url || "",
       });
     }
   }, [projectId]);
@@ -215,6 +219,39 @@ export default function EditProjectPage({ params }: { params: Promise<{ id: stri
                   type="number"
                   value={formData.funding_required}
                   onChange={(e) => setFormData({ ...formData, funding_required: parseFloat(e.target.value) || 0 })}
+                  className="w-full px-3.5 py-2 bg-[#FAFBFD] border border-[#E2E8F0] rounded-lg text-[#0F172A] text-xs sm:text-sm"
+                />
+              </div>
+            </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 pt-2">
+              <div>
+                <label className="block text-xs font-semibold text-[#0F172A] mb-1">Website</label>
+                <input
+                  type="url"
+                  placeholder="https://example.com"
+                  value={formData.website}
+                  onChange={(e) => setFormData({ ...formData, website: e.target.value })}
+                  className="w-full px-3.5 py-2 bg-[#FAFBFD] border border-[#E2E8F0] rounded-lg text-[#0F172A] text-xs sm:text-sm"
+                />
+              </div>
+              <div>
+                <label className="block text-xs font-semibold text-[#0F172A] mb-1">GitHub Repository</label>
+                <input
+                  type="url"
+                  placeholder="https://github.com/org/repo"
+                  value={formData.github_url}
+                  onChange={(e) => setFormData({ ...formData, github_url: e.target.value })}
+                  className="w-full px-3.5 py-2 bg-[#FAFBFD] border border-[#E2E8F0] rounded-lg text-[#0F172A] text-xs sm:text-sm"
+                />
+              </div>
+              <div>
+                <label className="block text-xs font-semibold text-[#0F172A] mb-1">Demo / Product Link</label>
+                <input
+                  type="url"
+                  placeholder="https://app.example.com"
+                  value={formData.demo_url}
+                  onChange={(e) => setFormData({ ...formData, demo_url: e.target.value })}
                   className="w-full px-3.5 py-2 bg-[#FAFBFD] border border-[#E2E8F0] rounded-lg text-[#0F172A] text-xs sm:text-sm"
                 />
               </div>

@@ -45,8 +45,27 @@ class Settings(BaseSettings):
     CORS_ORIGINS: str = "http://localhost:3000"
     ALLOWED_ORIGINS: Optional[str] = None  # Backward-compatibility alias
 
-    # AI Configuration
-    AI_PROVIDER: str = "none"
+    # AI project analysis.
+    # AI_PROVIDER: "auto" = Claude when ANTHROPIC_API_KEY is set, else the rule-based checker;
+    # "anthropic" = always Claude (errors if no key); "none" = always the rule-based checker.
+    AI_PROVIDER: str = "auto"
+    ANTHROPIC_API_KEY: Optional[str] = None
+    ANTHROPIC_MODEL: str = "claude-opus-5-5"
+    ANTHROPIC_EFFORT: str = "high"
+    # Optional: raises GitHub's unauthenticated limit (60 requests/hour) for repo intake.
+    GITHUB_TOKEN: Optional[str] = None
+
+    @property
+    def analysis_engine(self) -> str:
+        """Which engine analyzes projects: 'claude' or 'rules'."""
+        provider = (self.AI_PROVIDER or "auto").strip().lower()
+        if provider in ("none", "rules", "off"):
+            return "rules"
+        if provider in ("anthropic", "claude"):
+            return "claude"
+        import os
+        has_key = bool((self.ANTHROPIC_API_KEY or os.environ.get("ANTHROPIC_API_KEY") or "").strip())
+        return "claude" if has_key else "rules"
 
     @property
     def environment_name(self) -> str:

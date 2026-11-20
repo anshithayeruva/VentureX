@@ -27,13 +27,9 @@ export default function NewProjectPage() {
   const [submitting, setSubmitting] = useState(false);
   const [successResult, setSuccessResult] = useState<any>(null);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
-  const [uploadingDeck, setUploadingDeck] = useState(false);
-  const [uploadedDeckInfo, setUploadedDeckInfo] = useState<{
-    name: string;
-    size_kb: number;
-    url: string;
-    insights?: any;
-  } | null>(null);
+  // The deck is uploaded privately to the project once it exists (never to the public /uploads folder).
+  const [pendingDeck, setPendingDeck] = useState<File | null>(null);
+  const [deckWarning, setDeckWarning] = useState<string | null>(null);
 
   const [formData, setFormData] = useState<ProjectCreateInput>({
     title: "",
@@ -48,6 +44,8 @@ export default function NewProjectPage() {
     target_market: "",
     website: "",
     pitch_deck_url: "",
+    github_url: "",
+    demo_url: "",
   });
 
   const [makePublicNow, setMakePublicNow] = useState(false);
@@ -89,8 +87,19 @@ export default function NewProjectPage() {
     setSubmitting(true);
     setErrorMessage(null);
 
+    setDeckWarning(null);
     try {
-      const created = await api.createProject(formData);
+      const created = await api.createProject({ ...formData, is_published: makePublicNow });
+      if (pendingDeck) {
+        try {
+          await api.uploadProjectDocument(created.id, pendingDeck, "pitch_deck");
+        } catch (uploadErr) {
+          setDeckWarning(
+            `The project was created, but the pitch deck upload failed: ${uploadErr instanceof Error ? uploadErr.message : "unknown error"}. ` +
+              "You can upload it again from the project page."
+          );
+        }
+      }
       setSuccessResult(created);
     } catch (err: any) {
       setErrorMessage(err.message || "Failed to submit project. Please try again.");
@@ -145,25 +154,38 @@ export default function NewProjectPage() {
               <div className="flex items-center justify-between">
                 <span className="text-xs text-[#64748B] font-semibold uppercase tracking-wider flex items-center gap-1.5">
                   <Sparkles className="w-3.5 h-3.5 text-[#1B3B6F]" />
-                  Preliminary AI Readiness Score:
+                  Baseline Readiness Score:
                 </span>
                 <span className="text-lg font-mono font-bold text-[#1B3B6F]">
-                  {successResult.readiness_score ? `${successResult.readiness_score}%` : "88.0%"}
+                  {successResult.readiness_score != null ? `${successResult.readiness_score}` : "—"}
                 </span>
               </div>
               <p className="text-xs text-[#64748B] leading-relaxed">
                 {successResult.ai_feedback_summary ||
-                  "High problem-solution clarity. Semantic embeddings generated and ready for investor recommendation."}
+                  "A quick completeness check of your profile. Open the project to upload materials and run the full AI analysis."}
               </p>
               <div className="pt-2 text-[11px] text-[#2E7D52] flex items-center gap-1">
                 <Lock className="w-3 h-3" /> Note: This diagnostic analysis is private to you and never shared with investors.
               </div>
             </div>
 
-            <div className="flex gap-3 pt-2">
+            {deckWarning && (
+              <p role="alert" className="text-xs text-[#9A3412] bg-[#FFF7ED] border border-[#FED7AA] rounded-lg px-3 py-2">
+                {deckWarning}
+              </p>
+            )}
+
+            <div className="flex flex-wrap gap-3 pt-2">
+              <button
+                onClick={() => router.push(`/founder/projects/${successResult.id}`)}
+                className="px-4 py-2 rounded-lg text-xs font-medium text-white bg-[#1B3B6F] hover:bg-[#142C54] transition-colors shadow-sm flex items-center gap-1.5"
+              >
+                <Sparkles className="w-3.5 h-3.5" />
+                Open Project &amp; Run AI Analysis
+              </button>
               <button
                 onClick={() => router.push("/founder/dashboard")}
-                className="px-4 py-2 rounded-lg text-xs font-medium text-white bg-[#1B3B6F] hover:bg-[#142C54] transition-colors shadow-sm"
+                className="px-4 py-2 rounded-lg text-xs font-medium text-[#0F172A] bg-white border border-[#E2E8F0] hover:bg-[#FAFBFD]"
               >
                 Go to Dashboard
               </button>
@@ -322,8 +344,8 @@ export default function NewProjectPage() {
                   <input
                     type="number"
                     required
-                    min={10000}
-                    step={25000}
+                    min={1000}
+                    step={1000}
                     value={formData.funding_required}
                     onChange={(e) =>
                       setFormData({ ...formData, funding_required: parseFloat(e.target.value) || 0 })
@@ -382,21 +404,15 @@ export default function NewProjectPage() {
                 id="pitch-deck-file"
                 accept=".pdf,.pptx,.docx"
                 className="hidden"
-                onChange={async (e) => {
+                onChange={(e) => {
                   const file = e.target.files?.[0];
                   if (!file) return;
-                  setUploadingDeck(true);
-                  const result = await api.uploadFile(file, "pitch_deck");
-                  if (result) {
-                    setFormData((prev) => ({ ...prev, pitch_deck_url: result.url }));
-                    setUploadedDeckInfo({
-                      name: result.original_name,
-                      size_kb: result.size_kb,
-                      url: result.url,
-                      insights: result.insights,
-                    });
+                  if (file.size > 25 * 1024 * 1024) {
+                    setErrorMessage("The pitch deck must be 25 MB or smaller.");
+                    return;
                   }
-                  setUploadingDeck(false);
+                  setErrorMessage(null);
+                  setPendingDeck(file);
                 }}
               />
               <label
@@ -404,24 +420,22 @@ export default function NewProjectPage() {
                 className="cursor-pointer inline-flex items-center gap-2 py-2 px-4 rounded-lg bg-white border border-[#E2E8F0] text-xs font-semibold text-[#1B3B6F] hover:bg-[#F1F5F9] shadow-xs transition-colors"
               >
                 <Upload className="w-3.5 h-3.5 text-[#1B3B6F]" />
-                {uploadingDeck ? "Uploading & Analyzing..." : "Upload Pitch Deck (PDF, PPTX up to 25MB)"}
+                {pendingDeck ? "Choose a Different File" : "Attach Pitch Deck (PDF, PPTX, DOCX up to 25MB)"}
               </label>
 
-              {uploadedDeckInfo ? (
+              {pendingDeck ? (
                 <div className="mt-2 p-2.5 rounded-lg bg-[#E8F5E9] border border-[#C8E6C9] text-xs text-[#1E5236] flex items-center justify-between">
                   <span className="flex items-center gap-1.5 font-medium">
                     <CheckCircle2 className="w-4 h-4 text-[#2E7D52]" />
-                    Uploaded: <strong>{uploadedDeckInfo.name}</strong> ({uploadedDeckInfo.size_kb} KB)
+                    Attached: <strong>{pendingDeck.name}</strong> ({Math.round(pendingDeck.size / 1024)} KB)
                   </span>
-                  {uploadedDeckInfo.insights?.detected_keywords?.length > 0 && (
-                    <span className="text-[10px] text-[#2E7D52] bg-white px-2 py-0.5 rounded-full border border-[#C8E6C9]">
-                      Keywords: {uploadedDeckInfo.insights.detected_keywords.slice(0, 3).join(", ")}
-                    </span>
-                  )}
+                  <span className="text-[10px] text-[#2E7D52] flex items-center gap-1">
+                    <Lock className="w-3 h-3" /> Uploaded privately when you submit
+                  </span>
                 </div>
               ) : (
                 <p className="text-[11px] text-[#64748B]">
-                  Upload your slide deck directly to seed automatic pitch readiness analysis, or paste an external link below.
+                  Your deck is stored privately with the project and read by the AI analysis. You can add more materials later.
                 </p>
               )}
             </div>
@@ -442,14 +456,42 @@ export default function NewProjectPage() {
 
               <div>
                 <label className="block text-xs font-semibold text-[#0F172A] mb-1">
-                  Pitch Deck URL or Uploaded Path
+                  External Pitch Deck Link (optional)
                 </label>
                 <input
                   type="text"
-                  placeholder="https://docsend.com/view/demo or /uploads/..."
+                  placeholder="https://docsend.com/view/demo"
                   value={formData.pitch_deck_url}
                   onChange={(e) => setFormData({ ...formData, pitch_deck_url: e.target.value })}
                   className="w-full px-3.5 py-2.5 bg-[#FAFBFD] border border-[#E2E8F0] rounded-lg text-[#0F172A] placeholder-[#94A3B8] focus:outline-none focus:border-[#1B3B6F] text-xs sm:text-sm font-mono text-[11px]"
+                />
+              </div>
+            </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <div>
+                <label className="block text-xs font-semibold text-[#0F172A] mb-1">
+                  GitHub Repository
+                </label>
+                <input
+                  type="url"
+                  placeholder="https://github.com/your-org/your-repo"
+                  value={formData.github_url}
+                  onChange={(e) => setFormData({ ...formData, github_url: e.target.value })}
+                  className="w-full px-3.5 py-2.5 bg-[#FAFBFD] border border-[#E2E8F0] rounded-lg text-[#0F172A] placeholder-[#94A3B8] focus:outline-none focus:border-[#1B3B6F] text-xs sm:text-sm"
+                />
+                <p className="text-[10px] text-[#94A3B8] mt-1">Public repos are read during analysis (code, README, tests, CI).</p>
+              </div>
+              <div>
+                <label className="block text-xs font-semibold text-[#0F172A] mb-1">
+                  Demo / Product Link
+                </label>
+                <input
+                  type="url"
+                  placeholder="https://youtu.be/... or https://app.example.com"
+                  value={formData.demo_url}
+                  onChange={(e) => setFormData({ ...formData, demo_url: e.target.value })}
+                  className="w-full px-3.5 py-2.5 bg-[#FAFBFD] border border-[#E2E8F0] rounded-lg text-[#0F172A] placeholder-[#94A3B8] focus:outline-none focus:border-[#1B3B6F] text-xs sm:text-sm"
                 />
               </div>
             </div>
@@ -488,12 +530,12 @@ export default function NewProjectPage() {
               {submitting ? (
                 <>
                   <Cpu className="w-4 h-4 animate-spin" />
-                  Evaluating Readiness...
+                  Creating Project...
                 </>
               ) : (
                 <>
                   <Sparkles className="w-4 h-4" />
-                  Submit & Run AI Readiness Diagnostic
+                  Create Project
                 </>
               )}
             </button>

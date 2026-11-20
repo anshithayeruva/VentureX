@@ -61,14 +61,20 @@ export interface Project {
   target_market: string;
   website?: string;
   pitch_deck_url?: string;
+  github_url?: string;
+  demo_url?: string;
+  is_published?: boolean;
   readiness_score?: number;
   ai_readiness_breakdown?: {
     problem_solution_fit?: number;
     market_sizing?: number;
     business_model_clarity?: number;
     traction_feasibility?: number;
+    product_technology?: number;
   };
   ai_feedback_summary?: string;
+  strengths?: string[];
+  recommendations?: string[];
   created_at: string;
   updated_at?: string;
 }
@@ -86,6 +92,70 @@ export interface ProjectCreateInput {
   target_market: string;
   website?: string;
   pitch_deck_url?: string;
+  github_url?: string;
+  demo_url?: string;
+  is_published?: boolean;
+}
+
+/** A founder-uploaded project material (pitch deck, business plan, ...). */
+export interface ProjectDocument {
+  id: number;
+  project_id: number;
+  category: string;
+  original_name: string;
+  url: string;
+  content_type: string;
+  size_bytes: number;
+  page_count?: number | null;
+  text_chars: number;
+  extraction_note?: string | null;
+  created_at: string;
+}
+
+export type Severity = "high" | "medium" | "low";
+
+export interface ReadinessDimension {
+  key: string;
+  name: string;
+  score: number | null;
+  desc: string;
+  description?: string;
+}
+
+/** Private readiness report: the latest analysis of a project. */
+export interface ReadinessReport {
+  project_id: number;
+  title: string;
+  readiness_score: number;
+  model_version: string;
+  status_label: string;
+  dimensions: ReadinessDimension[];
+  strengths: string[];
+  recommendations: string[];
+  is_confidential: boolean;
+  engine?: "claude" | "rules" | null;
+  is_ai_generated: boolean;
+  summary?: string | null;
+  gaps: { area: string; issue: string; severity: Severity }[];
+  suggestions: { title: string; detail: string; priority: Severity }[];
+  industry_insights: string[];
+  inputs?: {
+    documents: { id: number; name: string; category: string; pages?: number | null; text_chars: number }[];
+    github?: { url?: string; ok?: boolean; error?: string | null; full_name?: string | null } | null;
+    demo_url?: string | null;
+    website?: string | null;
+  } | null;
+  analyzed_at?: string | null;
+  analysis_id?: number | null;
+}
+
+export interface AnalysisHistoryItem {
+  id: number;
+  engine: "claude" | "rules";
+  model?: string | null;
+  overall_score: number;
+  status_label: string;
+  created_at: string;
 }
 
 export interface MatchReason {

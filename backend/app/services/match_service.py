@@ -96,9 +96,15 @@ DEMO_INVESTORS = [
 
 
 class MatchService:
+    # Set once the demo investors are known to exist, so match computations
+    # don't repeat 8 insert-if-missing round trips on every call.
+    _investors_ready = False
+
     @classmethod
     async def ensure_investors_initialized(cls) -> None:
         """Ensure all benchmark syndicate investors exist (insert-if-missing, never overwrite)."""
+        if cls._investors_ready:
+            return
         now = datetime.now(timezone.utc)
         for inv in DEMO_INVESTORS:
             user_id = inv["user_id"]
@@ -125,6 +131,7 @@ class MatchService:
                 "updated_at": now,
             }
             await pg.upsert("investor_preferences", pref_doc, ["investor_id"], update=[])
+        cls._investors_ready = True
 
     @staticmethod
     def _tokenize(text: str) -> set:
