@@ -49,8 +49,13 @@ function InvestorDashboardContent() {
   const [matches, setMatches] = useState<MatchItem[]>(MOCK_MATCHES);
   const [selectedIndustry, setSelectedIndustry] = useState<string>("All");
   const [searchQuery, setSearchQuery] = useState<string>("");
-  const [savedInterests, setSavedInterests] = useState<number[]>([1]);
+  const [savedInterests, setSavedInterests] = useState<string[]>([]);
   const [interestsList, setInterestsList] = useState<ProjectInterest[]>([]);
+  const [connectingProjectId, setConnectingProjectId] = useState<string | null>(null);
+  const [connectFeedback, setConnectFeedback] = useState<{
+    message: string;
+    type: "success" | "info";
+  } | null>(null);
   const [notifications, setNotifications] = useState<NotificationItem[]>([]);
   const [unreadNotifCount, setUnreadNotifCount] = useState<number>(0);
 
@@ -113,9 +118,11 @@ function InvestorDashboardContent() {
       }
     });
     api.getInterests().then((data) => {
-      if (mounted && Array.isArray(data) && data.length > 0) {
-        setSavedInterests(data.map((item: any) => Number(item.project_id)));
+      if (mounted && Array.isArray(data)) {
         setInterestsList(data);
+        setSavedInterests(
+          Array.from(new Set(data.map((item: ProjectInterest) => String(item.project_id))))
+        );
       }
     });
     api.getNotifications("INVESTOR").then((data) => {
@@ -143,18 +150,68 @@ function InvestorDashboardContent() {
     setUnreadNotifCount(0);
   };
 
+  const getProjectConnectionStatus = (
+    projectId: number | string
+  ): "none" | "pending" | "accepted" | "declined" => {
+    const matching = interestsList.filter(
+      (item) => String(item.project_id) === String(projectId)
+    );
+    if (matching.length === 0) return "none";
+    if (matching.some((m) => m.status === "accepted")) return "accepted";
+    if (matching.some((m) => m.status === "pending")) return "pending";
+    if (matching.some((m) => m.status === "declined")) return "declined";
+    return "pending";
+  };
 
-  const toggleInterest = async (projectId: number) => {
-    if (savedInterests.includes(projectId)) {
-      setSavedInterests(savedInterests.filter((id) => id !== projectId));
-      setInterestsList(interestsList.filter((item) => Number(item.project_id) !== Number(projectId)));
-    } else {
-      setSavedInterests([...savedInterests, projectId]);
-      const created = await api.expressInterest({ project_id: projectId });
-      if (created) {
-        setInterestsList((prev) => [created, ...prev]);
-      }
+  const handleConnect = async (project: Project) => {
+    const pid = String(project.id);
+    const currentStatus = getProjectConnectionStatus(project.id);
+
+    // If already connected/pending, navigate directly to My Interests & Deal Rooms
+    if (currentStatus === "pending" || currentStatus === "accepted") {
+      setActiveTab("interests");
+      return;
     }
+
+    setConnectingProjectId(pid);
+    try {
+      const created = await api.expressInterest({
+        project_id: project.id,
+        project_title: project.title,
+        project_industry: project.industry,
+        message: `Interested in reviewing ${project.title}'s confidential materials and discussing potential ${project.stage} investment fit.`,
+      });
+      if (created) {
+        setInterestsList((prev) => {
+          const filtered = prev.filter((item) => String(item.id) !== String(created.id));
+          return [created, ...filtered];
+        });
+        setSavedInterests((prev) => (prev.includes(pid) ? prev : [...prev, pid]));
+        setConnectFeedback({
+          type: "success",
+          message: `Introduction request sent to ${project.title}! Track approval and deal room access in My Interests.`,
+        });
+        setTimeout(() => setConnectFeedback(null), 6000);
+      }
+    } finally {
+      setConnectingProjectId(null);
+    }
+  };
+
+  const handleWithdrawInterest = async (interest: ProjectInterest) => {
+    await api.withdrawInterest(interest.id);
+    setInterestsList((prev) => {
+      const next = prev.filter((item) => String(item.id) !== String(interest.id));
+      setSavedInterests(
+        Array.from(new Set(next.map((item) => String(item.project_id))))
+      );
+      return next;
+    });
+    setConnectFeedback({
+      type: "info",
+      message: `Introduction request for ${interest.project_title || `Project #${interest.project_id}`} has been withdrawn.`,
+    });
+    setTimeout(() => setConnectFeedback(null), 4000);
   };
 
   const filteredProjects = projects.filter((p) => {
@@ -167,8 +224,6 @@ function InvestorDashboardContent() {
       p.industry.toLowerCase().includes(searchQuery.toLowerCase());
     return matchesIndustry && matchesSearch;
   });
-
-  const interestedProjectsList = projects.filter((p) => savedInterests.includes(p.id));
 
   return (
     <PortalLayout
@@ -230,6 +285,43 @@ function InvestorDashboardContent() {
           </Link>
         </div>
       </div>
+
+      {/* Live Connection Feedback Banner */}
+      {connectFeedback && (
+        <div
+          className={`mb-6 p-3.5 rounded-xl border flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs shadow-subtle ${
+            connectFeedback.type === "success"
+              ? "bg-[#E8F5E9] border-[#C8E6C9] text-[#1E5236]"
+              : "bg-[#F1F5F9] border-[#CBD5E1] text-[#334155]"
+          }`}
+        >
+          <span className="flex items-center gap-2 font-medium">
+            <CheckCircle2 className="w-4 h-4 shrink-0 text-[#2E7D52]" />
+            {connectFeedback.message}
+          </span>
+          <div className="flex items-center gap-2 self-end sm:self-auto">
+            {activeTab !== "interests" && connectFeedback.type === "success" && (
+              <button
+                type="button"
+                onClick={() => {
+                  setActiveTab("interests");
+                  setConnectFeedback(null);
+                }}
+                className="px-3 py-1 rounded-lg bg-[#2E7D52] hover:bg-[#1E5236] text-white font-semibold transition-colors whitespace-nowrap"
+              >
+                View My Interests →
+              </button>
+            )}
+            <button
+              type="button"
+              onClick={() => setConnectFeedback(null)}
+              className="px-2 py-1 text-[11px] font-semibold opacity-70 hover:opacity-100"
+            >
+              Dismiss
+            </button>
+          </div>
+        </div>
+      )}
 
       {/* 1. Overview Tab */}
       {activeTab === "overview" && (
@@ -312,7 +404,9 @@ function InvestorDashboardContent() {
                   key={p.id}
                   project={p}
                   isInvestorView={true}
-                  onConnect={() => toggleInterest(p.id)}
+                  connectionStatus={getProjectConnectionStatus(p.id)}
+                  isConnecting={connectingProjectId === String(p.id)}
+                  onConnect={(proj) => handleConnect(proj)}
                 />
               ))}
             </div>
@@ -336,7 +430,9 @@ function InvestorDashboardContent() {
                 key={project.id}
                 project={project}
                 isInvestorView={true}
-                onConnect={() => toggleInterest(project.id)}
+                connectionStatus={getProjectConnectionStatus(project.id)}
+                isConnecting={connectingProjectId === String(project.id)}
+                onConnect={(proj) => handleConnect(proj)}
               />
             ))}
           </div>
@@ -386,7 +482,9 @@ function InvestorDashboardContent() {
                 key={project.id}
                 project={project}
                 isInvestorView={true}
-                onConnect={() => toggleInterest(project.id)}
+                connectionStatus={getProjectConnectionStatus(project.id)}
+                isConnecting={connectingProjectId === String(project.id)}
+                onConnect={(proj) => handleConnect(proj)}
               />
             ))}
           </div>
@@ -431,7 +529,7 @@ function InvestorDashboardContent() {
           ) : (
             <div className="space-y-4">
               {interestsList.map((interest) => {
-                const project = projects.find((p) => Number(p.id) === Number(interest.project_id));
+                const project = projects.find((p) => String(p.id) === String(interest.project_id));
                 const title = interest.project_title || project?.title || `Project #${interest.project_id}`;
                 const industry = interest.project_industry || project?.industry || "Technology";
                 const isAccepted = interest.status === "accepted";
@@ -497,7 +595,8 @@ function InvestorDashboardContent() {
                           Founder is reviewing your firm&apos;s thesis note. Once accepted, confidential data room materials unlock here.
                         </span>
                         <button
-                          onClick={() => toggleInterest(Number(interest.project_id))}
+                          type="button"
+                          onClick={() => handleWithdrawInterest(interest)}
                           className="text-[11px] font-semibold text-[#92400E] hover:underline shrink-0 ml-2"
                         >
                           Withdraw Request

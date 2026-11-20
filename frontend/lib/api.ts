@@ -624,18 +624,63 @@ export const api = {
     return data;
   },
 
-  async expressInterest(data: { project_id: number | string; note?: string }): Promise<any> {
+  async expressInterest(data: {
+    project_id: number | string;
+    note?: string;
+    message?: string;
+    investor_id?: string;
+    project_title?: string;
+    project_industry?: string;
+  }): Promise<ProjectInterest> {
+    const message =
+      data.message ||
+      data.note ||
+      "Introduction requested for confidential data room review.";
     try {
       const res = await fetch(`${API_BASE_URL}/interests`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(data),
+        body: JSON.stringify({
+          project_id: data.project_id,
+          investor_id: data.investor_id || "investor-001",
+          message,
+        }),
       });
       if (res.ok) return await res.json();
     } catch {
+      // Fallback for offline/mock mode
+    }
+    const matchedProject = localProjects.find(
+      (p) => String(p.id) === String(data.project_id)
+    );
+    return {
+      id: `intro-${data.project_id}-${data.investor_id || "investor-001"}`,
+      project_id: data.project_id,
+      project_title:
+        data.project_title ||
+        matchedProject?.title ||
+        `Project #${data.project_id}`,
+      project_industry:
+        data.project_industry || matchedProject?.industry || "DeepTech",
+      investor_id: data.investor_id || "investor-001",
+      investor_name: "Dr. Sarah Lin",
+      investor_firm: "Apex Horizon Ventures",
+      status: "pending",
+      message,
+      created_at: new Date().toISOString(),
+    };
+  },
+
+  async withdrawInterest(interestId: string | number): Promise<boolean> {
+    try {
+      const res = await fetch(`${API_BASE_URL}/interests/${interestId}`, {
+        method: "DELETE",
+      });
+      if (res.ok) return true;
+    } catch {
       // Fallback
     }
-    return { status: "received", ...data };
+    return false;
   },
 
   async getInterests(params?: { investor_id?: string; founder_id?: string; status?: string }): Promise<any[]> {
@@ -914,6 +959,92 @@ export const api = {
       // Fallback
     }
     return [];
+  },
+
+  async uploadFile(
+    file: File,
+    category: string = "general"
+  ): Promise<{
+    filename: string;
+    original_name: string;
+    url: string;
+    size_kb: number;
+    content_type: string;
+    insights?: any;
+  } | null> {
+    try {
+      const formData = new FormData();
+      formData.append("file", file);
+      formData.append("category", category);
+
+      const res = await fetch(`${API_BASE_URL}/upload`, {
+        method: "POST",
+        body: formData,
+      });
+
+      if (res.ok) {
+        return await res.json();
+      }
+    } catch {
+      // Fallback simulation for offline mode
+    }
+
+    const fakeUrl = URL.createObjectURL(file);
+    return {
+      filename: `${Date.now()}_${file.name}`,
+      original_name: file.name,
+      url: fakeUrl,
+      size_kb: Math.round(file.size / 1024),
+      content_type: file.type || "application/octet-stream",
+    };
+  },
+
+  async downloadProjectReadinessPDF(
+    projectId: number | string,
+    projectTitle: string = "Startup"
+  ): Promise<boolean> {
+    try {
+      const res = await fetch(`${API_BASE_URL}/projects/${projectId}/export-report`);
+      if (res.ok) {
+        const blob = await res.blob();
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement("a");
+        a.href = url;
+        a.download = `VentureX_Readiness_Report_${projectTitle.replace(/\s+/g, "_")}.pdf`;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        URL.revokeObjectURL(url);
+        return true;
+      }
+    } catch {
+      // Fallback
+    }
+    return false;
+  },
+
+  async downloadDealRoomPDF(
+    roomId: string,
+    projectTitle: string = "DealRoom"
+  ): Promise<boolean> {
+    try {
+      const res = await fetch(`${API_BASE_URL}/dealrooms/${roomId}/export-pdf`);
+      if (res.ok) {
+        const blob = await res.blob();
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement("a");
+        a.href = url;
+        a.download = `VentureX_Audit_Transcript_${projectTitle.replace(/\s+/g, "_")}.pdf`;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        URL.revokeObjectURL(url);
+        return true;
+      }
+    } catch {
+      // Fallback
+    }
+    return false;
   },
 };
 

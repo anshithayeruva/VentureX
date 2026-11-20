@@ -82,3 +82,15 @@ async def update_interest_status(
             detail=f"Interest record '{interest_id}' not found",
         )
     return updated
+
+
+@router.delete("/{interest_id}", status_code=status.HTTP_200_OK)
+async def withdraw_interest(interest_id: str):
+    """Investor action: Withdraw a pending introduction request."""
+    deleted = await InterestService.delete_interest(interest_id)
+    if not deleted:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Interest record '{interest_id}' not found",
+        )
+    return {"status": "withdrawn", "id": interest_id}

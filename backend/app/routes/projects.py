@@ -1,6 +1,7 @@
 import logging
 from typing import List, Optional
 from fastapi import APIRouter, HTTPException, status, Query
+from fastapi.responses import Response
 from app.schemas.project import (
     ProjectCreate,
     ProjectUpdate,
@@ -9,6 +10,7 @@ from app.schemas.project import (
     ProjectReadinessResponse,
 )
 from app.services.project_service import ProjectService
+from app.utils.pdf_generator import PDFGenerator
 
 logger = logging.getLogger(__name__)
 
@@ -106,3 +108,31 @@ async def re_evaluate_project_readiness(project_id: str):
             detail=f"Project with ID '{project_id}' not found",
         )
     return report
+
+
+@router.get("/{project_id}/export-report")
+async def export_project_readiness_pdf(project_id: str):
+    """Generate and download a branded, investor-ready AI Pitch Readiness Diagnostic Report PDF."""
+    project = await ProjectService.get_by_id(project_id)
+    if not project:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Project with ID '{project_id}' not found",
+        )
+
+    try:
+        pdf_bytes = PDFGenerator.generate_readiness_pdf(project)
+        title_slug = (project.get("title") or "Startup").replace(" ", "_")
+        return Response(
+            content=pdf_bytes,
+            media_type="application/pdf",
+            headers={
+                "Content-Disposition": f'attachment; filename="VentureX_Readiness_Report_{title_slug}.pdf"'
+            },
+        )
+    except Exception as e:
+        logger.error("Failed to generate readiness PDF for project %s: %s", project_id, e)
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Could not generate readiness PDF: {str(e)}",
+        )

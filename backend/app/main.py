@@ -2,6 +2,8 @@ import logging
 from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.staticfiles import StaticFiles
+import os
 from app.core.config import settings
 from app.routes import api_router
 from app.database.mongodb import (
@@ -10,6 +12,7 @@ from app.database.mongodb import (
     seed_initial_data_if_empty,
     close_mongodb_connection,
 )
+from app.services.storage_service import StorageService
 
 logging.basicConfig(
     level=logging.INFO,
@@ -72,6 +75,10 @@ app.add_middleware(
 
 # Include all API routes under /api
 app.include_router(api_router, prefix=settings.API_V1_STR)
+
+# Serve uploaded static files
+upload_directory = StorageService.get_upload_dir()
+app.mount("/uploads", StaticFiles(directory=upload_directory), name="uploads")
 
 
 @app.get("/", tags=["Root"])

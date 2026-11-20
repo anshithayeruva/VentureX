@@ -78,6 +78,7 @@ function FounderDashboardContent() {
   const [saveSuccess, setSaveSuccess] = useState(false);
   const [settingsSuccess, setSettingsSuccess] = useState(false);
   const [reanalyzing, setReanalyzing] = useState(false);
+  const [exportingReport, setExportingReport] = useState(false);
   const [investorSearch, setInvestorSearch] = useState("");
 
   const [settings, setSettings] = useState({
@@ -228,6 +229,13 @@ function FounderDashboardContent() {
         setReanalyzing(false);
       }, 800);
     }
+  };
+
+  const handleExportReadinessReport = async () => {
+    const activeProject = projects[0] || MOCK_PROJECTS[0];
+    setExportingReport(true);
+    await api.downloadProjectReadinessPDF(activeProject.id, activeProject.title);
+    setExportingReport(false);
   };
 
   const filteredMatches = matches.filter(
@@ -625,11 +633,13 @@ function FounderDashboardContent() {
                 {reanalyzing ? "Recalculating..." : "Re-evaluate"}
               </button>
               <button
-                onClick={() => alert("Diagnostic PDF Summary generated!")}
-                className="px-3.5 py-1.5 text-xs font-medium bg-[#0F1E36] hover:bg-[#0B1628] text-white rounded-lg transition-colors flex items-center gap-1.5 shadow-subtle"
+                onClick={handleExportReadinessReport}
+                disabled={exportingReport}
+                className="px-3.5 py-1.5 text-xs font-medium bg-[#0F1E36] hover:bg-[#0B1628] text-white rounded-lg transition-colors flex items-center gap-1.5 shadow-subtle disabled:opacity-70"
+                title="Download verified investor-ready AI readiness diagnostic PDF"
               >
-                <Download className="w-3.5 h-3.5" />
-                Export Report
+                <Download className={`w-3.5 h-3.5 ${exportingReport ? "animate-bounce" : ""}`} />
+                {exportingReport ? "Generating PDF..." : "Export Report"}
               </button>
             </div>
           </div>

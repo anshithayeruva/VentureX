@@ -13,6 +13,9 @@ import {
   Cpu,
   Layers,
   Lock,
+  Upload,
+  FileText,
+  Paperclip,
 } from "lucide-react";
 import { Badge } from "@/components/Badge";
 import { PortalLayout } from "@/components/PortalLayout";
@@ -24,6 +27,13 @@ export default function NewProjectPage() {
   const [submitting, setSubmitting] = useState(false);
   const [successResult, setSuccessResult] = useState<any>(null);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const [uploadingDeck, setUploadingDeck] = useState(false);
+  const [uploadedDeckInfo, setUploadedDeckInfo] = useState<{
+    name: string;
+    size_kb: number;
+    url: string;
+    insights?: any;
+  } | null>(null);
 
   const [formData, setFormData] = useState<ProjectCreateInput>({
     title: "",
@@ -365,6 +375,57 @@ export default function NewProjectPage() {
               4. Pitch Deck & Links
             </h2>
 
+            {/* Direct Pitch Deck File Upload Zone */}
+            <div className="p-4 bg-[#F8FAFC] border-2 border-dashed border-[#CBD5E1] rounded-xl text-center space-y-2">
+              <input
+                type="file"
+                id="pitch-deck-file"
+                accept=".pdf,.pptx,.docx"
+                className="hidden"
+                onChange={async (e) => {
+                  const file = e.target.files?.[0];
+                  if (!file) return;
+                  setUploadingDeck(true);
+                  const result = await api.uploadFile(file, "pitch_deck");
+                  if (result) {
+                    setFormData((prev) => ({ ...prev, pitch_deck_url: result.url }));
+                    setUploadedDeckInfo({
+                      name: result.original_name,
+                      size_kb: result.size_kb,
+                      url: result.url,
+                      insights: result.insights,
+                    });
+                  }
+                  setUploadingDeck(false);
+                }}
+              />
+              <label
+                htmlFor="pitch-deck-file"
+                className="cursor-pointer inline-flex items-center gap-2 py-2 px-4 rounded-lg bg-white border border-[#E2E8F0] text-xs font-semibold text-[#1B3B6F] hover:bg-[#F1F5F9] shadow-xs transition-colors"
+              >
+                <Upload className="w-3.5 h-3.5 text-[#1B3B6F]" />
+                {uploadingDeck ? "Uploading & Analyzing..." : "Upload Pitch Deck (PDF, PPTX up to 25MB)"}
+              </label>
+
+              {uploadedDeckInfo ? (
+                <div className="mt-2 p-2.5 rounded-lg bg-[#E8F5E9] border border-[#C8E6C9] text-xs text-[#1E5236] flex items-center justify-between">
+                  <span className="flex items-center gap-1.5 font-medium">
+                    <CheckCircle2 className="w-4 h-4 text-[#2E7D52]" />
+                    Uploaded: <strong>{uploadedDeckInfo.name}</strong> ({uploadedDeckInfo.size_kb} KB)
+                  </span>
+                  {uploadedDeckInfo.insights?.detected_keywords?.length > 0 && (
+                    <span className="text-[10px] text-[#2E7D52] bg-white px-2 py-0.5 rounded-full border border-[#C8E6C9]">
+                      Keywords: {uploadedDeckInfo.insights.detected_keywords.slice(0, 3).join(", ")}
+                    </span>
+                  )}
+                </div>
+              ) : (
+                <p className="text-[11px] text-[#64748B]">
+                  Upload your slide deck directly to seed automatic pitch readiness analysis, or paste an external link below.
+                </p>
+              )}
+            </div>
+
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div>
                 <label className="block text-xs font-semibold text-[#0F172A] mb-1">
@@ -381,14 +442,14 @@ export default function NewProjectPage() {
 
               <div>
                 <label className="block text-xs font-semibold text-[#0F172A] mb-1">
-                  Pitch Deck URL (Optional)
+                  Pitch Deck URL or Uploaded Path
                 </label>
                 <input
-                  type="url"
-                  placeholder="https://docsend.com/view/demo"
+                  type="text"
+                  placeholder="https://docsend.com/view/demo or /uploads/..."
                   value={formData.pitch_deck_url}
                   onChange={(e) => setFormData({ ...formData, pitch_deck_url: e.target.value })}
-                  className="w-full px-3.5 py-2.5 bg-[#FAFBFD] border border-[#E2E8F0] rounded-lg text-[#0F172A] placeholder-[#94A3B8] focus:outline-none focus:border-[#1B3B6F] text-xs sm:text-sm"
+                  className="w-full px-3.5 py-2.5 bg-[#FAFBFD] border border-[#E2E8F0] rounded-lg text-[#0F172A] placeholder-[#94A3B8] focus:outline-none focus:border-[#1B3B6F] text-xs sm:text-sm font-mono text-[11px]"
                 />
               </div>
             </div>

@@ -21,18 +21,46 @@ import { Project, MatchItem } from "@/types";
 
 export default function InvestorProjectDetailsPage({ params }: { params: Promise<{ id: string }> }) {
   const resolvedParams = use(params);
-  const projectId = parseInt(resolvedParams.id, 10);
+  const projectId = resolvedParams.id;
 
   const [project, setProject] = useState<Project | null>(null);
   const [matchItem, setMatchItem] = useState<MatchItem | null>(null);
   const [requested, setRequested] = useState(false);
+  const [submitting, setSubmitting] = useState(false);
 
   useEffect(() => {
-    const found = MOCK_PROJECTS.find((p) => p.id === projectId) || MOCK_PROJECTS[0];
-    setProject(found);
+    let mounted = true;
+    api.getProject(projectId).then((fetched) => {
+      if (!mounted) return;
+      const found =
+        fetched ||
+        MOCK_PROJECTS.find((p) => String(p.id) === String(projectId)) ||
+        MOCK_PROJECTS[0];
+      setProject(found);
 
-    const matchFound = MOCK_MATCHES.find((m) => m.project_id === found.id) || MOCK_MATCHES[0];
-    setMatchItem(matchFound);
+      api.getMatches().then((allMatches) => {
+        if (!mounted) return;
+        const matchFound =
+          allMatches.find((m) => String(m.project_id) === String(found.id)) ||
+          MOCK_MATCHES.find((m) => String(m.project_id) === String(found.id)) ||
+          null;
+        setMatchItem(matchFound);
+      });
+
+      api.getInterests().then((interests) => {
+        if (!mounted) return;
+        const exists = interests.some(
+          (i: any) =>
+            String(i.project_id) === String(found.id) &&
+            (i.status === "pending" || i.status === "accepted")
+        );
+        if (exists) setRequested(true);
+      });
+    });
+
+    return () => {
+      mounted = false;
+    };
   }, [projectId]);
 
   if (!project) {
@@ -49,8 +77,20 @@ export default function InvestorProjectDetailsPage({ params }: { params: Promise
     maximumFractionDigits: 0,
   }).format(project.funding_required);
 
-  const handleRequestIntro = () => {
-    setRequested(true);
+  const handleRequestIntro = async () => {
+    if (requested || submitting) return;
+    setSubmitting(true);
+    try {
+      await api.expressInterest({
+        project_id: project.id,
+        project_title: project.title,
+        project_industry: project.industry,
+        message: `Interested in reviewing ${project.title}'s confidential materials and discussing potential ${project.stage} investment fit.`,
+      });
+      setRequested(true);
+    } finally {
+      setSubmitting(false);
+    }
   };
 
   return (
@@ -88,15 +128,15 @@ export default function InvestorProjectDetailsPage({ params }: { params: Promise
           <div className="flex items-center gap-2.5">
             <button
               onClick={handleRequestIntro}
-              disabled={requested}
+              disabled={requested || submitting}
               className={`px-4 py-2 rounded-lg text-xs font-medium transition-colors flex items-center gap-1.5 shadow-sm ${
                 requested
                   ? "bg-[#E8F5E9] text-[#2E7D52] border border-[#A3E635]"
                   : "bg-[#1B3B6F] hover:bg-[#142C54] text-white"
-              }`}
+              } disabled:opacity-70`}
             >
               <UserCheck className="w-4 h-4" />
-              {requested ? "Intro Requested ✓" : "Request Introduction"}
+              {submitting ? "Requesting..." : requested ? "Intro Requested ✓" : "Request Introduction"}
             </button>
           </div>
         </div>

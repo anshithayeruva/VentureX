@@ -64,11 +64,21 @@ function DealRoomDetailContent({ params }: PageProps) {
   const [showDocModal, setShowDocModal] = useState(false);
   const [showStageModal, setShowStageModal] = useState(false);
   const [exporting, setExporting] = useState(false);
+  const [exportingPdf, setExportingPdf] = useState(false);
 
-  // New Document Form
+  // Real-time WebSocket, Typing & Presence
+  const [wsConnected, setWsConnected] = useState(false);
+  const [typingUser, setTypingUser] = useState<string | null>(null);
+  const [partnerOnline, setPartnerOnline] = useState(true);
+  const wsRef = useRef<WebSocket | null>(null);
+  const typingTimerRef = useRef<NodeJS.Timeout | null>(null);
+
+  // New Document Form & Upload
   const [newDocName, setNewDocName] = useState("");
   const [newDocUrl, setNewDocUrl] = useState("");
   const [newDocType, setNewDocType] = useState<string>("financial_model");
+  const [uploadingDoc, setUploadingDoc] = useState(false);
+  const [docSizeKb, setDocSizeKb] = useState<number>(1240);
 
   // Stage Update Form
   const [newStage, setNewStage] = useState<string>("DUE_DILIGENCE");
@@ -94,18 +104,83 @@ function DealRoomDetailContent({ params }: PageProps) {
       if (mounted) setLoading(false);
     });
 
-    // Auto-polling every 4 seconds for real-time conversation updates
+    // Establish Live Bidirectional WebSocket
+    const protocol = window.location.protocol === "https:" ? "wss:" : "ws:";
+    const host = process.env.NEXT_PUBLIC_API_URL
+      ? process.env.NEXT_PUBLIC_API_URL.replace(/^http(s?):\/\//, "")
+      : "localhost:8000";
+    const wsUrl = `${protocol}//${host}/api/dealrooms/ws/${roomId}`;
+
+    let socket: WebSocket | null = null;
+    try {
+      socket = new WebSocket(wsUrl);
+      wsRef.current = socket;
+
+      socket.onopen = () => {
+        if (!mounted) return;
+        setWsConnected(true);
+      };
+
+      socket.onmessage = (event) => {
+        if (!mounted) return;
+        try {
+          const payload = JSON.parse(event.data);
+          if (payload.type === "message" && payload.data) {
+            const incomingMsg: DealMessage = payload.data;
+            setMessages((prev) => {
+              if (prev.some((m) => m.id === incomingMsg.id)) return prev;
+              return [...prev, incomingMsg];
+            });
+            setRoom((prev) =>
+              prev
+                ? {
+                    ...prev,
+                    last_message: incomingMsg.content,
+                    last_message_at: incomingMsg.created_at,
+                    messages_count: (prev.messages_count || 0) + 1,
+                  }
+                : null
+            );
+          } else if (payload.type === "typing") {
+            if (payload.user_id !== currentUserId) {
+              setTypingUser(payload.is_typing ? payload.user_name : null);
+              if (payload.is_typing) {
+                setTimeout(() => setTypingUser(null), 3000);
+              }
+            }
+          } else if (payload.type === "presence") {
+            setPartnerOnline(payload.event === "joined");
+          }
+        } catch {
+          // Ignore json parse error
+        }
+      };
+
+      socket.onclose = () => {
+        if (mounted) setWsConnected(false);
+      };
+      socket.onerror = () => {
+        if (mounted) setWsConnected(false);
+      };
+    } catch {
+      setWsConnected(false);
+    }
+
+    // Fallback sync polling every 5 seconds in case WebSocket drops
     const pollInterval = setInterval(() => {
       api.getDealRoomMessages(roomId, currentUserId).then((msgs) => {
         if (mounted && msgs.length > 0) {
           setMessages(msgs);
         }
       });
-    }, 4000);
+    }, 5000);
 
     return () => {
       mounted = false;
       clearInterval(pollInterval);
+      if (socket && socket.readyState === WebSocket.OPEN) {
+        socket.close();
+      }
     };
   }, [roomId, role]);
 
@@ -131,7 +206,10 @@ function DealRoomDetailContent({ params }: PageProps) {
     });
 
     if (sent) {
-      setMessages((prev) => [...prev, sent]);
+      setMessages((prev) => {
+        if (prev.some((m) => m.id === sent.id)) return prev;
+        return [...prev, sent];
+      });
       // Update room last message locally
       setRoom((prev) =>
         prev
@@ -145,6 +223,37 @@ function DealRoomDetailContent({ params }: PageProps) {
       );
     }
     setSending(false);
+  };
+
+  const handleTyping = (text: string) => {
+    setNewMessage(text);
+    if (wsRef.current && wsRef.current.readyState === WebSocket.OPEN) {
+      try {
+        wsRef.current.send(
+          JSON.stringify({
+            type: "typing",
+            user_id: currentUserId,
+            user_name: currentUserName,
+            is_typing: true,
+          })
+        );
+        if (typingTimerRef.current) clearTimeout(typingTimerRef.current);
+        typingTimerRef.current = setTimeout(() => {
+          if (wsRef.current && wsRef.current.readyState === WebSocket.OPEN) {
+            wsRef.current.send(
+              JSON.stringify({
+                type: "typing",
+                user_id: currentUserId,
+                user_name: currentUserName,
+                is_typing: false,
+              })
+            );
+          }
+        }, 2000);
+      } catch {
+        // Ignore WS send error
+      }
+    }
   };
 
   // Handle Sign NDA
@@ -189,7 +298,7 @@ function DealRoomDetailContent({ params }: PageProps) {
       name: newDocName.trim(),
       url: newDocUrl.trim(),
       type: newDocType,
-      size_kb: 1240,
+      size_kb: docSizeKb || 1240,
       sender_id: currentUserId,
       sender_role: role,
       sender_name: currentUserName,
@@ -204,7 +313,14 @@ function DealRoomDetailContent({ params }: PageProps) {
     }
   };
 
-  // Handle Export Transcript
+  // Handle Export Legal Audit PDF Certificate
+  const handleExportPdf = async () => {
+    setExportingPdf(true);
+    await api.downloadDealRoomPDF(roomId, room?.project_title || "DealRoom");
+    setExportingPdf(false);
+  };
+
+  // Handle Export JSON Transcript
   const handleExportTranscript = async () => {
     setExporting(true);
     const transcript = await api.getDealRoomTranscript(roomId, currentUserId);
@@ -305,10 +421,15 @@ function DealRoomDetailContent({ params }: PageProps) {
                 </Badge>
               </div>
 
-              <div className="flex items-center gap-2 mt-0.5 text-[11px] text-[#64748B]">
-                <span className="inline-flex items-center gap-1 font-semibold text-emerald-600">
-                  <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
-                  Recording Active
+              <div className="flex items-center gap-2 mt-0.5 text-[11px] text-[#64748B] flex-wrap">
+                <span className={`inline-flex items-center gap-1 font-semibold ${wsConnected ? "text-emerald-600" : "text-amber-600"}`}>
+                  <span className={`w-1.5 h-1.5 rounded-full ${wsConnected ? "bg-emerald-500 animate-pulse" : "bg-amber-500"}`} />
+                  {wsConnected ? "Live Channel Active" : "Polling Sync"}
+                </span>
+                <span>•</span>
+                <span className="inline-flex items-center gap-1">
+                  <span className={`w-1.5 h-1.5 rounded-full ${partnerOnline ? "bg-emerald-500" : "bg-slate-400"}`} />
+                  {partnerOnline ? `${counterpartyName} is online` : `${counterpartyName} offline`}
                 </span>
                 <span>•</span>
                 <span className="font-mono text-[10px]">
@@ -353,12 +474,23 @@ function DealRoomDetailContent({ params }: PageProps) {
             </button>
 
             <button
+              onClick={handleExportPdf}
+              disabled={exportingPdf}
+              className="py-1.5 px-3 rounded-lg bg-[#1B3B6F] text-white text-xs font-semibold hover:bg-[#142C54] transition-colors flex items-center gap-1.5 shadow-subtle"
+              title="Download tamper-evident legal audit closing certificate PDF"
+            >
+              <Download className="w-3.5 h-3.5 text-sky-300" />
+              {exportingPdf ? "Generating PDF..." : "Export Legal PDF"}
+            </button>
+
+            <button
               onClick={handleExportTranscript}
               disabled={exporting}
               className="py-1.5 px-3 rounded-lg bg-[#0F1E36] text-white text-xs font-semibold hover:bg-[#1E3A8A] transition-colors flex items-center gap-1.5 shadow-subtle"
+              title="Download cryptographic raw JSON transcript"
             >
-              <Download className="w-3.5 h-3.5" />
-              {exporting ? "Signing..." : "Export Signed Transcript"}
+              <FileCheck className="w-3.5 h-3.5 text-emerald-400" />
+              {exporting ? "Signing..." : "JSON Log"}
             </button>
           </div>
         </div>
@@ -686,6 +818,14 @@ function DealRoomDetailContent({ params }: PageProps) {
             </button>
           </div>
 
+          {/* Real-time Typing Indicator */}
+          {typingUser && (
+            <div className="px-4 py-1.5 bg-[#F1F5F9] border-t border-[#E2E8F0] flex items-center gap-2 text-[11px] text-[#1B3B6F] font-medium animate-pulse">
+              <span className="w-2 h-2 rounded-full bg-[#1B3B6F] animate-ping" />
+              <span>{typingUser} is typing a message...</span>
+            </div>
+          )}
+
           {/* Message Input Box */}
           <form
             onSubmit={handleSendMessage}
@@ -703,7 +843,7 @@ function DealRoomDetailContent({ params }: PageProps) {
             <input
               type="text"
               value={newMessage}
-              onChange={(e) => setNewMessage(e.target.value)}
+              onChange={(e) => handleTyping(e.target.value)}
               placeholder={`Send message as ${currentUserName} (${role})... (Encrypted & Recorded)`}
               className="flex-1 py-2 px-3 bg-[#F8FAFC] border border-[#E2E8F0] rounded-lg text-xs sm:text-sm focus:outline-none focus:ring-1 focus:ring-[#1B3B6F]"
             />
@@ -737,6 +877,37 @@ function DealRoomDetailContent({ params }: PageProps) {
             </div>
 
             <form onSubmit={handleShareDocument} className="space-y-4 text-xs">
+              {/* File Upload Zone */}
+              <div className="p-4 bg-[#F8FAFC] border-2 border-dashed border-[#CBD5E1] rounded-xl text-center space-y-2">
+                <input
+                  type="file"
+                  id="dealroom-file-upload"
+                  className="hidden"
+                  onChange={async (e) => {
+                    const file = e.target.files?.[0];
+                    if (!file) return;
+                    setUploadingDoc(true);
+                    const uploaded = await api.uploadFile(file, "dealroom_attachment");
+                    if (uploaded) {
+                      setNewDocName(uploaded.original_name);
+                      setNewDocUrl(uploaded.url);
+                      setDocSizeKb(uploaded.size_kb);
+                    }
+                    setUploadingDoc(false);
+                  }}
+                />
+                <label
+                  htmlFor="dealroom-file-upload"
+                  className="cursor-pointer inline-flex items-center gap-1.5 py-2 px-3.5 rounded-lg bg-white border border-[#E2E8F0] text-xs font-semibold text-[#1B3B6F] hover:bg-[#F1F5F9] shadow-xs transition-colors"
+                >
+                  <Paperclip className="w-3.5 h-3.5" />
+                  {uploadingDoc ? "Uploading File..." : "Choose File from Computer (PDF, XLSX, DOCX)"}
+                </label>
+                <p className="text-[10px] text-[#64748B]">
+                  Max 25MB. Files are cryptographically fingerprinted upon upload.
+                </p>
+              </div>
+
               <div>
                 <label className="font-semibold text-[#0F172A] block mb-1">
                   Document Title
@@ -773,12 +944,12 @@ function DealRoomDetailContent({ params }: PageProps) {
                   Secure File URL
                 </label>
                 <input
-                  type="url"
+                  type="text"
                   required
                   value={newDocUrl}
                   onChange={(e) => setNewDocUrl(e.target.value)}
-                  placeholder="https://dataroom.venturex.io/..."
-                  className="w-full p-2.5 bg-[#F8FAFC] border border-[#E2E8F0] rounded-lg"
+                  placeholder="https://dataroom.venturex.io/... or uploaded path"
+                  className="w-full p-2.5 bg-[#F8FAFC] border border-[#E2E8F0] rounded-lg font-mono text-[11px]"
                 />
               </div>
 

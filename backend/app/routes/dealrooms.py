@@ -1,6 +1,8 @@
 import logging
-from typing import List, Optional
-from fastapi import APIRouter, HTTPException, status, Query
+import json
+from typing import List, Optional, Dict
+from fastapi import APIRouter, HTTPException, status, Query, WebSocket, WebSocketDisconnect
+from fastapi.responses import Response
 
 from app.schemas.dealroom import (
     DealRoom,
@@ -13,10 +15,52 @@ from app.schemas.dealroom import (
     DealRoomAuditLog,
 )
 from app.services.deal_room_service import DealRoomService
+from app.utils.pdf_generator import PDFGenerator
 
 logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/dealrooms", tags=["Deal Rooms & Secure Messaging"])
+
+
+class ConnectionManager:
+    """Manages active WebSocket connections per Deal Room for real-time messaging, typing, and presence."""
+
+    def __init__(self):
+        self.active_connections: Dict[str, List[WebSocket]] = {}
+
+    async def connect(self, room_id: str, websocket: WebSocket):
+        await websocket.accept()
+        if room_id not in self.active_connections:
+            self.active_connections[room_id] = []
+        self.active_connections[room_id].append(websocket)
+        logger.info("WebSocket client connected to deal room: %s (total: %d)", room_id, len(self.active_connections[room_id]))
+
+    def disconnect(self, room_id: str, websocket: WebSocket):
+        if room_id in self.active_connections:
+            if websocket in self.active_connections[room_id]:
+                self.active_connections[room_id].remove(websocket)
+            if not self.active_connections[room_id]:
+                del self.active_connections[room_id]
+        logger.info("WebSocket client disconnected from deal room: %s", room_id)
+
+    async def broadcast(self, room_id: str, message: dict, sender_socket: Optional[WebSocket] = None):
+        if room_id not in self.active_connections:
+            return
+        dead_sockets = []
+        for connection in self.active_connections[room_id]:
+            if sender_socket and connection is sender_socket:
+                continue
+            try:
+                await connection.send_json(message)
+            except Exception as e:
+                logger.warning("Failed to send WebSocket message in room %s: %s", room_id, e)
+                dead_sockets.append(connection)
+
+        for dead in dead_sockets:
+            self.disconnect(room_id, dead)
+
+
+manager = ConnectionManager()
 
 
 @router.get("", response_model=List[DealRoom])
@@ -74,6 +118,11 @@ async def send_message(room_id: str, message_in: MessageCreateInput):
     """Post and cryptographically record an immutable direct message into the Deal Room."""
     try:
         msg = await DealRoomService.send_message(room_id, message_in)
+        # Real-time WebSocket broadcast to all connected participants in this room
+        try:
+            await manager.broadcast(room_id, {"type": "message", "data": msg})
+        except Exception as ws_err:
+            logger.warning("Could not broadcast message to WebSocket: %s", ws_err)
         return msg
     except ValueError as e:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e))
@@ -83,6 +132,60 @@ async def send_message(room_id: str, message_in: MessageCreateInput):
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Failed to record message: {str(e)}",
         )
+
+
+@router.websocket("/ws/{room_id}")
+async def dealroom_websocket(websocket: WebSocket, room_id: str):
+    """Live bidirectional WebSocket channel for real-time messaging, typing indicators, and presence."""
+    await manager.connect(room_id, websocket)
+    # Broadcast participant presence
+    await manager.broadcast(
+        room_id,
+        {"type": "presence", "event": "joined", "room_id": room_id},
+        sender_socket=websocket,
+    )
+    try:
+        while True:
+            text_data = await websocket.receive_text()
+            try:
+                data = json.loads(text_data)
+            except Exception:
+                continue
+
+            action_type = data.get("type", "message")
+            if action_type == "ping":
+                await websocket.send_json({"type": "pong"})
+            elif action_type == "typing":
+                await manager.broadcast(
+                    room_id,
+                    {
+                        "type": "typing",
+                        "user_id": data.get("user_id"),
+                        "user_name": data.get("user_name"),
+                        "is_typing": data.get("is_typing", True),
+                    },
+                    sender_socket=websocket,
+                )
+            elif action_type == "message":
+                msg_payload = data.get("data")
+                if msg_payload:
+                    try:
+                        input_obj = MessageCreateInput(**msg_payload)
+                        saved_msg = await DealRoomService.send_message(room_id, input_obj)
+                        # Broadcast to all connections in room
+                        await manager.broadcast(room_id, {"type": "message", "data": saved_msg})
+                    except Exception as err:
+                        logger.error("WebSocket message processing failed: %s", err)
+                        await websocket.send_json({"type": "error", "detail": str(err)})
+    except WebSocketDisconnect:
+        manager.disconnect(room_id, websocket)
+        await manager.broadcast(
+            room_id,
+            {"type": "presence", "event": "left", "room_id": room_id},
+        )
+    except Exception as e:
+        logger.warning("WebSocket error in room %s: %s", room_id, e)
+        manager.disconnect(room_id, websocket)
 
 
 @router.patch("/{room_id}/stage", response_model=DealRoom)
@@ -134,6 +237,40 @@ async def export_transcript(
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e))
     except Exception as e:
         raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(e))
+
+
+@router.get("/{room_id}/export-pdf")
+async def export_dealroom_pdf(
+    room_id: str,
+    user_id: Optional[str] = Query(None, description="User participant requesting export"),
+):
+    """Export verified, tamper-evident cryptographic closing certificate and transcript as PDF."""
+    try:
+        room = await DealRoomService.get_room(room_id, user_id=user_id)
+        if not room:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"Deal room '{room_id}' not found")
+
+        messages = await DealRoomService.get_messages(room_id, user_id=user_id, limit=500)
+        audit_logs = await DealRoomService.get_audit_logs(room_id)
+
+        pdf_bytes = PDFGenerator.generate_dealroom_audit_pdf(room, messages, audit_logs)
+        proj_slug = (room.get("project_title") or "DealRoom").replace(" ", "_")
+
+        return Response(
+            content=pdf_bytes,
+            media_type="application/pdf",
+            headers={
+                "Content-Disposition": f'attachment; filename="VentureX_Audit_Transcript_{proj_slug}.pdf"'
+            },
+        )
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error("Failed to generate deal room audit PDF: %s", e)
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Could not generate audit PDF: {str(e)}",
+        )
 
 
 @router.get("/{room_id}/audit-logs", response_model=List[DealRoomAuditLog])

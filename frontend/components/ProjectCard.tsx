@@ -2,13 +2,23 @@ import React from "react";
 import Link from "next/link";
 import { Project } from "@/types";
 import { Badge } from "@/components/Badge";
-import { DollarSign, Sparkles, ArrowUpRight, Lock, CheckCircle2 } from "lucide-react";
+import {
+  DollarSign,
+  Sparkles,
+  ArrowUpRight,
+  CheckCircle2,
+  Clock,
+  Unlock,
+  Loader2,
+} from "lucide-react";
 
 interface ProjectCardProps {
   project: Project;
   onConnect?: (project: Project) => void;
   showActions?: boolean;
   isInvestorView?: boolean;
+  connectionStatus?: "none" | "pending" | "accepted" | "declined";
+  isConnecting?: boolean;
 }
 
 export function ProjectCard({
@@ -16,6 +26,8 @@ export function ProjectCard({
   onConnect,
   showActions = true,
   isInvestorView = false,
+  connectionStatus = "none",
+  isConnecting = false,
 }: ProjectCardProps) {
   const formattedFunding = new Intl.NumberFormat("en-US", {
     style: "currency",
@@ -96,13 +108,52 @@ export function ProjectCard({
 
         {showActions && (
           <div className="flex items-center gap-2">
+            {isInvestorView && (
+              <Link
+                href={`/investor/projects/${project.id}`}
+                className="px-2.5 py-1.5 text-xs font-medium text-[#475569] hover:text-[#1B3B6F] bg-[#F8FAFC] hover:bg-[#F1F5F9] border border-[#E2E8F0] rounded-lg transition-colors"
+              >
+                Details
+              </Link>
+            )}
             {onConnect ? (
               <button
+                type="button"
                 onClick={() => onConnect(project)}
-                className="px-3.5 py-1.5 text-xs font-medium text-white bg-[#1B3B6F] hover:bg-[#142C54] rounded-lg transition-colors flex items-center gap-1 shadow-sm"
+                disabled={isConnecting || connectionStatus === "declined"}
+                className={`px-3.5 py-1.5 text-xs font-medium rounded-lg transition-colors flex items-center gap-1.5 shadow-sm ${
+                  connectionStatus === "accepted"
+                    ? "bg-[#E8F5E9] text-[#2E7D52] border border-[#C8E6C9] hover:bg-[#DCFCE7]"
+                    : connectionStatus === "pending"
+                    ? "bg-[#FEF3C7] text-[#92400E] border border-[#FDE68A] hover:bg-[#FDE68A]/70"
+                    : connectionStatus === "declined"
+                    ? "bg-[#F1F5F9] text-[#64748B] border border-[#E2E8F0] cursor-not-allowed"
+                    : "text-white bg-[#1B3B6F] hover:bg-[#142C54]"
+                } disabled:opacity-70`}
               >
-                Connect
-                <ArrowUpRight className="w-3.5 h-3.5" />
+                {isConnecting ? (
+                  <>
+                    <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                    Connecting...
+                  </>
+                ) : connectionStatus === "accepted" ? (
+                  <>
+                    <Unlock className="w-3.5 h-3.5" />
+                    Deal Room ✓
+                  </>
+                ) : connectionStatus === "pending" ? (
+                  <>
+                    <Clock className="w-3.5 h-3.5" />
+                    Requested ✓
+                  </>
+                ) : connectionStatus === "declined" ? (
+                  <>Declined</>
+                ) : (
+                  <>
+                    Connect
+                    <ArrowUpRight className="w-3.5 h-3.5" />
+                  </>
+                )}
               </button>
             ) : (
               <Link

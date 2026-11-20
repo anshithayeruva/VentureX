@@ -118,24 +118,32 @@ class InterestService:
             p_query["$or"].append({"_id": ObjectId(str(project_id))})
 
         project = await db.projects.find_one(p_query)
+        canonical_project_id = project.get("id", project_id) if project else project_id
         founder_id = project.get("founder_id", "founder-001") if project else "founder-001"
         project_title = project.get("title", f"Project #{project_id}") if project else f"Project #{project_id}"
         project_industry = project.get("industry", "DeepTech") if project else "DeepTech"
 
         # Lookup investor details
         investor = await db.investor_profiles.find_one({"user_id": investor_id})
-        investor_name = investor.get("name", "Angel Investor") if investor else "Angel Investor"
-        investor_firm = investor.get("firm", "Venture Syndicate") if investor else "Venture Syndicate"
+        investor_name = investor.get("name", "Dr. Sarah Lin") if investor else "Dr. Sarah Lin"
+        investor_firm = investor.get("firm", "Apex Horizon Ventures") if investor else "Apex Horizon Ventures"
 
         # Lookup founder details
         founder = await db.founder_profiles.find_one({"user_id": founder_id})
         founder_name = founder.get("name", "Founding Team") if founder else "Founding Team"
 
-        int_id = f"intro-{project_id}-{investor_id}"
+        int_id = f"intro-{canonical_project_id}-{investor_id}"
+
+        # Check if an existing interest already exists (preserve accepted status/deal room if already accepted)
+        existing = await db.project_interests.find_one(
+            {"project_id": canonical_project_id, "investor_id": investor_id}
+        )
+        if existing and existing.get("status") == "accepted":
+            return serialize_doc(existing)
 
         doc = {
-            "id": int_id,
-            "project_id": project_id,
+            "id": existing.get("id", int_id) if existing else int_id,
+            "project_id": canonical_project_id,
             "project_title": project_title,
             "project_industry": project_industry,
             "investor_id": investor_id,
@@ -147,13 +155,13 @@ class InterestService:
             "founder_email": f"{founder_id}@startups.venturex.io",
             "status": "pending",
             "message": message or "Introduction requested for confidential data room review.",
-            "created_at": now,
+            "created_at": existing.get("created_at", now) if existing else now,
             "updated_at": now,
         }
 
         # Upsert by project_id and investor_id
         await db.project_interests.update_one(
-            {"project_id": project_id, "investor_id": investor_id},
+            {"project_id": canonical_project_id, "investor_id": investor_id},
             {"$set": doc},
             upsert=True
         )
@@ -173,7 +181,23 @@ class InterestService:
         except Exception as e:
             logger.warning("Failed to dispatch founder intro notification: %s", e)
 
-        saved = await db.project_interests.find_one({"project_id": project_id, "investor_id": investor_id})
+        # Dispatch transactional email alert to founder
+        try:
+            from app.services.email_service import EmailService
+            EmailService.send_intro_request_email(
+                founder_email=doc["founder_email"],
+                founder_name=founder_name,
+                investor_name=investor_name,
+                investor_firm=investor_firm,
+                project_title=project_title,
+                message=message,
+            )
+        except Exception as e:
+            logger.warning("Failed to dispatch founder intro email: %s", e)
+
+        saved = await db.project_interests.find_one(
+            {"project_id": canonical_project_id, "investor_id": investor_id}
+        )
         return serialize_doc(saved)
 
     @classmethod
@@ -247,6 +271,19 @@ class InterestService:
                 )
             except Exception as e:
                 logger.warning("Failed to dispatch investor unlock notification: %s", e)
+
+            # Dispatch transactional email alert to investor
+            try:
+                from app.services.email_service import EmailService
+                EmailService.send_dealroom_unlocked_email(
+                    investor_email=current.get("investor_email") or f"{investor_id}@investors.venturex.io",
+                    investor_name=investor_name,
+                    founder_name=founder_name,
+                    project_title=project_title,
+                    room_id=f"room-{project_id}",
+                )
+            except Exception as e:
+                logger.warning("Failed to dispatch investor unlock email: %s", e)
 
         elif clean_status == "declined":
             try:
@@ -327,3 +364,16 @@ class InterestService:
         if not doc:
             doc = await db.project_interests.find_one({"id": str(interest_id)})
         return serialize_doc(doc)
+
+    @classmethod
+    async def delete_interest(cls, interest_id: Union[int, str]) -> bool:
+        """Withdraw/remove an introduction request."""
+        db = get_database()
+        if db is None:
+            return False
+
+        query = cls._parse_id(interest_id)
+        res = await db.project_interests.delete_one(query)
+        if res.deleted_count == 0:
+            res = await db.project_interests.delete_one({"id": str(interest_id)})
+        return res.deleted_count > 0

@@ -528,6 +528,32 @@ class DealRoomService:
         }
         await db.notifications.insert_one(notif_doc)
 
+        # Dispatch email alert to counterparty
+        try:
+            from app.services.email_service import EmailService
+            recipient_email = (
+                room.get("investor_email")
+                if message_in.sender_role == "FOUNDER"
+                else room.get("founder_email")
+            ) or f"{recipient_id}@venturex.io"
+            recipient_name = (
+                room.get("investor_name")
+                if message_in.sender_role == "FOUNDER"
+                else room.get("founder_name")
+            ) or "Deal Partner"
+
+            EmailService.send_dealroom_message_alert(
+                recipient_email=recipient_email,
+                recipient_name=recipient_name,
+                sender_name=message_in.sender_name,
+                project_title=room.get("project_title", "Startup"),
+                message_preview=message_in.content,
+                room_id=room_id,
+                recipient_role=recipient_role,
+            )
+        except Exception as e:
+            logger.warning("Failed to dispatch dealroom message email alert: %s", e)
+
         return serialize_doc(msg_doc)
 
     @classmethod
