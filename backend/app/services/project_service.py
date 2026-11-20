@@ -169,6 +169,7 @@ class ProjectService:
                 "readiness_score": analysis["overall_score"],
                 "model_version": (
                     "Claude (" + (analysis["model"] or "") + ")" if engine == "claude"
+                    else "Gemini (" + (analysis["model"] or "") + ")" if engine == "gemini"
                     else "Rule-based check (AI not configured)"
                 ),
                 "status_label": analysis["status_label"],
@@ -181,7 +182,7 @@ class ProjectService:
                 "recommendations": [s["title"] + ": " + s["detail"] for s in analysis["suggestions"]],
                 "is_confidential": True,
                 "engine": engine,
-                "is_ai_generated": engine == "claude",
+                "is_ai_generated": engine in ("claude", "gemini"),
                 "summary": analysis["summary"],
                 "gaps": analysis["gaps"],
                 "suggestions": analysis["suggestions"],

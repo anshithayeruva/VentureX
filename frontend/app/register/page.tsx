@@ -1,10 +1,10 @@
 "use client";
 
-import React, { useState } from "react";
+import React, { useState, useSyncExternalStore } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { Rocket, Briefcase } from "lucide-react";
-import { authClient } from "@/lib/auth/client";
+import { authClient, insecureOriginWarning, noSubscribe, sessionWasKept } from "@/lib/auth/client";
 import { api } from "@/lib/api";
 
 export default function RegisterPage() {
@@ -16,6 +16,8 @@ export default function RegisterPage() {
   const [organization, setOrganization] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [pending, setPending] = useState(false);
+  // Browser-only check (null during server render, so hydration matches).
+  const originWarning = useSyncExternalStore(noSubscribe, insecureOriginWarning, () => null);
 
   const handleRegister = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -36,6 +38,14 @@ export default function RegisterPage() {
           signUpError.code === "USER_ALREADY_EXISTS" || signUpError.status === 422
             ? "An account with this email already exists. Sign in instead."
             : signUpError.message || "Sign-up failed. Please try again."
+        );
+        return;
+      }
+      if (!(await sessionWasKept())) {
+        setError(
+          insecureOriginWarning() ??
+            "You were signed in, but your browser didn't keep the session (cookies may be blocked for this site). " +
+              "Allow cookies for localhost and try again."
         );
         return;
       }
@@ -69,6 +79,12 @@ export default function RegisterPage() {
             Choose your account workspace to activate tailored workflows.
           </p>
         </div>
+
+        {originWarning && (
+          <p role="alert" className="mb-5 text-xs text-[#9A3412] bg-[#FFF7ED] border border-[#FED7AA] rounded-lg px-3 py-2">
+            {originWarning}
+          </p>
+        )}
 
         <form onSubmit={handleRegister} className="space-y-4 text-xs sm:text-sm">
           {/* Role selector */}

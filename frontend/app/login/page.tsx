@@ -1,9 +1,9 @@
 "use client";
 
-import React, { useState } from "react";
+import React, { useState, useSyncExternalStore } from "react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
-import { authClient } from "@/lib/auth/client";
+import { authClient, insecureOriginWarning, noSubscribe, sessionWasKept } from "@/lib/auth/client";
 import { api } from "@/lib/api";
 
 const HOME_FOR_ROLE = {
@@ -33,6 +33,8 @@ function LoginForm() {
   const [role, setRole] = useState<"FOUNDER" | "INVESTOR">("FOUNDER");
   const [error, setError] = useState<string | null>(null);
   const [pending, setPending] = useState(false);
+  // Browser-only check (null during server render, so hydration matches).
+  const originWarning = useSyncExternalStore(noSubscribe, insecureOriginWarning, () => null);
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -45,6 +47,14 @@ function LoginForm() {
           signInError.status === 401 || signInError.code === "INVALID_EMAIL_OR_PASSWORD"
             ? "Incorrect email or password."
             : signInError.message || "Sign-in failed. Please try again."
+        );
+        return;
+      }
+      if (!(await sessionWasKept())) {
+        setError(
+          insecureOriginWarning() ??
+            "You were signed in, but your browser didn't keep the session (cookies may be blocked for this site). " +
+              "Allow cookies for localhost and try again."
         );
         return;
       }
@@ -79,6 +89,12 @@ function LoginForm() {
             Access your confidential founder workspace or investor dealflow.
           </p>
         </div>
+
+        {originWarning && (
+          <p role="alert" className="mb-5 text-xs text-[#9A3412] bg-[#FFF7ED] border border-[#FED7AA] rounded-lg px-3 py-2">
+            {originWarning}
+          </p>
+        )}
 
         <form onSubmit={handleLogin} className="space-y-4 text-xs sm:text-sm">
           {/* Role selector */}
