@@ -1,5 +1,6 @@
 import logging
-from fastapi import APIRouter, UploadFile, File, Form, HTTPException, status
+from fastapi import APIRouter, Depends, UploadFile, File, Form, HTTPException, status
+from app.core.auth import CurrentUser, require_user
 from app.services.storage_service import StorageService
 
 logger = logging.getLogger(__name__)
@@ -11,6 +12,7 @@ router = APIRouter(prefix="/upload", tags=["File Storage & Uploads"])
 async def upload_file(
     file: UploadFile = File(...),
     category: str = Form("general"),
+    user: CurrentUser = Depends(require_user),
 ):
     """Upload a pitch deck, financial model, cap table, or deal room attachment.
 

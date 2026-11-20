@@ -5,11 +5,14 @@
   "description": "Venture X - AI-powered platform connecting early-stage founders with investors",
   "scripts": {
     "dev": "npm --prefix frontend run dev",
-    "dev:all": "powershell -Command \"Start-Process powershell -ArgumentList 'cd backend; .venv\\Scripts\\uvicorn app.main:app --reload --port 8000'; npm --prefix frontend run dev\"",
+    "dev:all": "powershell -Command \"Start-Process powershell -ArgumentList 'cd backend; .venv\\Scripts\\uvicorn app.main:app --reload --port 8000 --loop asyncio:SelectorEventLoop'; npm --prefix frontend run dev\"",
     "dev:frontend": "npm --prefix frontend run dev",
     "build:frontend": "npm --prefix frontend run build",
     "start:frontend": "npm --prefix frontend run start",
-    "backend": "powershell -Command \"cd backend; .venv\\Scripts\\uvicorn app.main:app --reload --port 8000\"",
+    "backend": "powershell -Command \"cd backend; .venv\\Scripts\\uvicorn app.main:app --reload --port 8000 --loop asyncio:SelectorEventLoop\"",
     "install:frontend": "npm --prefix frontend install"
+  },
+  "devDependencies": {
+    "@neon/config": "^1.14.5"
   }
 }

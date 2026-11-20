@@ -5,7 +5,7 @@ from app.main import app
 
 @pytest.fixture(scope="module")
 def client():
-    """Provides a TestClient context with lifespan (connecting and disconnecting MongoDB)."""
+    """Provides a TestClient context with lifespan (opening and closing the Neon Postgres pool)."""
     with TestClient(app) as test_client:
         yield test_client
 
@@ -28,8 +28,8 @@ def test_health_check(client):
     data = response.json()
     assert "status" in data
     assert data["service"] == "Venture X API"
-    assert data["database_name"] == "VentureX"
-    # Status should be healthy when connected to Atlas or mock when offline
+    assert data["database_name"] in ("neondb", "")
+    # Status should be healthy when connected to Neon or mock when offline
     assert data["status"] in ["healthy", "mock"]
 
 

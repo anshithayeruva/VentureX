@@ -2,30 +2,66 @@
 
 import React, { useState } from "react";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
-import { Sparkles, Rocket, Briefcase, ArrowRight, ShieldCheck, Lock } from "lucide-react";
-import { Badge } from "@/components/Badge";
+import { useRouter, useSearchParams } from "next/navigation";
+import { authClient } from "@/lib/auth/client";
+import { api } from "@/lib/api";
+
+const HOME_FOR_ROLE = {
+  FOUNDER: "/founder/dashboard",
+  INVESTOR: "/investor/dashboard",
+} as const;
+
+/** Only same-site paths are honoured as post-login destinations. */
+function safeRedirect(target: string | null): string | null {
+  if (!target || !target.startsWith("/") || target.startsWith("//") || target.startsWith("/\\")) return null;
+  return target;
+}
 
 export default function LoginPage() {
+  return (
+    <React.Suspense>
+      <LoginForm />
+    </React.Suspense>
+  );
+}
+
+function LoginForm() {
   const router = useRouter();
+  const searchParams = useSearchParams();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [role, setRole] = useState<"FOUNDER" | "INVESTOR">("FOUNDER");
+  const [error, setError] = useState<string | null>(null);
+  const [pending, setPending] = useState(false);
 
-  const handleLogin = (e: React.FormEvent) => {
+  const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (role === "FOUNDER") {
-      router.push("/founder/dashboard");
-    } else {
-      router.push("/investor/dashboard");
-    }
-  };
+    setError(null);
+    setPending(true);
+    try {
+      const { error: signInError } = await authClient.signIn.email({ email, password });
+      if (signInError) {
+        setError(
+          signInError.status === 401 || signInError.code === "INVALID_EMAIL_OR_PASSWORD"
+            ? "Incorrect email or password."
+            : signInError.message || "Sign-in failed. Please try again."
+        );
+        return;
+      }
 
-  const handleDemoLogin = (targetRole: "FOUNDER" | "INVESTOR") => {
-    if (targetRole === "FOUNDER") {
-      router.push("/founder/dashboard");
-    } else {
-      router.push("/investor/dashboard");
+      // The account's role decides which workspace opens; finish onboarding if it was skipped.
+      let me = await api.getMe();
+      if (me && !me.role) {
+        me = await api.completeOnboarding({ role });
+      }
+      const destination =
+        safeRedirect(searchParams.get("redirectTo")) ?? HOME_FOR_ROLE[me?.role ?? role];
+      router.replace(destination);
+      router.refresh();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Sign-in failed. Please try again.");
+    } finally {
+      setPending(false);
     }
   };
 
@@ -42,37 +78,6 @@ export default function LoginPage() {
           <p className="text-xs text-[#64748B] mt-1">
             Access your confidential founder workspace or investor dealflow.
           </p>
-        </div>
-
-        {/* Quick Demo Access Triggers */}
-        <div className="mb-6 p-4 rounded-xl bg-[#F1F5F9] border border-[#E2E8F0] space-y-2">
-          <span className="text-[10px] font-semibold uppercase tracking-wider text-[#64748B] block text-center">
-            ⚡ Quick Demo Sign-In
-          </span>
-          <div className="grid grid-cols-2 gap-2 pt-0.5">
-            <button
-              onClick={() => handleDemoLogin("FOUNDER")}
-              className="py-2 px-3 rounded-lg bg-[#EBF2FA] border border-[#BFD7EE] text-[#1B3B6F] hover:bg-[#1B3B6F] hover:text-white text-xs font-medium transition-all flex items-center justify-center gap-1.5 shadow-subtle"
-            >
-              <Rocket className="w-3.5 h-3.5" />
-              Demo Founder
-            </button>
-            <button
-              onClick={() => handleDemoLogin("INVESTOR")}
-              className="py-2 px-3 rounded-lg bg-[#0F1E36] text-white hover:bg-[#1C355E] text-xs font-medium transition-all flex items-center justify-center gap-1.5 shadow-subtle"
-            >
-              <Briefcase className="w-3.5 h-3.5" />
-              Demo Investor
-            </button>
-          </div>
-        </div>
-
-        <div className="relative flex py-2 items-center mb-5">
-          <div className="flex-grow border-t border-[#E2E8F0]" />
-          <span className="flex-shrink mx-3 text-[#94A3B8] text-[11px] uppercase font-mono">
-            Or with credentials
-          </span>
-          <div className="flex-grow border-t border-[#E2E8F0]" />
         </div>
 
         <form onSubmit={handleLogin} className="space-y-4 text-xs sm:text-sm">
@@ -137,11 +142,18 @@ export default function LoginPage() {
             />
           </div>
 
+          {error && (
+            <p role="alert" className="text-xs text-[#B91C1C] bg-[#FEF2F2] border border-[#FECACA] rounded-lg px-3 py-2">
+              {error}
+            </p>
+          )}
+
           <button
             type="submit"
-            className="w-full mt-2 py-2.5 rounded-lg text-xs sm:text-sm font-medium text-white bg-[#1B3B6F] hover:bg-[#142C54] transition-all shadow-sm"
+            disabled={pending}
+            className="w-full mt-2 py-2.5 rounded-lg text-xs sm:text-sm font-medium text-white bg-[#1B3B6F] hover:bg-[#142C54] transition-all shadow-sm disabled:opacity-60 disabled:cursor-wait"
           >
-            Sign In to {role === "FOUNDER" ? "Founder Workspace" : "Investor Portal"}
+            {pending ? "Signing in…" : `Sign In to ${role === "FOUNDER" ? "Founder Workspace" : "Investor Portal"}`}
           </button>
         </form>
 

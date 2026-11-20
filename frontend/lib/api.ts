@@ -11,8 +11,30 @@ import {
   DealRoomAuditLog,
   MessageAttachment,
 } from "@/types";
+import { getApiToken } from "@/lib/auth/client";
 
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000/api";
+
+/**
+ * fetch() against the FastAPI backend, attaching the signed-in user's
+ * Neon Auth JWT as a Bearer token when there is a session.
+ */
+async function apiFetch(input: string, init: RequestInit = {}): Promise<Response> {
+  const headers = new Headers(init.headers);
+  if (typeof window !== "undefined" && !headers.has("Authorization")) {
+    const token = await getApiToken();
+    if (token) headers.set("Authorization", `Bearer ${token}`);
+  }
+  return fetch(input, { ...init, headers });
+}
+
+export type MeResponse = {
+  id: string;
+  email: string;
+  name?: string | null;
+  role?: "FOUNDER" | "INVESTOR" | null;
+  organization?: string | null;
+};
 
 
 export const MOCK_PROJECTS: Project[] = [
@@ -316,9 +338,35 @@ let localPreferences: InvestorPreference = { ...MOCK_INVESTOR_PREFERENCE };
 let localNotifications: NotificationItem[] = [...MOCK_NOTIFICATIONS];
 
 export const api = {
+  /** The signed-in user and their VentureX role (null role = not onboarded). */
+  async getMe(): Promise<MeResponse | null> {
+    const res = await apiFetch(`${API_BASE_URL}/me`, { cache: "no-store" });
+    if (res.status === 401) return null;
+    if (!res.ok) throw new Error(`Could not load your account (HTTP ${res.status})`);
+    return res.json();
+  },
+
+  /** One-time onboarding after sign-up: choose FOUNDER or INVESTOR. */
+  async completeOnboarding(data: {
+    role: "FOUNDER" | "INVESTOR";
+    name?: string;
+    organization?: string;
+  }): Promise<MeResponse> {
+    const res = await apiFetch(`${API_BASE_URL}/me`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(data),
+    });
+    if (!res.ok) {
+      const detail = await res.json().catch(() => null);
+      throw new Error(detail?.detail || `Could not finish setting up your account (HTTP ${res.status})`);
+    }
+    return res.json();
+  },
+
   async checkHealth(): Promise<{ status: string; service?: string; database?: string; version?: string }> {
     try {
-      const res = await fetch(`${API_BASE_URL}/health`, { method: "GET", cache: "no-store" });
+      const res = await apiFetch(`${API_BASE_URL}/health`, { method: "GET", cache: "no-store" });
       if (res.ok) {
         return await res.json();
       }
@@ -334,11 +382,9 @@ export const api = {
       if (myProjects) {
         url.searchParams.set("founder_only", "true");
       }
-      const token = typeof window !== "undefined" ? localStorage.getItem("token") : null;
       const headers: Record<string, string> = {};
-      if (token) headers["Authorization"] = `Bearer ${token}`;
 
-      const res = await fetch(url.toString(), { headers, cache: "no-store" });
+      const res = await apiFetch(url.toString(), { headers, cache: "no-store" });
       if (res.ok) {
         const data = await res.json();
         if (Array.isArray(data) && data.length > 0) return data;
@@ -351,7 +397,7 @@ export const api = {
 
   async getProject(id: number | string): Promise<Project | null> {
     try {
-      const res = await fetch(`${API_BASE_URL}/projects/${id}`, { cache: "no-store" });
+      const res = await apiFetch(`${API_BASE_URL}/projects/${id}`, { cache: "no-store" });
       if (res.ok) {
         return await res.json();
       }
@@ -363,11 +409,9 @@ export const api = {
 
   async createProject(data: ProjectCreateInput): Promise<Project> {
     try {
-      const token = typeof window !== "undefined" ? localStorage.getItem("token") : null;
       const headers: Record<string, string> = { "Content-Type": "application/json" };
-      if (token) headers["Authorization"] = `Bearer ${token}`;
 
-      const res = await fetch(`${API_BASE_URL}/projects`, {
+      const res = await apiFetch(`${API_BASE_URL}/projects`, {
         method: "POST",
         headers,
         body: JSON.stringify(data),
@@ -404,11 +448,9 @@ export const api = {
 
   async updateProject(id: number | string, data: Partial<ProjectCreateInput>): Promise<Project> {
     try {
-      const token = typeof window !== "undefined" ? localStorage.getItem("token") : null;
       const headers: Record<string, string> = { "Content-Type": "application/json" };
-      if (token) headers["Authorization"] = `Bearer ${token}`;
 
-      const res = await fetch(`${API_BASE_URL}/projects/${id}`, {
+      const res = await apiFetch(`${API_BASE_URL}/projects/${id}`, {
         method: "PUT",
         headers,
         body: JSON.stringify(data),
@@ -433,7 +475,7 @@ export const api = {
 
   async togglePublishProject(id: number | string): Promise<{ id: string | number; is_published: boolean }> {
     try {
-      const res = await fetch(`${API_BASE_URL}/projects/${id}/publish`, {
+      const res = await apiFetch(`${API_BASE_URL}/projects/${id}/publish`, {
         method: "PATCH",
       });
       if (res.ok) {
@@ -447,7 +489,7 @@ export const api = {
 
   async getProjectReadiness(id: number | string): Promise<any> {
     try {
-      const res = await fetch(`${API_BASE_URL}/projects/${id}/readiness`);
+      const res = await apiFetch(`${API_BASE_URL}/projects/${id}/readiness`);
       if (res.ok) {
         return await res.json();
       }
@@ -459,7 +501,7 @@ export const api = {
 
   async reEvaluateProject(id: number | string): Promise<any> {
     try {
-      const res = await fetch(`${API_BASE_URL}/projects/${id}/re-evaluate`, {
+      const res = await apiFetch(`${API_BASE_URL}/projects/${id}/re-evaluate`, {
         method: "POST",
       });
       if (res.ok) {
@@ -473,11 +515,9 @@ export const api = {
 
   async getMatches(): Promise<MatchItem[]> {
     try {
-      const token = typeof window !== "undefined" ? localStorage.getItem("token") : null;
       const headers: Record<string, string> = {};
-      if (token) headers["Authorization"] = `Bearer ${token}`;
 
-      const res = await fetch(`${API_BASE_URL}/matches`, { headers, cache: "no-store" });
+      const res = await apiFetch(`${API_BASE_URL}/matches`, { headers, cache: "no-store" });
       if (res.ok) {
         const data = await res.json();
         if (Array.isArray(data) && data.length > 0) return data;
@@ -490,11 +530,9 @@ export const api = {
 
   async getInvestorPreferences(): Promise<InvestorPreference> {
     try {
-      const token = typeof window !== "undefined" ? localStorage.getItem("token") : null;
       const headers: Record<string, string> = {};
-      if (token) headers["Authorization"] = `Bearer ${token}`;
 
-      const res = await fetch(`${API_BASE_URL}/investors/preferences`, { headers, cache: "no-store" });
+      const res = await apiFetch(`${API_BASE_URL}/investors/preferences`, { headers, cache: "no-store" });
       if (res.ok) {
         const data = await res.json();
         if (data) return data;
@@ -507,11 +545,9 @@ export const api = {
 
   async updateInvestorPreferences(prefs: Partial<InvestorPreference>): Promise<InvestorPreference> {
     try {
-      const token = typeof window !== "undefined" ? localStorage.getItem("token") : null;
       const headers: Record<string, string> = { "Content-Type": "application/json" };
-      if (token) headers["Authorization"] = `Bearer ${token}`;
 
-      const res = await fetch(`${API_BASE_URL}/investors/preferences`, {
+      const res = await apiFetch(`${API_BASE_URL}/investors/preferences`, {
         method: "PUT",
         headers,
         body: JSON.stringify(prefs),
@@ -530,7 +566,7 @@ export const api = {
 
   async getFounderProfile(): Promise<any> {
     try {
-      const res = await fetch(`${API_BASE_URL}/founders/profile`, { cache: "no-store" });
+      const res = await apiFetch(`${API_BASE_URL}/founders/profile`, { cache: "no-store" });
       if (res.ok) return await res.json();
     } catch {
       // Fallback
@@ -540,7 +576,7 @@ export const api = {
 
   async updateFounderProfile(data: any): Promise<any> {
     try {
-      const res = await fetch(`${API_BASE_URL}/founders/profile`, {
+      const res = await apiFetch(`${API_BASE_URL}/founders/profile`, {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(data),
@@ -554,7 +590,7 @@ export const api = {
 
   async getFounderSettings(): Promise<any> {
     try {
-      const res = await fetch(`${API_BASE_URL}/founders/settings`, { cache: "no-store" });
+      const res = await apiFetch(`${API_BASE_URL}/founders/settings`, { cache: "no-store" });
       if (res.ok) return await res.json();
     } catch {
       // Fallback
@@ -564,7 +600,7 @@ export const api = {
 
   async updateFounderSettings(data: any): Promise<any> {
     try {
-      const res = await fetch(`${API_BASE_URL}/founders/settings`, {
+      const res = await apiFetch(`${API_BASE_URL}/founders/settings`, {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(data),
@@ -578,7 +614,7 @@ export const api = {
 
   async getInvestorProfile(): Promise<any> {
     try {
-      const res = await fetch(`${API_BASE_URL}/investors/profile`, { cache: "no-store" });
+      const res = await apiFetch(`${API_BASE_URL}/investors/profile`, { cache: "no-store" });
       if (res.ok) return await res.json();
     } catch {
       // Fallback
@@ -588,7 +624,7 @@ export const api = {
 
   async updateInvestorProfile(data: any): Promise<any> {
     try {
-      const res = await fetch(`${API_BASE_URL}/investors/profile`, {
+      const res = await apiFetch(`${API_BASE_URL}/investors/profile`, {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(data),
@@ -602,7 +638,7 @@ export const api = {
 
   async getInvestorSettings(): Promise<any> {
     try {
-      const res = await fetch(`${API_BASE_URL}/investors/settings`, { cache: "no-store" });
+      const res = await apiFetch(`${API_BASE_URL}/investors/settings`, { cache: "no-store" });
       if (res.ok) return await res.json();
     } catch {
       // Fallback
@@ -612,7 +648,7 @@ export const api = {
 
   async updateInvestorSettings(data: any): Promise<any> {
     try {
-      const res = await fetch(`${API_BASE_URL}/investors/settings`, {
+      const res = await apiFetch(`${API_BASE_URL}/investors/settings`, {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(data),
@@ -637,7 +673,7 @@ export const api = {
       data.note ||
       "Introduction requested for confidential data room review.";
     try {
-      const res = await fetch(`${API_BASE_URL}/interests`, {
+      const res = await apiFetch(`${API_BASE_URL}/interests`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -673,7 +709,7 @@ export const api = {
 
   async withdrawInterest(interestId: string | number): Promise<boolean> {
     try {
-      const res = await fetch(`${API_BASE_URL}/interests/${interestId}`, {
+      const res = await apiFetch(`${API_BASE_URL}/interests/${interestId}`, {
         method: "DELETE",
       });
       if (res.ok) return true;
@@ -689,7 +725,7 @@ export const api = {
       if (params?.investor_id) url.searchParams.set("investor_id", params.investor_id);
       if (params?.founder_id) url.searchParams.set("founder_id", params.founder_id);
       if (params?.status) url.searchParams.set("status", params.status);
-      const res = await fetch(url.toString(), { cache: "no-store" });
+      const res = await apiFetch(url.toString(), { cache: "no-store" });
       if (res.ok) {
         const data = await res.json();
         if (Array.isArray(data)) return data;
@@ -706,7 +742,7 @@ export const api = {
     responseNote?: string
   ): Promise<any> {
     try {
-      const res = await fetch(`${API_BASE_URL}/interests/${interestId}/status`, {
+      const res = await apiFetch(`${API_BASE_URL}/interests/${interestId}/status`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ status, response_note: responseNote }),
@@ -728,7 +764,7 @@ export const api = {
       if (role) params.append("role", role);
       if (userId) params.append("user_id", userId);
       if (unreadOnly) params.append("unread_only", "true");
-      const res = await fetch(`${API_BASE_URL}/notifications?${params.toString()}`, { cache: "no-store" });
+      const res = await apiFetch(`${API_BASE_URL}/notifications?${params.toString()}`, { cache: "no-store" });
       if (res.ok) {
         const data = await res.json();
         if (Array.isArray(data) && data.length > 0) return data;
@@ -748,7 +784,7 @@ export const api = {
       const params = new URLSearchParams();
       if (role) params.append("role", role);
       if (userId) params.append("user_id", userId);
-      const res = await fetch(`${API_BASE_URL}/notifications/unread-count?${params.toString()}`, { cache: "no-store" });
+      const res = await apiFetch(`${API_BASE_URL}/notifications/unread-count?${params.toString()}`, { cache: "no-store" });
       if (res.ok) {
         const data = await res.json();
         return data.unread_count ?? 0;
@@ -764,7 +800,7 @@ export const api = {
 
   async markNotificationRead(id: string | number): Promise<boolean> {
     try {
-      const res = await fetch(`${API_BASE_URL}/notifications/${id}/read`, {
+      const res = await apiFetch(`${API_BASE_URL}/notifications/${id}/read`, {
         method: "PATCH",
       });
       if (res.ok) return true;
@@ -784,7 +820,7 @@ export const api = {
       const params = new URLSearchParams();
       if (role) params.append("role", role);
       if (userId) params.append("user_id", userId);
-      const res = await fetch(`${API_BASE_URL}/notifications/mark-all-read?${params.toString()}`, {
+      const res = await apiFetch(`${API_BASE_URL}/notifications/mark-all-read?${params.toString()}`, {
         method: "POST",
       });
       if (res.ok) {
@@ -810,7 +846,7 @@ export const api = {
       const url = new URL(`${API_BASE_URL}/dealrooms`);
       if (params?.user_id) url.searchParams.set("user_id", params.user_id);
       if (params?.role) url.searchParams.set("role", params.role);
-      const res = await fetch(url.toString(), { cache: "no-store" });
+      const res = await apiFetch(url.toString(), { cache: "no-store" });
       if (res.ok) {
         const data = await res.json();
         if (Array.isArray(data)) return data;
@@ -825,7 +861,7 @@ export const api = {
     try {
       const url = new URL(`${API_BASE_URL}/dealrooms/${roomId}`);
       if (userId) url.searchParams.set("user_id", userId);
-      const res = await fetch(url.toString(), { cache: "no-store" });
+      const res = await apiFetch(url.toString(), { cache: "no-store" });
       if (res.ok) return await res.json();
     } catch {
       // Fallback
@@ -837,7 +873,7 @@ export const api = {
     try {
       const url = new URL(`${API_BASE_URL}/dealrooms/${roomId}/messages`);
       if (userId) url.searchParams.set("user_id", userId);
-      const res = await fetch(url.toString(), { cache: "no-store" });
+      const res = await apiFetch(url.toString(), { cache: "no-store" });
       if (res.ok) {
         const data = await res.json();
         if (Array.isArray(data)) return data;
@@ -859,7 +895,7 @@ export const api = {
     }
   ): Promise<DealMessage | null> {
     try {
-      const res = await fetch(`${API_BASE_URL}/dealrooms/${roomId}/messages`, {
+      const res = await apiFetch(`${API_BASE_URL}/dealrooms/${roomId}/messages`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(message),
@@ -882,7 +918,7 @@ export const api = {
     }
   ): Promise<DealRoom | null> {
     try {
-      const res = await fetch(`${API_BASE_URL}/dealrooms/${roomId}/stage`, {
+      const res = await apiFetch(`${API_BASE_URL}/dealrooms/${roomId}/stage`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(stageData),
@@ -899,7 +935,7 @@ export const api = {
     ndaData: { signer_id: string; signer_role: string; signer_name: string }
   ): Promise<DealRoom | null> {
     try {
-      const res = await fetch(`${API_BASE_URL}/dealrooms/${roomId}/nda`, {
+      const res = await apiFetch(`${API_BASE_URL}/dealrooms/${roomId}/nda`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(ndaData),
@@ -924,7 +960,7 @@ export const api = {
     }
   ): Promise<DealRoom | null> {
     try {
-      const res = await fetch(`${API_BASE_URL}/dealrooms/${roomId}/documents`, {
+      const res = await apiFetch(`${API_BASE_URL}/dealrooms/${roomId}/documents`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(docData),
@@ -940,7 +976,7 @@ export const api = {
     try {
       const url = new URL(`${API_BASE_URL}/dealrooms/${roomId}/transcript`);
       if (userId) url.searchParams.set("user_id", userId);
-      const res = await fetch(url.toString(), { cache: "no-store" });
+      const res = await apiFetch(url.toString(), { cache: "no-store" });
       if (res.ok) return await res.json();
     } catch {
       // Fallback
@@ -950,7 +986,7 @@ export const api = {
 
   async getDealRoomAuditLogs(roomId: string): Promise<DealRoomAuditLog[]> {
     try {
-      const res = await fetch(`${API_BASE_URL}/dealrooms/${roomId}/audit-logs`, { cache: "no-store" });
+      const res = await apiFetch(`${API_BASE_URL}/dealrooms/${roomId}/audit-logs`, { cache: "no-store" });
       if (res.ok) {
         const data = await res.json();
         if (Array.isArray(data)) return data;
@@ -977,7 +1013,7 @@ export const api = {
       formData.append("file", file);
       formData.append("category", category);
 
-      const res = await fetch(`${API_BASE_URL}/upload`, {
+      const res = await apiFetch(`${API_BASE_URL}/upload`, {
         method: "POST",
         body: formData,
       });
@@ -1004,7 +1040,7 @@ export const api = {
     projectTitle: string = "Startup"
   ): Promise<boolean> {
     try {
-      const res = await fetch(`${API_BASE_URL}/projects/${projectId}/export-report`);
+      const res = await apiFetch(`${API_BASE_URL}/projects/${projectId}/export-report`);
       if (res.ok) {
         const blob = await res.blob();
         const url = URL.createObjectURL(blob);
@@ -1028,7 +1064,7 @@ export const api = {
     projectTitle: string = "DealRoom"
   ): Promise<boolean> {
     try {
-      const res = await fetch(`${API_BASE_URL}/dealrooms/${roomId}/export-pdf`);
+      const res = await apiFetch(`${API_BASE_URL}/dealrooms/${roomId}/export-pdf`);
       if (res.ok) {
         const blob = await res.blob();
         const url = URL.createObjectURL(blob);

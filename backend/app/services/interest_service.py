@@ -1,95 +1,12 @@
 import logging
 from datetime import datetime, timezone
 from typing import List, Dict, Any, Optional, Union
-from bson import ObjectId
-from app.database.mongodb import get_database
-from app.database.utils import serialize_doc, serialize_docs
+from app.database import postgres as pg
 
 logger = logging.getLogger(__name__)
 
 
 class InterestService:
-    @classmethod
-    async def _seed_initial_interests_if_empty(cls, db) -> None:
-        """Seed initial introduction requests so the deal room workflow is immediately interactive."""
-        count = await db.project_interests.count_documents({})
-        if count > 0:
-            return
-
-        now = datetime.now(timezone.utc)
-        initial_interests = [
-            {
-                "id": "intro-001",
-                "project_id": 1,
-                "project_title": "NeuroPulse AI",
-                "project_industry": "Healthcare & AI",
-                "investor_id": "investor-001",
-                "investor_name": "Dr. Sarah Lin",
-                "investor_firm": "Apex Horizon Ventures",
-                "investor_email": "sarah.lin@apexhorizon.vc",
-                "founder_id": "founder-001",
-                "founder_name": "Alex Rivers",
-                "founder_email": "alex@neuropulse.demo",
-                "status": "pending",
-                "message": (
-                    "We've tracked your clinical ICU telemetry validation and would love to review your "
-                    "confidential regulatory roadmap and discuss participating as lead in your $750k Seed round."
-                ),
-                "created_at": now,
-                "updated_at": now,
-            },
-            {
-                "id": "intro-002",
-                "project_id": 1,
-                "project_title": "NeuroPulse AI",
-                "project_industry": "Healthcare & AI",
-                "investor_id": "investor-002",
-                "investor_name": "Marcus Sterling",
-                "investor_firm": "BlueShift Capital",
-                "investor_email": "m.sterling@blueshiftcap.com",
-                "founder_id": "founder-001",
-                "founder_name": "Alex Rivers",
-                "founder_email": "alex@neuropulse.demo",
-                "status": "accepted",
-                "message": "Highly interested in your edge neural processor architecture. Requesting deal room dialogue.",
-                "response_note": "Welcome Marcus. Excited to connect and share our pilot hospital data room.",
-                "deal_room": {
-                    "unlocked": True,
-                    "unlocked_at": now.isoformat(),
-                    "founder_name": "Alex Rivers",
-                    "founder_email": "alex@neuropulse.demo",
-                    "founder_phone": "+1 (415) 890-2341",
-                    "founder_linkedin": "https://linkedin.com/in/alexrivers",
-                    "direct_messaging_channel": "channel-dealroom-intro-002",
-                    "meeting_scheduler_url": "https://cal.com/alexrivers/seed-intro-30min",
-                    "data_room_url": "https://dataroom.venturex.io/room/1?access=verified_partner",
-                    "pitch_deck_url": "https://neuropulse.demo/deck.pdf",
-                    "financial_model_url": "https://dataroom.venturex.io/models/neuropulse_financial_model.xlsx",
-                    "cap_table_verified": True,
-                },
-                "created_at": now,
-                "updated_at": now,
-            },
-        ]
-        await db.project_interests.insert_many(initial_interests)
-        logger.info("Seeded initial project interests with deal rooms into MongoDB Atlas.")
-
-    @classmethod
-    def _parse_id(cls, interest_id: Union[int, str]) -> Dict[str, Any]:
-        """Generate a filter matching custom string id or ObjectId."""
-        queries = [{"id": interest_id}]
-        try:
-            queries.append({"id": int(interest_id)})
-        except (ValueError, TypeError):
-            pass
-        try:
-            queries.append({"id": str(interest_id)})
-        except Exception:
-            pass
-        if ObjectId.is_valid(str(interest_id)):
-            queries.append({"_id": ObjectId(str(interest_id))})
-        return {"$or": queries} if len(queries) > 1 else queries[0]
-
     @classmethod
     async def express_interest(
         cls,
@@ -98,48 +15,36 @@ class InterestService:
         message: Optional[str] = None,
     ) -> Dict[str, Any]:
         """Record an investor's introduction request and generate deal room initiation."""
-        db = get_database()
-        if db is None:
-            raise RuntimeError("Database unavailable")
-
         now = datetime.now(timezone.utc)
 
         # Lookup project for title, founder, and industry
-        p_query = {"$or": [{"id": project_id}]}
-        try:
-            p_query["$or"].append({"id": int(project_id)})
-        except ValueError:
-            pass
-        try:
-            p_query["$or"].append({"id": str(project_id)})
-        except Exception:
-            pass
-        if ObjectId.is_valid(str(project_id)):
-            p_query["$or"].append({"_id": ObjectId(str(project_id))})
-
-        project = await db.projects.find_one(p_query)
-        canonical_project_id = project.get("id", project_id) if project else project_id
+        from app.services.project_service import ProjectService
+        project = await ProjectService.get_by_id(project_id)
+        if not project and ProjectService.parse_id(project_id) is None:
+            raise ValueError(f"Invalid project id '{project_id}'")
+        canonical_project_id = project["id"] if project else ProjectService.parse_id(project_id)
         founder_id = project.get("founder_id", "founder-001") if project else "founder-001"
         project_title = project.get("title", f"Project #{project_id}") if project else f"Project #{project_id}"
         project_industry = project.get("industry", "DeepTech") if project else "DeepTech"
 
         # Lookup investor details
-        investor = await db.investor_profiles.find_one({"user_id": investor_id})
+        investor = await pg.fetch_one("SELECT name, firm FROM investor_profiles WHERE user_id = %s", [investor_id])
         investor_name = investor.get("name", "Dr. Sarah Lin") if investor else "Dr. Sarah Lin"
         investor_firm = investor.get("firm", "Apex Horizon Ventures") if investor else "Apex Horizon Ventures"
 
         # Lookup founder details
-        founder = await db.founder_profiles.find_one({"user_id": founder_id})
+        founder = await pg.fetch_one("SELECT name FROM founder_profiles WHERE user_id = %s", [founder_id])
         founder_name = founder.get("name", "Founding Team") if founder else "Founding Team"
 
         int_id = f"intro-{canonical_project_id}-{investor_id}"
 
         # Check if an existing interest already exists (preserve accepted status/deal room if already accepted)
-        existing = await db.project_interests.find_one(
-            {"project_id": canonical_project_id, "investor_id": investor_id}
+        existing = await pg.fetch_one(
+            "SELECT * FROM project_interests WHERE project_id = %s AND investor_id = %s",
+            [canonical_project_id, investor_id],
         )
         if existing and existing.get("status") == "accepted":
-            return serialize_doc(existing)
+            return existing
 
         doc = {
             "id": existing.get("id", int_id) if existing else int_id,
@@ -160,10 +65,11 @@ class InterestService:
         }
 
         # Upsert by project_id and investor_id
-        await db.project_interests.update_one(
-            {"project_id": canonical_project_id, "investor_id": investor_id},
-            {"$set": doc},
-            upsert=True
+        saved = await pg.upsert(
+            "project_interests",
+            doc,
+            ["project_id", "investor_id"],
+            update=[c for c in doc if c not in ("id", "project_id", "investor_id", "created_at")],
         )
 
         # Create instant notification for founder
@@ -195,10 +101,7 @@ class InterestService:
         except Exception as e:
             logger.warning("Failed to dispatch founder intro email: %s", e)
 
-        saved = await db.project_interests.find_one(
-            {"project_id": canonical_project_id, "investor_id": investor_id}
-        )
-        return serialize_doc(saved)
+        return saved
 
     @classmethod
     async def update_status(
@@ -208,19 +111,11 @@ class InterestService:
         response_note: Optional[str] = None,
     ) -> Optional[Dict[str, Any]]:
         """Update intro status to accepted or declined and unlock deal room resources."""
-        db = get_database()
-        if db is None:
-            return None
-
         now = datetime.now(timezone.utc)
-        query = cls._parse_id(interest_id)
-        current = await db.project_interests.find_one(query)
+        current = await cls.get_by_id(interest_id)
         if not current:
-            # Fallback query by string ID in case field was saved as string id
-            current = await db.project_interests.find_one({"id": str(interest_id)})
-            if not current:
-                logger.warning("Interest record %s not found for status update", interest_id)
-                return None
+            logger.warning("Interest record %s not found for status update", interest_id)
+            return None
 
         clean_status = status.lower().strip()
         update_fields: Dict[str, Any] = {
@@ -238,7 +133,7 @@ class InterestService:
 
         if clean_status == "accepted":
             # Lookup latest project deck URL if available
-            p_doc = await db.projects.find_one({"$or": [{"id": project_id}, {"id": str(project_id)}]})
+            p_doc = await pg.fetch_one("SELECT pitch_deck_url FROM projects WHERE id = %s", [project_id])
             deck_url = (p_doc.get("pitch_deck_url") if p_doc else None) or "https://neuropulse.demo/deck.pdf"
 
             deal_room = {
@@ -300,9 +195,8 @@ class InterestService:
             except Exception as e:
                 logger.warning("Failed to dispatch investor decline notification: %s", e)
 
-        await db.project_interests.update_one({"_id": current["_id"]}, {"$set": update_fields})
-        updated = await db.project_interests.find_one({"_id": current["_id"]})
-        return serialize_doc(updated)
+        await pg.update_where("project_interests", update_fields, "id = %s", [current["id"]])
+        return await cls.get_by_id(current["id"])
 
     @classmethod
     async def list_interests(
@@ -312,28 +206,27 @@ class InterestService:
         status: Optional[str] = None,
     ) -> List[Dict[str, Any]]:
         """List introduction requests and deal rooms with enriched context."""
-        db = get_database()
-        if db is None:
-            return []
-
-        # Auto-seed sample interests if database is empty
-        await cls._seed_initial_interests_if_empty(db)
-
-        query: Dict[str, Any] = {}
+        where: List[str] = []
+        params: List[Any] = []
         if investor_id:
-            query["investor_id"] = investor_id
+            where.append("investor_id = %s")
+            params.append(investor_id)
         if founder_id:
-            query["founder_id"] = founder_id
+            where.append("founder_id = %s")
+            params.append(founder_id)
         if status:
-            query["status"] = status.lower().strip()
+            where.append("status = %s")
+            params.append(status.lower().strip())
 
-        cursor = db.project_interests.find(query).sort("created_at", -1)
-        docs = await cursor.to_list(length=100)
+        sql = "SELECT * FROM project_interests"
+        if where:
+            sql += " WHERE " + " AND ".join(where)
+        docs = await pg.fetch_all(sql + " ORDER BY created_at DESC, id LIMIT 100", params)
 
         # Ensure legacy or minimal records have titles, names, and firms enriched
         for doc in docs:
             if not doc.get("project_title") and doc.get("project_id"):
-                p = await db.projects.find_one({"$or": [{"id": doc["project_id"]}, {"id": str(doc["project_id"])}]})
+                p = await pg.fetch_one("SELECT title, industry FROM projects WHERE id = %s", [doc["project_id"]])
                 if p:
                     doc["project_title"] = p.get("title")
                     doc["project_industry"] = p.get("industry")
@@ -342,7 +235,10 @@ class InterestService:
                     doc["project_industry"] = "Healthcare & AI"
 
             if not doc.get("investor_name"):
-                inv = await db.investor_profiles.find_one({"user_id": doc.get("investor_id", "investor-001")})
+                inv = await pg.fetch_one(
+                    "SELECT name, firm FROM investor_profiles WHERE user_id = %s",
+                    [doc.get("investor_id") or "investor-001"],
+                )
                 if inv:
                     doc["investor_name"] = inv.get("name", "Dr. Sarah Lin")
                     doc["investor_firm"] = inv.get("firm", "Apex Horizon Ventures")
@@ -350,30 +246,15 @@ class InterestService:
                     doc["investor_name"] = "Dr. Sarah Lin"
                     doc["investor_firm"] = "Apex Horizon Ventures"
 
-        return serialize_docs(docs)
+        return docs
 
     @classmethod
     async def get_by_id(cls, interest_id: Union[int, str]) -> Optional[Dict[str, Any]]:
         """Retrieve single interest document with deal room details."""
-        db = get_database()
-        if db is None:
-            return None
-
-        query = cls._parse_id(interest_id)
-        doc = await db.project_interests.find_one(query)
-        if not doc:
-            doc = await db.project_interests.find_one({"id": str(interest_id)})
-        return serialize_doc(doc)
+        return await pg.fetch_one("SELECT * FROM project_interests WHERE id = %s", [str(interest_id)])
 
     @classmethod
     async def delete_interest(cls, interest_id: Union[int, str]) -> bool:
         """Withdraw/remove an introduction request."""
-        db = get_database()
-        if db is None:
-            return False
-
-        query = cls._parse_id(interest_id)
-        res = await db.project_interests.delete_one(query)
-        if res.deleted_count == 0:
-            res = await db.project_interests.delete_one({"id": str(interest_id)})
-        return res.deleted_count > 0
+        deleted = await pg.execute("DELETE FROM project_interests WHERE id = %s", [str(interest_id)])
+        return deleted > 0

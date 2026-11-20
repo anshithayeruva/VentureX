@@ -2,9 +2,7 @@ import logging
 import random
 from datetime import datetime, timezone
 from typing import List, Optional, Dict, Any, Union
-from bson import ObjectId
-from app.database.mongodb import get_database
-from app.database.utils import serialize_doc, serialize_docs
+from app.database import postgres as pg
 from app.schemas.project import ProjectCreate, ProjectUpdate
 
 logger = logging.getLogger(__name__)
@@ -12,27 +10,15 @@ logger = logging.getLogger(__name__)
 
 class ProjectService:
     @staticmethod
-    def _parse_id(project_id: Union[int, str]) -> Dict[str, Any]:
-        """Generate a MongoDB filter query matching integer id, string id, or ObjectId."""
-        queries = [{"id": project_id}]
+    def parse_id(project_id: Union[int, str]) -> Optional[int]:
+        """Project ids are BIGINTs; anything non-numeric can never match."""
         try:
-            queries.append({"id": int(project_id)})
+            return int(str(project_id).strip())
         except (ValueError, TypeError):
-            pass
-        try:
-            queries.append({"id": str(project_id)})
-        except Exception:
-            pass
-        if ObjectId.is_valid(str(project_id)):
-            queries.append({"_id": ObjectId(str(project_id))})
-        return {"$or": queries} if len(queries) > 1 else queries[0]
+            return None
 
     @classmethod
-    async def create(cls, data: ProjectCreate, founder_id: str = "founder-001") -> Dict[str, Any]:
-        db = get_database()
-        if db is None:
-            raise RuntimeError("Database connection unavailable")
-
+    async def create(cls, data: ProjectCreate, founder_id: str) -> Dict[str, Any]:
         now = datetime.now(timezone.utc)
         # Deterministic / heuristic preliminary AI score calculation
         base_score = 86.0
@@ -47,10 +33,7 @@ class ProjectService:
             base_score += 1.5
         score = min(98.0, base_score)
 
-        new_id = int(now.timestamp())
-
         doc = {
-            "id": new_id,
             "founder_id": founder_id,
             "title": data.title,
             "tagline": data.tagline or "",
@@ -88,8 +71,8 @@ class ProjectService:
             "updated_at": now,
         }
 
-        result = await db.projects.insert_one(doc)
-        doc["_id"] = result.inserted_id
+        created = await pg.insert("projects", doc)
+        new_id = created["id"]
 
         # Trigger dynamic matching pipeline for the newly created project
         try:
@@ -98,56 +81,57 @@ class ProjectService:
         except Exception as e:
             logger.warning("Could not auto-generate matches for project %s: %s", new_id, e)
 
-        return serialize_doc(doc)
+        return created
 
     @classmethod
     async def list_all(
         cls,
         founder_only: bool = False,
+        founder_id: Optional[str] = None,
         industry: Optional[str] = None,
         search: Optional[str] = None,
         skip: int = 0,
         limit: int = 50,
     ) -> List[Dict[str, Any]]:
-        db = get_database()
-        if db is None:
-            return []
-
-        query: Dict[str, Any] = {}
-        if not founder_only:
+        where: List[str] = []
+        params: List[Any] = []
+        if founder_only:
+            # A founder's own workspace: their drafts and published projects.
+            where.append("founder_id = %s")
+            params.append(founder_id or "founder-001")
+        else:
             # Public / Investor view only shows published projects
-            query["is_published"] = True
+            where.append("is_published")
 
         if industry and industry.lower() != "all":
-            query["industry"] = {"$regex": industry, "$options": "i"}
+            where.append("industry ILIKE %s")
+            params.append(f"%{pg.escape_like(industry)}%")
 
         if search and search.strip():
-            s = search.strip()
-            query["$or"] = [
-                {"title": {"$regex": s, "$options": "i"}},
-                {"description": {"$regex": s, "$options": "i"}},
-                {"industry": {"$regex": s, "$options": "i"}},
-                {"target_market": {"$regex": s, "$options": "i"}},
-            ]
+            pattern = f"%{pg.escape_like(search.strip())}%"
+            where.append(
+                "(title ILIKE %s OR description ILIKE %s OR industry ILIKE %s OR target_market ILIKE %s)"
+            )
+            params.extend([pattern] * 4)
 
-        cursor = db.projects.find(query).sort("created_at", -1).skip(skip).limit(limit)
-        docs = await cursor.to_list(length=limit)
-        return serialize_docs(docs)
+        sql = "SELECT * FROM projects"
+        if where:
+            sql += " WHERE " + " AND ".join(where)
+        sql += " ORDER BY created_at DESC, id DESC OFFSET %s LIMIT %s"
+        params.extend([skip, limit])
+        return await pg.fetch_all(sql, params)
 
     @classmethod
     async def get_by_id(cls, project_id: Union[int, str]) -> Optional[Dict[str, Any]]:
-        db = get_database()
-        if db is None:
+        pid = cls.parse_id(project_id)
+        if pid is None:
             return None
-
-        query = cls._parse_id(project_id)
-        doc = await db.projects.find_one(query)
-        return serialize_doc(doc)
+        return await pg.fetch_one("SELECT * FROM projects WHERE id = %s", [pid])
 
     @classmethod
     async def update(cls, project_id: Union[int, str], data: ProjectUpdate) -> Optional[Dict[str, Any]]:
-        db = get_database()
-        if db is None:
+        pid = cls.parse_id(project_id)
+        if pid is None:
             return None
 
         update_fields = {k: v for k, v in data.model_dump(exclude_unset=True).items() if v is not None}
@@ -155,9 +139,8 @@ class ProjectService:
             return await cls.get_by_id(project_id)
 
         update_fields["updated_at"] = datetime.now(timezone.utc)
-        query = cls._parse_id(project_id)
-
-        await db.projects.update_one(query, {"$set": update_fields})
+        if not await pg.update_where("projects", update_fields, "id = %s", [pid]):
+            return None
 
         # Recalculate matches if thesis-critical fields changed
         thesis_keys = {"industry", "stage", "funding_required", "business_model", "target_market", "description"}
@@ -172,15 +155,17 @@ class ProjectService:
 
     @classmethod
     async def toggle_publish(cls, project_id: Union[int, str], is_published: bool) -> Optional[Dict[str, Any]]:
-        db = get_database()
-        if db is None:
+        pid = cls.parse_id(project_id)
+        if pid is None:
             return None
-
-        query = cls._parse_id(project_id)
-        await db.projects.update_one(
-            query,
-            {"$set": {"is_published": is_published, "updated_at": datetime.now(timezone.utc)}}
+        updated = await pg.update_where(
+            "projects",
+            {"is_published": is_published, "updated_at": datetime.now(timezone.utc)},
+            "id = %s",
+            [pid],
         )
+        if not updated:
+            return None
 
         try:
             from app.services.match_service import MatchService
@@ -250,10 +235,6 @@ class ProjectService:
 
     @classmethod
     async def re_evaluate_readiness(cls, project_id: Union[int, str]) -> Optional[Dict[str, Any]]:
-        db = get_database()
-        if db is None:
-            return None
-
         project = await cls.get_by_id(project_id)
         if not project:
             return None
@@ -269,15 +250,14 @@ class ProjectService:
             "traction_feasibility": round(min(100.0, new_score + random.uniform(0.5, 2.5)), 1),
         }
 
-        query = cls._parse_id(project_id)
-        await db.projects.update_one(
-            query,
+        await pg.update_where(
+            "projects",
             {
-                "$set": {
-                    "readiness_score": new_score,
-                    "ai_readiness_breakdown": breakdown,
-                    "updated_at": datetime.now(timezone.utc),
-                }
-            }
+                "readiness_score": new_score,
+                "ai_readiness_breakdown": breakdown,
+                "updated_at": datetime.now(timezone.utc),
+            },
+            "id = %s",
+            [project["id"]],
         )
         return await cls.get_readiness_report(project_id)

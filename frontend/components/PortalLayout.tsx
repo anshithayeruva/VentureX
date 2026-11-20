@@ -2,7 +2,7 @@
 
 import React, { useState, useEffect } from "react";
 import Link from "next/link";
-import { usePathname } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
 import {
   Rocket,
   Briefcase,
@@ -25,6 +25,7 @@ import {
 } from "lucide-react";
 import { Badge } from "@/components/Badge";
 import { api } from "@/lib/api";
+import { authClient } from "@/lib/auth/client";
 
 interface PortalLayoutProps {
   role: "FOUNDER" | "INVESTOR";
@@ -54,6 +55,22 @@ export function PortalLayout({
   actions,
 }: PortalLayoutProps) {
   const pathname = usePathname();
+  const router = useRouter();
+  const { data: session } = authClient.useSession();
+  const sessionUser = session?.user;
+  const initials =
+    (sessionUser?.name || sessionUser?.email || "?")
+      .split(/[\s@.]+/)
+      .filter(Boolean)
+      .slice(0, 2)
+      .map((part) => part[0]?.toUpperCase())
+      .join("") || "?";
+
+  const handleSignOut = async () => {
+    await authClient.signOut();
+    router.replace("/login");
+    router.refresh();
+  };
   const [mobileSidebarOpen, setMobileSidebarOpen] = useState(false);
   const [unreadCount, setUnreadCount] = useState<number>(0);
 
@@ -238,25 +255,27 @@ export function PortalLayout({
           <div className="flex items-center justify-between px-2 py-2 rounded-lg bg-[#0F1E36] border border-[#182C4C]">
             <div className="flex items-center gap-2.5">
               <div className="w-8 h-8 rounded-full bg-[#182C4C] border border-[#223E68] flex items-center justify-center font-bold text-xs text-[#E2E8F0]">
-                {role === "FOUNDER" ? "AR" : "SL"}
+                {initials}
               </div>
-              <div className="flex flex-col">
-                <span className="text-xs font-semibold text-white leading-tight">
-                  {role === "FOUNDER" ? "Alex Rivers" : "Dr. Sarah Lin"}
+              <div className="flex flex-col min-w-0">
+                <span className="text-xs font-semibold text-white leading-tight truncate">
+                  {sessionUser?.name || sessionUser?.email || "Signed in"}
                 </span>
-                <span className="text-[10px] text-[#8DA0B5] leading-tight">
-                  {role === "FOUNDER" ? "NeuroPulse AI" : "Apex Horizon VC"}
+                <span className="text-[10px] text-[#8DA0B5] leading-tight truncate">
+                  {sessionUser?.email ?? (role === "FOUNDER" ? "Founder workspace" : "Investor portal")}
                 </span>
               </div>
             </div>
 
-            <Link
-              href={role === "FOUNDER" ? "/investor/dashboard" : "/founder/dashboard"}
-              title={`Switch to ${role === "FOUNDER" ? "Investor" : "Founder"} Workspace`}
+            <button
+              type="button"
+              onClick={handleSignOut}
+              title="Sign out"
+              aria-label="Sign out"
               className="p-1.5 rounded text-[#8DA0B5] hover:text-white hover:bg-[#182C4C] transition-colors"
             >
               <LogOut className="w-3.5 h-3.5" />
-            </Link>
+            </button>
           </div>
         </div>
       </aside>
