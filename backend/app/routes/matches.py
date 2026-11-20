@@ -1,6 +1,7 @@
 import logging
 from typing import List, Optional
-from fastapi import APIRouter, Query
+from fastapi import APIRouter, Depends, Query
+from app.core.auth import CurrentUser, require_user
 from app.schemas.match import MatchResponse
 from app.services.match_service import MatchService
 
@@ -21,7 +22,7 @@ async def list_matches(
 
 
 @router.post("/recalculate")
-async def recalculate_matches():
+async def recalculate_matches(user: CurrentUser = Depends(require_user)):
     """Trigger full dynamic recalculation of matches across all projects and investors."""
     total = await MatchService.recompute_all_matches()
     return {"status": "success", "matches_computed": total}

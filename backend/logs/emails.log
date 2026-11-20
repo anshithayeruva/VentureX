@@ -1,0 +1,30 @@
+
+[2026-11-20T08:27:30.540151+00:00] TO: i@example.com | SUBJECT: New Deal Room Message: F (E2E Neon Check)
+PREVIEW: Hi I,
+
+F posted a new message in the 'E2E Neon Check' Deal Room:
+
+"first"
+
+View conversation: http://localhost:3000/deal...
+------------------------------------------------------------
+
+[2026-11-20T08:27:32.102834+00:00] TO: f@example.com | SUBJECT: New Deal Room Message: I (E2E Neon Check)
+PREVIEW: Hi F,
+
+I posted a new message in the 'E2E Neon Check' Deal Room:
+
+"parallel 1"
+
+View conversation: http://localhost:3000...
+------------------------------------------------------------
+
+[2026-11-20T08:27:32.989660+00:00] TO: f@example.com | SUBJECT: New Deal Room Message: I (E2E Neon Check)
+PREVIEW: Hi F,
+
+I posted a new message in the 'E2E Neon Check' Deal Room:
+
+"parallel 2"
+
+View conversation: http://localhost:3000...
+------------------------------------------------------------

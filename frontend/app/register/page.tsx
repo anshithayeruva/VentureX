@@ -3,8 +3,9 @@
 import React, { useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { Sparkles, Rocket, Briefcase, CheckCircle2 } from "lucide-react";
-import { Badge } from "@/components/Badge";
+import { Rocket, Briefcase } from "lucide-react";
+import { authClient } from "@/lib/auth/client";
+import { api } from "@/lib/api";
 
 export default function RegisterPage() {
   const router = useRouter();
@@ -13,13 +14,44 @@ export default function RegisterPage() {
   const [role, setRole] = useState<"FOUNDER" | "INVESTOR">("FOUNDER");
   const [fullName, setFullName] = useState("");
   const [organization, setOrganization] = useState("");
+  const [error, setError] = useState<string | null>(null);
+  const [pending, setPending] = useState(false);
 
-  const handleRegister = (e: React.FormEvent) => {
+  const handleRegister = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (role === "FOUNDER") {
-      router.push("/founder/dashboard");
-    } else {
-      router.push("/investor/dashboard");
+    setError(null);
+    if (password.length < 8) {
+      setError("Use a password of at least 8 characters.");
+      return;
+    }
+    setPending(true);
+    try {
+      const { error: signUpError } = await authClient.signUp.email({
+        email,
+        password,
+        name: fullName,
+      });
+      if (signUpError) {
+        setError(
+          signUpError.code === "USER_ALREADY_EXISTS" || signUpError.status === 422
+            ? "An account with this email already exists. Sign in instead."
+            : signUpError.message || "Sign-up failed. Please try again."
+        );
+        return;
+      }
+
+      // Record the workspace choice and create the matching profile.
+      await api.completeOnboarding({
+        role,
+        name: fullName,
+        organization: organization || undefined,
+      });
+      router.replace(role === "FOUNDER" ? "/founder/dashboard" : "/investor/dashboard");
+      router.refresh();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Sign-up failed. Please try again.");
+    } finally {
+      setPending(false);
     }
   };
 
@@ -112,18 +144,27 @@ export default function RegisterPage() {
             <input
               type="password"
               required
-              placeholder="Minimum 6 characters"
+              placeholder="Minimum 8 characters"
+              minLength={8}
+              autoComplete="new-password"
               value={password}
               onChange={(e) => setPassword(e.target.value)}
               className="w-full px-3.5 py-2.5 bg-[#F8FAFC] border border-[#E2E8F0] rounded-lg text-[#0F172A] placeholder-[#94A3B8] focus:outline-none focus:border-[#1B3B6F]"
             />
           </div>
 
+          {error && (
+            <p role="alert" className="text-xs text-[#B91C1C] bg-[#FEF2F2] border border-[#FECACA] rounded-lg px-3 py-2">
+              {error}
+            </p>
+          )}
+
           <button
             type="submit"
-            className="w-full mt-2 py-2.5 rounded-lg text-xs sm:text-sm font-medium text-white bg-[#1B3B6F] hover:bg-[#142C54] transition-all shadow-sm"
+            disabled={pending}
+            className="w-full mt-2 py-2.5 rounded-lg text-xs sm:text-sm font-medium text-white bg-[#1B3B6F] hover:bg-[#142C54] transition-all shadow-sm disabled:opacity-60 disabled:cursor-wait"
           >
-            Create {role === "FOUNDER" ? "Founder" : "Investor"} Account
+            {pending ? "Creating account…" : `Create ${role === "FOUNDER" ? "Founder" : "Investor"} Account`}
           </button>
         </form>
 

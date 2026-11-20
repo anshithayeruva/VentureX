@@ -1,9 +1,7 @@
 import logging
-from datetime import datetime
-from typing import List, Dict, Any, Optional, Union
-from bson import ObjectId
-from app.database.mongodb import get_database
-from app.database.utils import serialize_docs, serialize_doc
+from datetime import datetime, timezone
+from typing import List, Dict, Any, Optional, Tuple, Union
+from app.database import postgres as pg
 
 logger = logging.getLogger(__name__)
 
@@ -12,22 +10,42 @@ def format_relative_time(dt: Optional[datetime]) -> str:
     """Format a datetime object into a concise relative time string."""
     if not dt:
         return "Recently"
-    now = datetime.utcnow()
-    diff = now - dt
+    if dt.tzinfo is None:
+        dt = dt.replace(tzinfo=timezone.utc)
+    diff = datetime.now(timezone.utc) - dt
     seconds = max(0, int(diff.total_seconds()))
     if seconds < 60:
         return "Just now"
     elif seconds < 3600:
-        mins = seconds // 60
-        return f"{mins}m ago"
+        return f"{seconds // 60}m ago"
     elif seconds < 86400:
-        hours = seconds // 3600
-        return f"{hours}h ago"
+        return f"{seconds // 3600}h ago"
     elif seconds < 604800:
-        days = seconds // 86400
-        return f"{days}d ago"
-    else:
-        return dt.strftime("%b %d")
+        return f"{seconds // 86400}d ago"
+    return dt.strftime("%b %d")
+
+
+def _serialize(row: Dict[str, Any]) -> Dict[str, Any]:
+    return {**row, "id": str(row["id"]), "time": format_relative_time(row.get("created_at"))}
+
+
+def _filters(
+    target_role: Optional[str],
+    user_id: Optional[str],
+    unread_only: bool,
+) -> Tuple[str, List[Any]]:
+    where: List[str] = []
+    params: List[Any] = []
+    if target_role:
+        where.append("target_role = %s")
+        params.append(target_role.upper())
+    if user_id:
+        # A user sees their own alerts plus role-wide broadcasts (user_id IS NULL).
+        where.append("(user_id = %s OR user_id IS NULL)")
+        params.append(str(user_id))
+    if unread_only:
+        where.append("NOT read")
+    return (" WHERE " + " AND ".join(where)) if where else "", params
 
 
 class NotificationService:
@@ -42,30 +60,25 @@ class NotificationService:
         badge_variant: str = "primary",
         link: Optional[str] = None,
     ) -> Dict[str, Any]:
-        """Insert a new notification into the database and return the serialized document."""
-        db = get_database()
-        if db is None:
+        """Insert a new notification and return it."""
+        if not pg.is_configured():
             logger.warning("Database unavailable, skipping notification creation")
             return {}
-
-        now = datetime.utcnow()
-        doc = {
-            "target_role": target_role.upper(),
-            "user_id": str(user_id) if user_id is not None else None,
-            "title": title,
-            "desc": desc,
-            "time": "Just now",
-            "badge": badge,
-            "badge_variant": badge_variant,
-            "link": link,
-            "read": False,
-            "created_at": now,
-        }
-
-        result = await db.notifications.insert_one(doc)
-        doc["_id"] = result.inserted_id
-        logger.info(f"Notification created [{result.inserted_id}] for {target_role} ({user_id}): {title}")
-        return serialize_doc(doc)
+        row = await pg.insert(
+            "notifications",
+            {
+                "target_role": target_role.upper(),
+                "user_id": str(user_id) if user_id is not None else None,
+                "title": title,
+                "desc": desc,
+                "badge": badge,
+                "badge_variant": badge_variant,
+                "link": link,
+                "read": False,
+            },
+        )
+        logger.info("Notification created [%s] for %s (%s): %s", row["id"], target_role, user_id, title)
+        return _serialize(row)
 
     @classmethod
     async def list_notifications(
@@ -75,45 +88,22 @@ class NotificationService:
         unread_only: bool = False,
         limit: int = 50,
     ) -> List[Dict[str, Any]]:
-        """List notifications, recalculating relative timestamps dynamically."""
-        db = get_database()
-        if db is None:
-            return []
-
-        query: Dict[str, Any] = {}
-        if target_role:
-            query["target_role"] = target_role.upper()
-        if user_id:
-            query["$or"] = [{"user_id": str(user_id)}, {"user_id": None}]
-        if unread_only:
-            query["read"] = False
-
-        cursor = db.notifications.find(query).sort("created_at", -1).limit(limit)
-        docs = await cursor.to_list(length=limit)
-
-        # Update dynamic relative time if created_at is a datetime
-        for d in docs:
-            created_at = d.get("created_at")
-            if isinstance(created_at, datetime):
-                d["time"] = format_relative_time(created_at)
-
-        return serialize_docs(docs)
+        """List notifications, computing relative timestamps on the fly."""
+        where, params = _filters(target_role, user_id, unread_only)
+        rows = await pg.fetch_all(
+            f"SELECT * FROM notifications{where} ORDER BY created_at DESC, id DESC LIMIT %s",
+            [*params, limit],
+        )
+        return [_serialize(r) for r in rows]
 
     @classmethod
     async def mark_as_read(cls, notification_id: str) -> bool:
-        """Mark a single notification as read by its ObjectId string."""
-        db = get_database()
-        if db is None:
-            return False
-
+        """Mark a single notification as read."""
         try:
-            oid = ObjectId(notification_id)
-            query = {"_id": oid}
-        except Exception:
-            query = {"id": notification_id}
-
-        result = await db.notifications.update_one(query, {"$set": {"read": True}})
-        return result.modified_count > 0
+            nid = int(notification_id)
+        except (TypeError, ValueError):
+            return False
+        return await pg.execute("UPDATE notifications SET read = TRUE WHERE id = %s AND NOT read", [nid]) > 0
 
     @classmethod
     async def mark_all_read(
@@ -122,18 +112,8 @@ class NotificationService:
         user_id: Optional[str] = None,
     ) -> int:
         """Mark all matching notifications as read."""
-        db = get_database()
-        if db is None:
-            return 0
-
-        query: Dict[str, Any] = {"read": False}
-        if target_role:
-            query["target_role"] = target_role.upper()
-        if user_id:
-            query["$or"] = [{"user_id": str(user_id)}, {"user_id": None}]
-
-        result = await db.notifications.update_many(query, {"$set": {"read": True}})
-        return result.modified_count
+        where, params = _filters(target_role, user_id, unread_only=True)
+        return await pg.execute(f"UPDATE notifications SET read = TRUE{where}", params)
 
     @classmethod
     async def get_unread_count(
@@ -142,15 +122,5 @@ class NotificationService:
         user_id: Optional[str] = None,
     ) -> int:
         """Return the count of unread notifications for a role/user."""
-        db = get_database()
-        if db is None:
-            return 0
-
-        query: Dict[str, Any] = {"read": False}
-        if target_role:
-            query["target_role"] = target_role.upper()
-        if user_id:
-            query["$or"] = [{"user_id": str(user_id)}, {"user_id": None}]
-
-        return await db.notifications.count_documents(query)
-
+        where, params = _filters(target_role, user_id, unread_only=True)
+        return await pg.fetch_val(f"SELECT count(*) AS n FROM notifications{where}", params) or 0

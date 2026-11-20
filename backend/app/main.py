@@ -1,17 +1,14 @@
 import logging
 from contextlib import asynccontextmanager
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
+from fastapi.responses import JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 import os
 from app.core.config import settings
 from app.routes import api_router
-from app.database.mongodb import (
-    get_database,
-    init_db_indexes,
-    seed_initial_data_if_empty,
-    close_mongodb_connection,
-)
+from app.database import postgres as pg
+from app.database.seed import seed_all
 from app.services.storage_service import StorageService
 
 logging.basicConfig(
@@ -26,30 +23,18 @@ async def lifespan(app: FastAPI):
     """Application lifespan context manager for startup and shutdown events."""
     logger.info("Starting up Venture X Backend API...")
     try:
-        db = get_database()
-        if db is not None:
-            try:
-                await db.command("ping")
-                logger.info("Successfully connected to MongoDB Atlas: %s", db.name)
-                # Safe index initialization
-                await init_db_indexes(db)
-                # Seed initial sample data if empty so UI pages work immediately
-                await seed_initial_data_if_empty(db)
-            except Exception as conn_err:
-                logger.warning(
-                    "MongoDB Atlas is reachable but TLS/Access was rejected: %s. "
-                    "Check your IP whitelist in MongoDB Atlas Network Access.",
-                    conn_err
-                )
-        else:
-            logger.warning("MongoDB Atlas is not configured in .env. Running in offline mode.")
+        if await pg.open_pool() is not None:
+            await pg.apply_schema()
+            # Seed demo data into empty tables so UI pages work immediately
+            await seed_all()
+            logger.info("Connected to Lakebase Postgres on Neon (branch: %s)", settings.NEON_BRANCH or "unknown")
     except Exception as e:
-        logger.error("Error during MongoDB initialization on startup: %s", e)
+        logger.error("Postgres initialization failed on startup: %s", e)
 
     yield
 
     logger.info("Shutting down Venture X Backend API...")
-    await close_mongodb_connection()
+    await pg.close_pool()
 
 
 app = FastAPI(
@@ -60,6 +45,11 @@ app = FastAPI(
     docs_url="/docs",
     redoc_url="/redoc",
 )
+
+@app.exception_handler(pg.DatabaseUnavailable)
+async def database_unavailable_handler(request: Request, exc: pg.DatabaseUnavailable):
+    return JSONResponse(status_code=503, content={"detail": "Database is unavailable. Check DATABASE_URL and connectivity to Neon."})
+
 
 # CORS configuration
 origins = settings.cors_origins

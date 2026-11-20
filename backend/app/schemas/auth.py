@@ -1,31 +1,18 @@
-from datetime import datetime
-from pydantic import BaseModel, EmailStr, Field
-from app.models.user import UserRole
+from typing import Literal, Optional
+from pydantic import BaseModel, Field
 
 
-class UserRegister(BaseModel):
-    email: EmailStr
-    password: str = Field(..., min_length=6, description="Password with minimum 6 characters")
-    role: UserRole = Field(default=UserRole.FOUNDER, description="Role: FOUNDER or INVESTOR")
-
-
-class UserLogin(BaseModel):
-    email: EmailStr
-    password: str
-
-
-class Token(BaseModel):
-    access_token: str
-    token_type: str = "bearer"
-    role: str
-    user_id: int
-
-
-class UserResponse(BaseModel):
-    id: int
+class MeResponse(BaseModel):
+    """The signed-in Neon Auth user plus their VentureX role."""
+    id: str
     email: str
-    role: str
-    created_at: datetime
+    name: Optional[str] = None
+    role: Optional[Literal["FOUNDER", "INVESTOR"]] = None
+    organization: Optional[str] = None
 
-    class Config:
-        from_attributes = True
+
+class OnboardingInput(BaseModel):
+    """Chosen once, right after sign-up."""
+    role: Literal["FOUNDER", "INVESTOR"]
+    name: Optional[str] = Field(None, max_length=200)
+    organization: Optional[str] = Field(None, max_length=200)

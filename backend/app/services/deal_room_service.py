@@ -3,10 +3,7 @@ import hashlib
 import uuid
 from datetime import datetime, timezone
 from typing import List, Dict, Any, Optional, Union
-from bson import ObjectId
-
-from app.database.mongodb import get_database
-from app.database.utils import serialize_doc, serialize_docs
+from app.database import postgres as pg
 from app.schemas.dealroom import (
     MessageCreateInput,
     StageUpdateInput,
@@ -23,250 +20,52 @@ def _compute_sha256(data_str: str) -> str:
     return hashlib.sha256(data_str.encode("utf-8")).hexdigest()
 
 
+# Appends one message to a room's hash chain in a single atomic statement:
+# lock the room, find the chain tip, insert the sealed message, update the room.
+# integrity_hash = sha256("{previous_hash}|{sequence}|{created_at iso}|{sender_id}|{content}"),
+# identical to _compute_sha256() over the same string, so exported transcripts verify.
+_SEND_MESSAGE_SQL = """
+WITH room AS (
+    SELECT id, audit_trail_hash FROM deal_rooms WHERE id = %s FOR UPDATE
+), tip AS (
+    SELECT
+        COALESCE(
+            (SELECT m.integrity_hash FROM deal_room_messages m
+             WHERE m.room_id = room.id ORDER BY m.sequence DESC LIMIT 1),
+            room.audit_trail_hash,
+            'GENESIS'
+        ) AS prev_hash,
+        COALESCE((SELECT max(m.sequence) FROM deal_room_messages m WHERE m.room_id = room.id), 0) + 1 AS seq
+    FROM room
+), ins AS (
+    INSERT INTO deal_room_messages
+        (id, room_id, sender_id, sender_role, sender_name, content, attachments,
+         sequence, previous_hash, integrity_hash, created_at, is_read)
+    SELECT %s, room.id, %s, %s, %s, %s, %s::jsonb,
+           tip.seq, tip.prev_hash,
+           encode(sha256(convert_to(
+               tip.prev_hash || '|' || tip.seq::text || '|' || %s::text || '|' || %s::text || '|' || %s::text,
+               'UTF8')), 'hex'),
+           %s::timestamptz, FALSE
+    FROM room, tip
+    RETURNING *
+), upd AS (
+    UPDATE deal_rooms d
+    SET last_message = %s, last_message_at = ins.created_at, last_message_sender = %s,
+        audit_trail_hash = ins.integrity_hash, updated_at = ins.created_at,
+        messages_count = d.messages_count + 1
+    FROM ins
+    WHERE d.id = ins.room_id
+)
+SELECT * FROM ins
+"""
+
+
 class DealRoomService:
     """Service handling secure Deal Rooms, tamper-evident conversation recording,
 
     cryptographic audit trails, and multi-party milestone management.
     """
-
-    @classmethod
-    async def _seed_initial_dealrooms_if_empty(cls, db) -> None:
-        """Seed initial deal rooms with recorded messages so UI is instantly interactive."""
-        count = await db.deal_rooms.count_documents({})
-        if count > 0:
-            return
-
-        now = datetime.now(timezone.utc)
-        room_id = "room-neuropulse-blueshift"
-        genesis_hash = _compute_sha256(f"GENESIS|{room_id}|{now.isoformat()}")
-
-        # 1. Initial messages with cryptographic hash chain
-        msg1_hash = _compute_sha256(f"{genesis_hash}|1|{now.isoformat()}|investor-002|Hi Alex, Marcus here from BlueShift.")
-        msg2_hash = _compute_sha256(f"{msg1_hash}|2|{now.isoformat()}|founder-001|Great to connect, Marcus!")
-        msg3_hash = _compute_sha256(f"{msg2_hash}|3|{now.isoformat()}|SYSTEM|Mutual NDA signed by Dr. Sarah Lin & Alex Rivers")
-        msg4_hash = _compute_sha256(f"{msg3_hash}|4|{now.isoformat()}|founder-001|Attached our confidential pilot ICU hospital clinical data.")
-
-        initial_messages = [
-            {
-                "id": "msg-001",
-                "room_id": room_id,
-                "sender_id": "investor-002",
-                "sender_role": "INVESTOR",
-                "sender_name": "Marcus Sterling",
-                "content": "Hi Alex, Marcus here from BlueShift Capital. We reviewed your pitch teaser and want to deep dive into your edge neural processor benchmarks.",
-                "attachments": [],
-                "sequence": 1,
-                "previous_hash": genesis_hash,
-                "integrity_hash": msg1_hash,
-                "created_at": now,
-                "is_read": True,
-            },
-            {
-                "id": "msg-002",
-                "room_id": room_id,
-                "sender_id": "founder-001",
-                "sender_role": "FOUNDER",
-                "sender_name": "Alex Rivers",
-                "content": "Great to connect, Marcus! We're excited about BlueShift's deeptech portfolio. We just completed our 2nd hospital ICU deployment with zero telemetry latency.",
-                "attachments": [],
-                "sequence": 2,
-                "previous_hash": msg1_hash,
-                "integrity_hash": msg2_hash,
-                "created_at": now,
-                "is_read": True,
-            },
-            {
-                "id": "msg-003",
-                "room_id": room_id,
-                "sender_id": "SYSTEM",
-                "sender_role": "SYSTEM",
-                "sender_name": "VentureX Security Escrow",
-                "content": "Mutual Non-Disclosure Agreement (NDA v2.4) digitally executed by both parties. Confidential data room documents unlocked.",
-                "attachments": [],
-                "sequence": 3,
-                "previous_hash": msg2_hash,
-                "integrity_hash": msg3_hash,
-                "created_at": now,
-                "is_read": True,
-            },
-            {
-                "id": "msg-004",
-                "room_id": room_id,
-                "sender_id": "founder-001",
-                "sender_role": "FOUNDER",
-                "sender_name": "Alex Rivers",
-                "content": "Here is our verified cap table and audited clinical validation study from Johns Hopkins pilot.",
-                "attachments": [
-                    {
-                        "name": "NeuroPulse_Clinical_Validation_2026.pdf",
-                        "url": "https://neuropulse.demo/clinical_study.pdf",
-                        "type": "clinical_data",
-                        "size_kb": 2480,
-                    },
-                    {
-                        "name": "NeuroPulse_CapTable_Series_Seed.xlsx",
-                        "url": "https://neuropulse.demo/captable.xlsx",
-                        "type": "cap_table",
-                        "size_kb": 640,
-                    },
-                ],
-                "sequence": 4,
-                "previous_hash": msg3_hash,
-                "integrity_hash": msg4_hash,
-                "created_at": now,
-                "is_read": False,
-            },
-        ]
-        await db.deal_room_messages.insert_many(initial_messages)
-
-        # 2. Initial Room 1
-        initial_room_1 = {
-            "id": room_id,
-            "interest_id": "intro-002",
-            "project_id": 1,
-            "project_title": "NeuroPulse AI",
-            "project_industry": "Healthcare & AI",
-            "founder_id": "founder-001",
-            "founder_name": "Alex Rivers",
-            "founder_email": "alex@neuropulse.demo",
-            "founder_company": "NeuroPulse AI",
-            "investor_id": "investor-002",
-            "investor_name": "Marcus Sterling",
-            "investor_firm": "BlueShift Capital",
-            "investor_email": "m.sterling@blueshiftcap.com",
-            "stage": "DUE_DILIGENCE",
-            "nda_signed": True,
-            "nda_signed_at": now,
-            "nda_signer_name": "Marcus Sterling & Alex Rivers",
-            "shared_documents": [
-                {
-                    "name": "NeuroPulse_Full_PitchDeck_v3.pdf",
-                    "url": "https://neuropulse.demo/deck.pdf",
-                    "type": "pitch_deck",
-                    "size_kb": 4120,
-                },
-                {
-                    "name": "NeuroPulse_Clinical_Validation_2026.pdf",
-                    "url": "https://neuropulse.demo/clinical_study.pdf",
-                    "type": "clinical_data",
-                    "size_kb": 2480,
-                },
-                {
-                    "name": "NeuroPulse_CapTable_Series_Seed.xlsx",
-                    "url": "https://neuropulse.demo/captable.xlsx",
-                    "type": "cap_table",
-                    "size_kb": 640,
-                },
-            ],
-            "created_at": now,
-            "updated_at": now,
-            "last_message": "Here is our verified cap table and audited clinical validation study from Johns Hopkins pilot.",
-            "last_message_at": now,
-            "last_message_sender": "Alex Rivers",
-            "messages_count": 4,
-            "audit_trail_hash": msg4_hash,
-            "is_secure_recording_active": True,
-        }
-
-        # 3. Initial Room 2 with Dr. Sarah Lin (Apex Horizon)
-        room_id_2 = "room-neuropulse-apex"
-        g2_hash = _compute_sha256(f"GENESIS|{room_id_2}|{now.isoformat()}")
-        m2_1_hash = _compute_sha256(f"{g2_hash}|1|{now.isoformat()}|investor-001|Hello Alex, Sarah Lin here.")
-
-        initial_messages_2 = [
-            {
-                "id": "msg-101",
-                "room_id": room_id_2,
-                "sender_id": "investor-001",
-                "sender_role": "INVESTOR",
-                "sender_name": "Dr. Sarah Lin",
-                "content": "Hello Alex, Dr. Sarah Lin here from Apex Horizon. Your ICU telemetry fits squarely into our $50M MedTech thesis. When are you free for an initial partner screening?",
-                "attachments": [],
-                "sequence": 1,
-                "previous_hash": g2_hash,
-                "integrity_hash": m2_1_hash,
-                "created_at": now,
-                "is_read": False,
-            }
-        ]
-        await db.deal_room_messages.insert_many(initial_messages_2)
-
-        initial_room_2 = {
-            "id": room_id_2,
-            "interest_id": "intro-001",
-            "project_id": 1,
-            "project_title": "NeuroPulse AI",
-            "project_industry": "Healthcare & AI",
-            "founder_id": "founder-001",
-            "founder_name": "Alex Rivers",
-            "founder_email": "alex@neuropulse.demo",
-            "founder_company": "NeuroPulse AI",
-            "investor_id": "investor-001",
-            "investor_name": "Dr. Sarah Lin",
-            "investor_firm": "Apex Horizon Ventures",
-            "investor_email": "sarah.lin@apexhorizon.vc",
-            "stage": "INTRO_ACCEPTED",
-            "nda_signed": False,
-            "nda_signed_at": None,
-            "nda_signer_name": None,
-            "shared_documents": [
-                {
-                    "name": "NeuroPulse_Executive_Summary.pdf",
-                    "url": "https://neuropulse.demo/exec_summary.pdf",
-                    "type": "pitch_deck",
-                    "size_kb": 1200,
-                }
-            ],
-            "created_at": now,
-            "updated_at": now,
-            "last_message": "Hello Alex, Dr. Sarah Lin here from Apex Horizon. Your ICU telemetry fits squarely into our $50M MedTech thesis.",
-            "last_message_at": now,
-            "last_message_sender": "Dr. Sarah Lin",
-            "messages_count": 1,
-            "audit_trail_hash": m2_1_hash,
-            "is_secure_recording_active": True,
-        }
-
-        await db.deal_rooms.insert_many([initial_room_1, initial_room_2])
-
-        # 4. Audit Log Entries
-        audit_entries = [
-            {
-                "id": str(uuid.uuid4()),
-                "room_id": room_id,
-                "event_type": "ROOM_CREATED",
-                "actor_id": "SYSTEM",
-                "actor_role": "SYSTEM",
-                "actor_name": "VentureX Deal Engine",
-                "details": {"interest_id": "intro-002", "parties": ["founder-001", "investor-002"]},
-                "tamper_hash": genesis_hash,
-                "timestamp": now,
-            },
-            {
-                "id": str(uuid.uuid4()),
-                "room_id": room_id,
-                "event_type": "NDA_EXECUTED",
-                "actor_id": "investor-002",
-                "actor_role": "INVESTOR",
-                "actor_name": "Marcus Sterling",
-                "details": {"nda_version": "2.4", "signer": "Marcus Sterling"},
-                "tamper_hash": msg3_hash,
-                "timestamp": now,
-            },
-            {
-                "id": str(uuid.uuid4()),
-                "room_id": room_id,
-                "event_type": "STAGE_ADVANCED",
-                "actor_id": "investor-002",
-                "actor_role": "INVESTOR",
-                "actor_name": "Marcus Sterling",
-                "details": {"from_stage": "INTRO_ACCEPTED", "to_stage": "DUE_DILIGENCE"},
-                "tamper_hash": msg4_hash,
-                "timestamp": now,
-            },
-        ]
-        await db.deal_room_audit_logs.insert_many(audit_entries)
-        logger.info("Successfully seeded initial Deal Rooms, messages, and cryptographic audit records.")
 
     @classmethod
     async def list_rooms(
@@ -275,43 +74,28 @@ class DealRoomService:
         role: Optional[str] = None,
     ) -> List[Dict[str, Any]]:
         """Retrieve all active deal rooms where user is participant."""
-        db = get_database()
-        if db is None:
-            return []
-
-        await cls._seed_initial_dealrooms_if_empty(db)
-
-        filter_query: Dict[str, Any] = {}
+        where = ""
+        params: List[Any] = []
         if user_id:
             clean_uid = str(user_id)
             if role == "FOUNDER":
-                filter_query["founder_id"] = clean_uid
+                where = " WHERE founder_id = %s"
+                params = [clean_uid]
             elif role == "INVESTOR":
-                filter_query["investor_id"] = clean_uid
+                where = " WHERE investor_id = %s"
+                params = [clean_uid]
             else:
-                filter_query["$or"] = [
-                    {"founder_id": clean_uid},
-                    {"investor_id": clean_uid},
-                ]
+                where = " WHERE founder_id = %s OR investor_id = %s"
+                params = [clean_uid, clean_uid]
 
-        cursor = db.deal_rooms.find(filter_query).sort("updated_at", -1)
-        rooms = await cursor.to_list(length=100)
-        return serialize_docs(rooms)
+        return await pg.fetch_all(
+            f"SELECT * FROM deal_rooms{where} ORDER BY updated_at DESC, id LIMIT 100", params
+        )
 
     @classmethod
     async def get_room(cls, room_id: str, user_id: Optional[str] = None) -> Optional[Dict[str, Any]]:
-        """Retrieve single deal room by custom id or ObjectId, verifying participation."""
-        db = get_database()
-        if db is None:
-            return None
-
-        await cls._seed_initial_dealrooms_if_empty(db)
-
-        filter_q = {"id": room_id}
-        if ObjectId.is_valid(room_id):
-            filter_q = {"$or": [{"id": room_id}, {"_id": ObjectId(room_id)}]}
-
-        room = await db.deal_rooms.find_one(filter_q)
+        """Retrieve a single deal room by id, verifying participation."""
+        room = await pg.fetch_one("SELECT * FROM deal_rooms WHERE id = %s", [room_id])
         if not room:
             return None
 
@@ -320,28 +104,28 @@ class DealRoomService:
             logger.warning("Unauthorized access attempt to deal room %s by user %s", room_id, user_id)
             return None
 
-        return serialize_doc(room)
+        return room
 
     @classmethod
     async def create_or_get_from_interest(cls, room_in: DealRoomCreateInput) -> Dict[str, Any]:
         """Create or find existing deal room for an introduction/interest record."""
-        db = get_database()
-        if db is None:
-            raise RuntimeError("Database connection not established")
-
         # Check existing room by interest_id or project + investor pair
-        existing = await db.deal_rooms.find_one({
-            "$or": [
-                {"interest_id": room_in.interest_id} if room_in.interest_id else {},
-                {
-                    "project_id": room_in.project_id,
-                    "founder_id": room_in.founder_id,
-                    "investor_id": room_in.investor_id,
-                },
-            ]
-        })
+        try:
+            project_id = int(room_in.project_id)
+        except (TypeError, ValueError):
+            raise ValueError(f"Invalid project id '{room_in.project_id}'")
+
+        existing = await pg.fetch_one(
+            """
+            SELECT * FROM deal_rooms
+            WHERE (%s::text IS NOT NULL AND interest_id = %s)
+               OR (project_id = %s AND founder_id = %s AND investor_id = %s)
+            LIMIT 1
+            """,
+            [room_in.interest_id, room_in.interest_id, project_id, room_in.founder_id, room_in.investor_id],
+        )
         if existing:
-            return serialize_doc(existing)
+            return existing
 
         now = datetime.now(timezone.utc)
         room_id = f"room-{uuid.uuid4().hex[:10]}"
@@ -350,7 +134,7 @@ class DealRoomService:
         new_room = {
             "id": room_id,
             "interest_id": room_in.interest_id,
-            "project_id": room_in.project_id,
+            "project_id": project_id,
             "project_title": room_in.project_title,
             "founder_id": room_in.founder_id,
             "founder_name": room_in.founder_name,
@@ -373,7 +157,7 @@ class DealRoomService:
             "audit_trail_hash": genesis_hash,
             "is_secure_recording_active": True,
         }
-        await db.deal_rooms.insert_one(new_room)
+        created_room = await pg.insert("deal_rooms", new_room)
 
         # Log genesis audit record
         audit_rec = {
@@ -387,7 +171,7 @@ class DealRoomService:
             "tamper_hash": genesis_hash,
             "timestamp": now,
         }
-        await db.deal_room_audit_logs.insert_one(audit_rec)
+        await pg.insert("deal_room_audit_logs", audit_rec, returning=False)
 
         if room_in.initial_message:
             init_msg_hash = _compute_sha256(f"{genesis_hash}|1|{now.isoformat()}|SYSTEM|{room_in.initial_message}")
@@ -405,9 +189,9 @@ class DealRoomService:
                 "created_at": now,
                 "is_read": False,
             }
-            await db.deal_room_messages.insert_one(msg_doc)
+            await pg.insert("deal_room_messages", msg_doc, returning=False)
 
-        return serialize_doc(new_room)
+        return created_room
 
     @classmethod
     async def get_messages(
@@ -417,19 +201,16 @@ class DealRoomService:
         limit: int = 100,
     ) -> List[Dict[str, Any]]:
         """Retrieve conversation history with cryptographic signatures."""
-        db = get_database()
-        if db is None:
-            return []
-
         # Access check
         room = await cls.get_room(room_id, user_id=user_id)
         if not room:
             logger.warning("Access denied to room messages for user %s", user_id)
             return []
 
-        cursor = db.deal_room_messages.find({"room_id": room_id}).sort("sequence", 1).limit(limit)
-        messages = await cursor.to_list(length=limit)
-        return serialize_docs(messages)
+        return await pg.fetch_all(
+            "SELECT * FROM deal_room_messages WHERE room_id = %s ORDER BY sequence LIMIT %s",
+            [room_id, limit],
+        )
 
     @classmethod
     async def send_message(
@@ -438,60 +219,37 @@ class DealRoomService:
         message_in: MessageCreateInput,
     ) -> Dict[str, Any]:
         """Record and cryptographically seal an immutable conversation message."""
-        db = get_database()
-        if db is None:
-            raise RuntimeError("Database connection not established")
-
         room = await cls.get_room(room_id)
         if not room:
             raise ValueError(f"Deal Room '{room_id}' not found")
 
-        # Monotonic sequence & cryptographic previous hash resolution
-        last_msg = await db.deal_room_messages.find_one(
-            {"room_id": room_id},
-            sort=[("sequence", -1)]
-        )
-        prev_hash = last_msg.get("integrity_hash") if last_msg else room.get("audit_trail_hash", "GENESIS")
-        next_seq = (last_msg.get("sequence", 0) + 1) if last_msg else 1
-
         now = datetime.now(timezone.utc)
         attachments_data = [att.model_dump() for att in (message_in.attachments or [])]
 
-        # Calculate immutable SHA-256 integrity signature
-        payload_str = f"{prev_hash}|{next_seq}|{now.isoformat()}|{message_in.sender_id}|{message_in.content}"
-        msg_hash = _compute_sha256(payload_str)
-
         msg_id = f"msg-{uuid.uuid4().hex[:10]}"
-        msg_doc = {
-            "id": msg_id,
-            "room_id": room_id,
-            "sender_id": message_in.sender_id,
-            "sender_role": message_in.sender_role,
-            "sender_name": message_in.sender_name,
-            "content": message_in.content,
-            "attachments": attachments_data,
-            "sequence": next_seq,
-            "previous_hash": prev_hash,
-            "integrity_hash": msg_hash,
-            "created_at": now,
-            "is_read": False,
-        }
-        await db.deal_room_messages.insert_one(msg_doc)
-
-        # Update room last message info and audit pointer
-        await db.deal_rooms.update_one(
-            {"id": room_id},
-            {
-                "$set": {
-                    "last_message": message_in.content[:140],
-                    "last_message_at": now,
-                    "last_message_sender": message_in.sender_name,
-                    "audit_trail_hash": msg_hash,
-                    "updated_at": now,
-                },
-                "$inc": {"messages_count": 1},
-            }
-        )
+        created_iso = now.isoformat()
+        params = [
+            room_id,                                   # room
+            msg_id, message_in.sender_id, message_in.sender_role, message_in.sender_name,
+            message_in.content, pg.Jsonb(attachments_data),
+            created_iso, message_in.sender_id, message_in.content,   # hash payload
+            created_iso,                               # created_at
+            message_in.content[:140], message_in.sender_name,        # room summary
+        ]
+        msg_doc = None
+        for attempt in range(3):
+            try:
+                msg_doc = await pg.fetch_one(_SEND_MESSAGE_SQL, params)
+                break
+            except pg.DatabaseError as e:
+                # Two senders raced for the same sequence number: the UNIQUE
+                # (room_id, sequence) constraint rejected one; retry on the new tip.
+                if e.code != "23505" or attempt == 2:
+                    raise
+        if msg_doc is None:
+            raise ValueError(f"Deal Room '{room_id}' not found")
+        next_seq = msg_doc["sequence"]
+        msg_hash = msg_doc["integrity_hash"]
 
         # Append to compliance audit log
         audit_entry = {
@@ -509,24 +267,21 @@ class DealRoomService:
             "tamper_hash": msg_hash,
             "timestamp": now,
         }
-        await db.deal_room_audit_logs.insert_one(audit_entry)
+        await pg.insert("deal_room_audit_logs", audit_entry, returning=False)
 
         # Send notification to counterparty
         recipient_id = room["investor_id"] if message_in.sender_role == "FOUNDER" else room["founder_id"]
         recipient_role = "INVESTOR" if message_in.sender_role == "FOUNDER" else "FOUNDER"
-        notif_doc = {
-            "user_id": recipient_id,
-            "target_role": recipient_role,
-            "title": f"New Message from {message_in.sender_name}",
-            "desc": f"{message_in.sender_name} posted in Deal Room for '{room.get('project_title')}': {message_in.content[:80]}",
-            "time": "Just now",
-            "badge": "Deal Room",
-            "badge_variant": "primary",
-            "read": False,
-            "link": f"/dealroom/{room_id}",
-            "created_at": now,
-        }
-        await db.notifications.insert_one(notif_doc)
+        from app.services.notification_service import NotificationService
+        await NotificationService.create_notification(
+            target_role=recipient_role,
+            user_id=recipient_id,
+            title=f"New Message from {message_in.sender_name}",
+            desc=f"{message_in.sender_name} posted in Deal Room for '{room.get('project_title')}': {message_in.content[:80]}",
+            badge="Deal Room",
+            badge_variant="primary",
+            link=f"/dealroom/{room_id}",
+        )
 
         # Dispatch email alert to counterparty
         try:
@@ -554,15 +309,11 @@ class DealRoomService:
         except Exception as e:
             logger.warning("Failed to dispatch dealroom message email alert: %s", e)
 
-        return serialize_doc(msg_doc)
+        return msg_doc
 
     @classmethod
     async def update_stage(cls, room_id: str, stage_in: StageUpdateInput) -> Dict[str, Any]:
         """Advance or update the Deal Room lifecycle stage with a recorded milestone."""
-        db = get_database()
-        if db is None:
-            raise RuntimeError("Database connection not established")
-
         room = await cls.get_room(room_id)
         if not room:
             raise ValueError(f"Deal Room '{room_id}' not found")
@@ -571,15 +322,7 @@ class DealRoomService:
         old_stage = room.get("stage", "INTRO_ACCEPTED")
 
         # Update room stage
-        await db.deal_rooms.update_one(
-            {"id": room_id},
-            {
-                "$set": {
-                    "stage": stage_in.stage,
-                    "updated_at": now,
-                }
-            }
-        )
+        await pg.update_where("deal_rooms", {"stage": stage_in.stage, "updated_at": now}, "id = %s", [room_id])
 
         # Insert system milestone message into conversation
         note_text = f" Note: {stage_in.note}" if stage_in.note else ""
@@ -605,7 +348,7 @@ class DealRoomService:
             "tamper_hash": _compute_sha256(f"{room_id}|{stage_in.stage}|{now.isoformat()}"),
             "timestamp": now,
         }
-        await db.deal_room_audit_logs.insert_one(audit_entry)
+        await pg.insert("deal_room_audit_logs", audit_entry, returning=False)
 
         updated_room = await cls.get_room(room_id)
         return updated_room
@@ -613,25 +356,16 @@ class DealRoomService:
     @classmethod
     async def sign_nda(cls, room_id: str, nda_in: NDASignInput) -> Dict[str, Any]:
         """Execute digital NDA bilateral confidentiality agreement."""
-        db = get_database()
-        if db is None:
-            raise RuntimeError("Database connection not established")
-
         room = await cls.get_room(room_id)
         if not room:
             raise ValueError(f"Deal Room '{room_id}' not found")
 
         now = datetime.now(timezone.utc)
-        await db.deal_rooms.update_one(
-            {"id": room_id},
-            {
-                "$set": {
-                    "nda_signed": True,
-                    "nda_signed_at": now,
-                    "nda_signer_name": nda_in.signer_name,
-                    "updated_at": now,
-                }
-            }
+        await pg.update_where(
+            "deal_rooms",
+            {"nda_signed": True, "nda_signed_at": now, "nda_signer_name": nda_in.signer_name, "updated_at": now},
+            "id = %s",
+            [room_id],
         )
 
         # Announce in deal room
@@ -656,17 +390,13 @@ class DealRoomService:
             "tamper_hash": _compute_sha256(f"NDA|{room_id}|{nda_in.signer_id}|{now.isoformat()}"),
             "timestamp": now,
         }
-        await db.deal_room_audit_logs.insert_one(audit_entry)
+        await pg.insert("deal_room_audit_logs", audit_entry, returning=False)
 
         return await cls.get_room(room_id)
 
     @classmethod
     async def share_document(cls, room_id: str, doc_in: DocumentShareInput) -> Dict[str, Any]:
         """Share a confidential file / document into the Deal Room vault."""
-        db = get_database()
-        if db is None:
-            raise RuntimeError("Database connection not established")
-
         room = await cls.get_room(room_id)
         if not room:
             raise ValueError(f"Deal Room '{room_id}' not found")
@@ -679,12 +409,9 @@ class DealRoomService:
         }
 
         # Add to shared documents in room
-        await db.deal_rooms.update_one(
-            {"id": room_id},
-            {
-                "$push": {"shared_documents": doc_dict},
-                "$set": {"updated_at": datetime.now(timezone.utc)},
-            }
+        await pg.execute(
+            "UPDATE deal_rooms SET shared_documents = shared_documents || %s, updated_at = now() WHERE id = %s",
+            [pg.Jsonb([doc_dict]), room_id],
         )
 
         # Post message with attachment
@@ -707,10 +434,6 @@ class DealRoomService:
         user_id: Optional[str] = None,
     ) -> Dict[str, Any]:
         """Export tamper-verified conversation transcript with integrity certificates for regulatory compliance."""
-        db = get_database()
-        if db is None:
-            raise RuntimeError("Database connection not established")
-
         room = await cls.get_room(room_id, user_id=user_id)
         if not room:
             raise ValueError(f"Deal Room '{room_id}' not accessible or not found")
@@ -786,17 +509,14 @@ class DealRoomService:
             "tamper_hash": _compute_sha256(f"EXPORT|{room_id}|{now.isoformat()}"),
             "timestamp": now,
         }
-        await db.deal_room_audit_logs.insert_one(audit_entry)
+        await pg.insert("deal_room_audit_logs", audit_entry, returning=False)
 
         return transcript
 
     @classmethod
     async def get_audit_logs(cls, room_id: str) -> List[Dict[str, Any]]:
         """Retrieve the immutable tamper-evident event log for a Deal Room."""
-        db = get_database()
-        if db is None:
-            return []
-
-        cursor = db.deal_room_audit_logs.find({"room_id": room_id}).sort("timestamp", 1)
-        logs = await cursor.to_list(length=100)
-        return serialize_docs(logs)
+        return await pg.fetch_all(
+            'SELECT * FROM deal_room_audit_logs WHERE room_id = %s ORDER BY "timestamp" LIMIT 100',
+            [room_id],
+        )

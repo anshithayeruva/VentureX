@@ -2,9 +2,7 @@ import logging
 import re
 from datetime import datetime, timezone
 from typing import List, Dict, Any, Optional, Union
-from bson import ObjectId
-from app.database.mongodb import get_database
-from app.database.utils import serialize_doc, serialize_docs
+from app.database import postgres as pg
 
 logger = logging.getLogger(__name__)
 
@@ -99,45 +97,34 @@ DEMO_INVESTORS = [
 
 class MatchService:
     @classmethod
-    async def ensure_investors_initialized(cls, db) -> None:
-        """Ensure all benchmark syndicate investors are registered in the database."""
+    async def ensure_investors_initialized(cls) -> None:
+        """Ensure all benchmark syndicate investors exist (insert-if-missing, never overwrite)."""
         now = datetime.now(timezone.utc)
         for inv in DEMO_INVESTORS:
             user_id = inv["user_id"]
-            existing = await db.investor_profiles.find_one({"user_id": user_id})
-            if not existing:
-                profile_doc = {
-                    "user_id": user_id,
-                    "name": inv["name"],
-                    "firm": inv["firm"],
-                    "title": inv["title"],
-                    "bio": inv["bio"],
-                    "location": inv["location"],
-                    "thesis": inv["thesis"],
-                    "min_check": inv["min_check"],
-                    "max_check": inv["max_check"],
-                    "created_at": now,
-                    "updated_at": now,
-                }
-                await db.investor_profiles.update_one(
-                    {"user_id": user_id},
-                    {"$set": profile_doc},
-                    upsert=True
-                )
+            profile_doc = {
+                "user_id": user_id,
+                "name": inv["name"],
+                "firm": inv["firm"],
+                "title": inv["title"],
+                "bio": inv["bio"],
+                "location": inv["location"],
+                "thesis": inv["thesis"],
+                "min_check": inv["min_check"],
+                "max_check": inv["max_check"],
+                "created_at": now,
+                "updated_at": now,
+            }
+            # update=[] -> ON CONFLICT DO NOTHING
+            await pg.upsert("investor_profiles", profile_doc, ["user_id"], update=[])
 
-            pref_existing = await db.investor_preferences.find_one({"investor_id": user_id})
-            if not pref_existing:
-                pref_doc = {
-                    "investor_id": user_id,
-                    **inv["preferences"],
-                    "created_at": now,
-                    "updated_at": now,
-                }
-                await db.investor_preferences.update_one(
-                    {"investor_id": user_id},
-                    {"$set": pref_doc},
-                    upsert=True
-                )
+            pref_doc = {
+                "investor_id": user_id,
+                **inv["preferences"],
+                "created_at": now,
+                "updated_at": now,
+            }
+            await pg.upsert("investor_preferences", pref_doc, ["investor_id"], update=[])
 
     @staticmethod
     def _tokenize(text: str) -> set:
@@ -284,38 +271,30 @@ class MatchService:
     @classmethod
     async def compute_matches_for_project(cls, project_id: Union[int, str]) -> List[Dict[str, Any]]:
         """Recalculate dynamic matches for a specific project across all investors."""
-        db = get_database()
-        if db is None:
-            return []
+        await cls.ensure_investors_initialized()
 
-        await cls.ensure_investors_initialized(db)
-
-        # Parse project query
-        query = {"$or": [{"id": project_id}]}
-        try:
-            query["$or"].append({"id": int(project_id)})
-        except (ValueError, TypeError):
-            pass
-        try:
-            query["$or"].append({"id": str(project_id)})
-        except Exception:
-            pass
-        if ObjectId.is_valid(str(project_id)):
-            query["$or"].append({"_id": ObjectId(str(project_id))})
-
-        project = await db.projects.find_one(query)
+        from app.services.project_service import ProjectService
+        project = await ProjectService.get_by_id(project_id)
         if not project:
             logger.warning("Project %s not found for match computation", project_id)
             return []
 
-        # Load all investor profiles and preferences
-        cursor = db.investor_profiles.find({})
-        investors = await cursor.to_list(length=100)
+        # Load all investor profiles with their preferences in one query
+        investors = await pg.fetch_all(
+            """
+            SELECT to_jsonb(ip) AS profile, to_jsonb(pr) AS preference
+            FROM investor_profiles ip
+            LEFT JOIN investor_preferences pr ON pr.investor_id = ip.user_id
+            ORDER BY ip.created_at
+            LIMIT 100
+            """
+        )
 
         results = []
-        for inv in investors:
+        for row in investors:
+            inv = row["profile"]
             user_id = inv.get("user_id")
-            pref = await db.investor_preferences.find_one({"investor_id": user_id})
+            pref = row["preference"]
             if not pref:
                 # Fallback to default preference from demo list
                 demo_match = next((d["preferences"] for d in DEMO_INVESTORS if d["user_id"] == user_id), None)
@@ -323,11 +302,7 @@ class MatchService:
 
             match_data = cls.calculate_match(project, inv, pref)
             if match_data:
-                await db.matches.update_one(
-                    {"project_id": match_data["project_id"], "investor_id": match_data["investor_id"]},
-                    {"$set": match_data},
-                    upsert=True
-                )
+                await cls._store_match(match_data)
                 results.append(match_data)
 
                 # Emit automated notification for high-fit deals (> 90%)
@@ -337,10 +312,10 @@ class MatchService:
                         p_title = project.get("title", "Startup")
                         p_ind = project.get("industry", "DeepTech")
                         score = match_data["match_score"]
-                        existing = await db.notifications.find_one({
-                            "user_id": user_id,
-                            "title": {"$regex": f".*{p_title}.*"},
-                        })
+                        existing = await pg.fetch_val(
+                            "SELECT EXISTS (SELECT 1 FROM notifications WHERE user_id = %s AND title LIKE %s) AS e",
+                            [user_id, f"%{pg.escape_like(p_title)}%"],
+                        )
                         if not existing:
                             await NotificationService.create_notification(
                                 target_role="INVESTOR",
@@ -360,35 +335,26 @@ class MatchService:
     @classmethod
     async def compute_matches_for_investor(cls, investor_id: str) -> List[Dict[str, Any]]:
         """Recalculate dynamic matches for an investor across all startup projects."""
-        db = get_database()
-        if db is None:
-            return []
+        await cls.ensure_investors_initialized()
 
-        await cls.ensure_investors_initialized(db)
-
-        investor = await db.investor_profiles.find_one({"user_id": investor_id})
+        investor = await pg.fetch_one("SELECT * FROM investor_profiles WHERE user_id = %s", [investor_id])
         if not investor:
             investor = next((d for d in DEMO_INVESTORS if d["user_id"] == investor_id), None)
             if not investor:
                 logger.warning("Investor %s not found for match calculation", investor_id)
                 return []
 
-        pref = await db.investor_preferences.find_one({"investor_id": investor_id})
+        pref = await pg.fetch_one("SELECT * FROM investor_preferences WHERE investor_id = %s", [investor_id])
         if not pref:
             pref = investor.get("preferences") or {}
 
-        cursor = db.projects.find({})
-        projects = await cursor.to_list(length=200)
+        projects = await pg.fetch_all("SELECT * FROM projects ORDER BY created_at LIMIT 200")
 
         results = []
         for project in projects:
             match_data = cls.calculate_match(project, investor, pref)
             if match_data:
-                await db.matches.update_one(
-                    {"project_id": match_data["project_id"], "investor_id": match_data["investor_id"]},
-                    {"$set": match_data},
-                    upsert=True
-                )
+                await cls._store_match(match_data)
                 results.append(match_data)
 
                 # Emit automated notification for high-fit deals (> 90%)
@@ -398,10 +364,10 @@ class MatchService:
                         p_title = project.get("title", "Startup")
                         p_ind = project.get("industry", "DeepTech")
                         score = match_data["match_score"]
-                        existing = await db.notifications.find_one({
-                            "user_id": investor_id,
-                            "title": {"$regex": f".*{p_title}.*"},
-                        })
+                        existing = await pg.fetch_val(
+                            "SELECT EXISTS (SELECT 1 FROM notifications WHERE user_id = %s AND title LIKE %s) AS e",
+                            [investor_id, f"%{pg.escape_like(p_title)}%"],
+                        )
                         if not existing:
                             await NotificationService.create_notification(
                                 target_role="INVESTOR",
@@ -421,14 +387,9 @@ class MatchService:
     @classmethod
     async def recompute_all_matches(cls) -> int:
         """Full recomputation of matches across all projects and registered investors."""
-        db = get_database()
-        if db is None:
-            return 0
+        await cls.ensure_investors_initialized()
 
-        await cls.ensure_investors_initialized(db)
-
-        cursor = db.projects.find({})
-        projects = await cursor.to_list(length=200)
+        projects = await pg.fetch_all("SELECT id FROM projects ORDER BY created_at LIMIT 200")
 
         total = 0
         for p in projects:
@@ -437,7 +398,7 @@ class MatchService:
                 matches = await cls.compute_matches_for_project(p_id)
                 total += len(matches)
 
-        logger.info("Successfully refreshed total of %d dynamic matches in MongoDB Atlas.", total)
+        logger.info("Successfully refreshed total of %d dynamic matches in Postgres.", total)
         return total
 
     @classmethod
@@ -448,31 +409,38 @@ class MatchService:
         limit: int = 50,
     ) -> List[Dict[str, Any]]:
         """Retrieve matches with explainable reasoning, ensuring calculations are up to date."""
-        db = get_database()
-        if db is None:
-            return []
-
-        # If database currently has 0 matches, auto-compute
-        current_count = await db.matches.count_documents({})
-        if current_count == 0:
-            logger.info("No matches found in collection; running initial dynamic match synthesis...")
+        # If the table is empty, auto-compute
+        if not await pg.fetch_val("SELECT EXISTS (SELECT 1 FROM matches) AS present"):
+            logger.info("No matches stored yet; running initial dynamic match synthesis...")
             await cls.recompute_all_matches()
 
-        query: Dict[str, Any] = {}
+        where: List[str] = []
+        params: List[Any] = []
         if project_id:
             try:
-                query["project_id"] = int(project_id)
+                params.append(int(project_id))
             except ValueError:
-                query["project_id"] = project_id
+                return []
+            where.append("project_id = %s")
 
         if search and search.strip():
-            s = search.strip()
-            query["$or"] = [
-                {"investor_name": {"$regex": s, "$options": "i"}},
-                {"investor_firm": {"$regex": s, "$options": "i"}},
-                {"project_title": {"$regex": s, "$options": "i"}},
-            ]
+            pattern = f"%{pg.escape_like(search.strip())}%"
+            where.append("(investor_name ILIKE %s OR investor_firm ILIKE %s OR project_title ILIKE %s)")
+            params.extend([pattern] * 3)
 
-        cursor = db.matches.find(query).sort("match_score", -1).limit(limit)
-        docs = await cursor.to_list(length=limit)
-        return serialize_docs(docs)
+        sql = "SELECT * FROM matches"
+        if where:
+            sql += " WHERE " + " AND ".join(where)
+        sql += " ORDER BY match_score DESC, id LIMIT %s"
+        return await pg.fetch_all(sql, [*params, limit])
+
+    @staticmethod
+    async def _store_match(match_data: Dict[str, Any]) -> None:
+        """Upsert by (project_id, investor_id), keeping the row's original id and created_at."""
+        row = {**match_data, "investor_id": str(match_data["investor_id"])}
+        await pg.upsert(
+            "matches",
+            row,
+            ["project_id", "investor_id"],
+            update=[c for c in row if c not in ("project_id", "investor_id", "id", "created_at")],
+        )

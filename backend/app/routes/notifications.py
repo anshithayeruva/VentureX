@@ -1,6 +1,7 @@
 import logging
 from typing import List, Optional, Dict, Any
-from fastapi import APIRouter, Query, HTTPException, Path
+from fastapi import APIRouter, Depends, Query, HTTPException, Path
+from app.core.auth import CurrentUser, require_user
 from app.schemas.notification import NotificationResponse, NotificationMarkReadResponse
 from app.services.notification_service import NotificationService
 
@@ -39,6 +40,7 @@ async def get_unread_count(
 @router.patch("/{notification_id}/read", response_model=NotificationMarkReadResponse)
 async def mark_notification_read(
     notification_id: str = Path(..., description="Notification ID to mark as read"),
+    user: CurrentUser = Depends(require_user),
 ):
     """Mark an individual notification as read."""
     success = await NotificationService.mark_as_read(notification_id)
@@ -55,6 +57,7 @@ async def mark_notification_read(
 async def mark_all_notifications_read(
     role: Optional[str] = Query(None, description="Target role: FOUNDER or INVESTOR"),
     user_id: Optional[str] = Query(None),
+    user: CurrentUser = Depends(require_user),
 ):
     """Mark all notifications for the specified role/user as read."""
     count = await NotificationService.mark_all_read(target_role=role, user_id=user_id)

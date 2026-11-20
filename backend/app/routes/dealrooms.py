@@ -1,7 +1,7 @@
 import logging
 import json
 from typing import List, Optional, Dict
-from fastapi import APIRouter, HTTPException, status, Query, WebSocket, WebSocketDisconnect
+from fastapi import APIRouter, Depends, HTTPException, status, Query, WebSocket, WebSocketDisconnect
 from fastapi.responses import Response
 
 from app.schemas.dealroom import (
@@ -14,6 +14,7 @@ from app.schemas.dealroom import (
     DealRoomCreateInput,
     DealRoomAuditLog,
 )
+from app.core.auth import CurrentUser, require_user
 from app.services.deal_room_service import DealRoomService
 from app.utils.pdf_generator import PDFGenerator
 
@@ -63,6 +64,22 @@ class ConnectionManager:
 manager = ConnectionManager()
 
 
+async def _require_participant(room_id: str, user: CurrentUser) -> dict:
+    """Only the room's founder or investor may act in it."""
+    room = await DealRoomService.get_room(room_id, user_id=user.id)
+    if not room:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Deal Room '{room_id}' not found or access denied",
+        )
+    return room
+
+
+def _as_sender(user: CurrentUser) -> dict:
+    """Identity fields come from the verified token, never from the request body."""
+    return {"sender_id": user.id, "sender_role": user.role or "FOUNDER", "sender_name": user.name or user.email}
+
+
 @router.get("", response_model=List[DealRoom])
 async def list_deal_rooms(
     user_id: Optional[str] = Query(None, description="Filter by user participant ID"),
@@ -74,8 +91,10 @@ async def list_deal_rooms(
 
 
 @router.post("", response_model=DealRoom, status_code=status.HTTP_201_CREATED)
-async def create_deal_room(room_in: DealRoomCreateInput):
+async def create_deal_room(room_in: DealRoomCreateInput, user: CurrentUser = Depends(require_user)):
     """Initiate a secure Deal Room between a founder and matched investor."""
+    if user.id not in (room_in.founder_id, room_in.investor_id):
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="You must be a party to the deal room")
     try:
         room = await DealRoomService.create_or_get_from_interest(room_in)
         return room
@@ -114,8 +133,14 @@ async def get_messages(
 
 
 @router.post("/{room_id}/messages", response_model=DealMessage, status_code=status.HTTP_201_CREATED)
-async def send_message(room_id: str, message_in: MessageCreateInput):
+async def send_message(
+    room_id: str,
+    message_in: MessageCreateInput,
+    user: CurrentUser = Depends(require_user),
+):
     """Post and cryptographically record an immutable direct message into the Deal Room."""
+    await _require_participant(room_id, user)
+    message_in = message_in.model_copy(update=_as_sender(user))
     try:
         msg = await DealRoomService.send_message(room_id, message_in)
         # Real-time WebSocket broadcast to all connected participants in this room
@@ -189,8 +214,10 @@ async def dealroom_websocket(websocket: WebSocket, room_id: str):
 
 
 @router.patch("/{room_id}/stage", response_model=DealRoom)
-async def update_stage(room_id: str, stage_in: StageUpdateInput):
+async def update_stage(room_id: str, stage_in: StageUpdateInput, user: CurrentUser = Depends(require_user)):
     """Advance deal pipeline milestone (e.g. Due Diligence, Term Sheet) with audit record."""
+    await _require_participant(room_id, user)
+    stage_in = stage_in.model_copy(update=_as_sender(user))
     try:
         updated_room = await DealRoomService.update_stage(room_id, stage_in)
         return updated_room
@@ -201,8 +228,15 @@ async def update_stage(room_id: str, stage_in: StageUpdateInput):
 
 
 @router.post("/{room_id}/nda", response_model=DealRoom)
-async def sign_nda(room_id: str, nda_in: NDASignInput):
+async def sign_nda(room_id: str, nda_in: NDASignInput, user: CurrentUser = Depends(require_user)):
     """Digitally sign bilateral NDA to unlock full diligence documents."""
+    await _require_participant(room_id, user)
+    sender = _as_sender(user)
+    nda_in = nda_in.model_copy(update={
+        "signer_id": sender["sender_id"],
+        "signer_role": sender["sender_role"],
+        "signer_name": sender["sender_name"],
+    })
     try:
         updated_room = await DealRoomService.sign_nda(room_id, nda_in)
         return updated_room
@@ -213,8 +247,10 @@ async def sign_nda(room_id: str, nda_in: NDASignInput):
 
 
 @router.post("/{room_id}/documents", response_model=DealRoom)
-async def share_document(room_id: str, doc_in: DocumentShareInput):
+async def share_document(room_id: str, doc_in: DocumentShareInput, user: CurrentUser = Depends(require_user)):
     """Upload or share a confidential pitch deck, financial model, or cap table into the Deal Room."""
+    await _require_participant(room_id, user)
+    doc_in = doc_in.model_copy(update=_as_sender(user))
     try:
         updated_room = await DealRoomService.share_document(room_id, doc_in)
         return updated_room
