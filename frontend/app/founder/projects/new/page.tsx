@@ -1,537 +1,108 @@
 "use client";
 
 import React, { useState } from "react";
-import Link from "next/link";
-import { useRouter } from "next/navigation";
-import {
-  Rocket,
-  Sparkles,
-  ArrowLeft,
-  CheckCircle2,
-  DollarSign,
-  AlertCircle,
-  Cpu,
-  Layers,
-  Lock,
-  Upload,
-  FileText,
-  Paperclip,
-} from "lucide-react";
-import { Badge } from "@/components/Badge";
+import { CheckCircle2, Sparkles } from "lucide-react";
 import { PortalLayout } from "@/components/PortalLayout";
+import { EMPTY_PROJECT, ProjectForm, ProjectFormExtras } from "@/components/ProjectForm";
+import { ButtonLink, Card, PageHeader, buttonClass } from "@/components/ui";
 import { api } from "@/lib/api";
-import { ProjectCreateInput } from "@/types";
+import { Project, ProjectCreateInput } from "@/types";
 
 export default function NewProjectPage() {
-  const router = useRouter();
   const [submitting, setSubmitting] = useState(false);
-  const [successResult, setSuccessResult] = useState<any>(null);
-  const [errorMessage, setErrorMessage] = useState<string | null>(null);
-  // The deck is uploaded privately to the project once it exists (never to the public /uploads folder).
-  const [pendingDeck, setPendingDeck] = useState<File | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [created, setCreated] = useState<Project | null>(null);
   const [deckWarning, setDeckWarning] = useState<string | null>(null);
+  const [formKey, setFormKey] = useState(0);
 
-  const [formData, setFormData] = useState<ProjectCreateInput>({
-    title: "",
-    tagline: "",
-    description: "",
-    problem: "",
-    solution: "",
-    industry: "AI/ML",
-    stage: "Seed",
-    funding_required: 500000,
-    business_model: "B2B SaaS",
-    target_market: "",
-    website: "",
-    pitch_deck_url: "",
-    github_url: "",
-    demo_url: "",
-  });
-
-  const [makePublicNow, setMakePublicNow] = useState(false);
-
-  const industries = [
-    "AI/ML",
-    "Healthcare & AI",
-    "ClimateTech",
-    "Cybersecurity",
-    "Fintech",
-    "Developer Tools",
-    "BioTech",
-    "Robotics",
-    "B2B SaaS",
-    "Web3 & Infrastructure",
-  ];
-
-  const stages = [
-    "Idea Phase",
-    "Prototype",
-    "MVP / Private Beta",
-    "Early Traction",
-    "Pre-seed",
-    "Seed",
-    "Series A",
-  ];
-
-  const businessModels = [
-    "B2B SaaS",
-    "Enterprise Licensing",
-    "Marketplace / Commission",
-    "Usage-Based API",
-    "Hardware + Recurring Software",
-    "D2C Subscription",
-  ];
-
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
+  const handleSubmit = async (data: ProjectCreateInput, { publish, deck }: ProjectFormExtras) => {
     setSubmitting(true);
-    setErrorMessage(null);
-
+    setError(null);
     setDeckWarning(null);
     try {
-      const created = await api.createProject({ ...formData, is_published: makePublicNow });
-      if (pendingDeck) {
+      const project = await api.createProject({ ...data, is_published: publish });
+      // The deck goes privately to the new project (never to a public folder).
+      if (deck) {
         try {
-          await api.uploadProjectDocument(created.id, pendingDeck, "pitch_deck");
+          await api.uploadProjectDocument(project.id, deck, "pitch_deck");
         } catch (uploadErr) {
           setDeckWarning(
-            `The project was created, but the pitch deck upload failed: ${uploadErr instanceof Error ? uploadErr.message : "unknown error"}. ` +
-              "You can upload it again from the project page."
+            `The project was saved, but the pitch deck didn't upload (${
+              uploadErr instanceof Error ? uploadErr.message : "unknown error"
+            }). You can add it from the project page.`
           );
         }
       }
-      setSuccessResult(created);
-    } catch (err: any) {
-      setErrorMessage(err.message || "Failed to submit project. Please try again.");
+      setCreated(project);
+      window.scrollTo({ top: 0 });
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Couldn't save the project. Please try again.");
     } finally {
       setSubmitting(false);
     }
   };
 
   return (
-    <PortalLayout role="FOUNDER" activeItem="new_project" title="Create Project">
-      <div className="max-w-4xl mx-auto space-y-6">
-        {/* Back navigation */}
-        <Link
-          href="/founder/dashboard"
-          className="inline-flex items-center gap-1.5 text-xs font-semibold text-[#64748B] hover:text-[#0F172A] transition-colors"
-        >
-          <ArrowLeft className="w-3.5 h-3.5" />
-          Back to Founder Dashboard
-        </Link>
-
-        {/* Header */}
-        <div className="border-b border-[#E2E8F0] pb-6">
-          <h1 className="text-2xl font-semibold text-[#0F172A]">New project</h1>
-          <p className="text-sm text-[#64748B] mt-1">
-            Tell us about your startup. It stays private until you publish it.
-          </p>
-        </div>
-
-        {/* Success Modal / Readiness Preview */}
-        {successResult && (
-          <div className="rounded-xl border border-[#C8E6C9] bg-[#E8F5E9] p-6 sm:p-8 shadow-card space-y-4">
-            <div className="flex items-center gap-2.5 text-[#2E7D52]">
-              <CheckCircle2 className="w-6 h-6 text-[#2E7D52]" />
-              <h2 className="text-lg sm:text-xl font-bold text-[#0F172A] font-display">
-                Project created
-              </h2>
-            </div>
-            <p className="text-xs sm:text-sm text-[#1E5236]">
-              &ldquo;{successResult.title}&rdquo; is currently saved in your <strong>private workspace</strong>.
-            </p>
-
-            <div className="p-4 rounded-lg bg-white border border-[#E2E8F0] space-y-2 shadow-subtle">
-              <div className="flex items-center justify-between">
-                <span className="text-sm text-[#64748B] flex items-center gap-1.5">
-                  <Sparkles className="w-3.5 h-3.5 text-[#1B3B6F]" />
-                  First readiness score
-                </span>
-                <span className="text-lg font-semibold text-[#1B3B6F]">
-                  {successResult.readiness_score != null ? `${successResult.readiness_score}` : "—"}
-                </span>
-              </div>
-              <p className="text-xs text-[#64748B] leading-relaxed">
-                {successResult.ai_feedback_summary ||
-                  "A quick completeness check of your profile. Open the project to upload materials and run the full AI analysis."}
-              </p>
-              <div className="pt-2 text-[11px] text-[#2E7D52] flex items-center gap-1">
-                <Lock className="w-3 h-3" /> Note: This diagnostic analysis is private to you and never shared with investors.
-              </div>
-            </div>
-
-            {deckWarning && (
-              <p role="alert" className="text-xs text-[#9A3412] bg-[#FFF7ED] border border-[#FED7AA] rounded-lg px-3 py-2">
-                {deckWarning}
-              </p>
-            )}
-
-            <div className="flex flex-wrap gap-3 pt-2">
-              <button
-                onClick={() => router.push(`/founder/projects/${successResult.id}`)}
-                className="px-4 py-2 rounded-lg text-xs font-medium text-white bg-[#1B3B6F] hover:bg-[#142C54] transition-colors shadow-sm flex items-center gap-1.5"
-              >
-                <Sparkles className="w-3.5 h-3.5" />
-                Open Project &amp; Run AI Analysis
-              </button>
-              <button
-                onClick={() => router.push("/founder/dashboard")}
-                className="px-4 py-2 rounded-lg text-xs font-medium text-[#0F172A] bg-white border border-[#E2E8F0] hover:bg-[#FAFBFD]"
-              >
-                Go to Dashboard
-              </button>
-              <button
-                onClick={() => setSuccessResult(null)}
-                className="px-4 py-2 rounded-lg text-xs font-medium text-[#0F172A] bg-white border border-[#E2E8F0] hover:bg-[#FAFBFD]"
-              >
-                Create Another Project
-              </button>
-            </div>
-          </div>
-        )}
-
-        {/* Submission Form */}
-        <form onSubmit={handleSubmit} className="space-y-6">
-          {errorMessage && (
-            <div className="p-4 rounded-xl bg-[#FFF7ED] border border-[#FFEDD5] text-[#C2410C] text-xs flex items-center gap-2">
-              <AlertCircle className="w-4 h-4 shrink-0 text-[#C2410C]" />
-              {errorMessage}
-            </div>
-          )}
-
-          {/* 1. Startup Identity */}
-          <div className="rounded-xl border border-[#E2E8F0] bg-white p-6 space-y-4 shadow-subtle">
-            <h2 className="text-base font-bold text-[#0F172A] font-display flex items-center gap-2">
-              <Rocket className="w-4 h-4 text-[#1B3B6F]" />
-              1. Startup Identity
-            </h2>
-
-            <div>
-              <label className="block text-xs font-semibold text-[#0F172A] mb-1">
-                Project / Startup Name <span className="text-[#1B3B6F]">*</span>
-              </label>
-              <input
-                type="text"
-                required
-                placeholder="e.g., OmniFlow AI"
-                value={formData.title}
-                onChange={(e) => setFormData({ ...formData, title: e.target.value })}
-                className="w-full px-3.5 py-2.5 bg-[#FAFBFD] border border-[#E2E8F0] rounded-lg text-[#0F172A] placeholder-[#94A3B8] focus:outline-none focus:border-[#1B3B6F] text-xs sm:text-sm"
-              />
-            </div>
-
-            <div>
-              <label className="block text-xs font-semibold text-[#0F172A] mb-1">
-                One-Line Elevator Tagline
-              </label>
-              <input
-                type="text"
-                placeholder="e.g., Autonomous edge diagnostics for distributed telemetry"
-                value={formData.tagline}
-                onChange={(e) => setFormData({ ...formData, tagline: e.target.value })}
-                className="w-full px-3.5 py-2.5 bg-[#FAFBFD] border border-[#E2E8F0] rounded-lg text-[#0F172A] placeholder-[#94A3B8] focus:outline-none focus:border-[#1B3B6F] text-xs sm:text-sm"
-              />
-            </div>
-
-            <div>
-              <label className="block text-xs font-semibold text-[#0F172A] mb-1">
-                Executive Project Summary <span className="text-[#1B3B6F]">*</span>
-              </label>
-              <textarea
-                required
-                rows={3}
-                placeholder="Describe your technology architecture, primary value proposition, and venture vision..."
-                value={formData.description}
-                onChange={(e) => setFormData({ ...formData, description: e.target.value })}
-                className="w-full px-3.5 py-2.5 bg-[#FAFBFD] border border-[#E2E8F0] rounded-lg text-[#0F172A] placeholder-[#94A3B8] focus:outline-none focus:border-[#1B3B6F] text-xs sm:text-sm"
-              />
-            </div>
-          </div>
-
-          {/* 2. Problem & Solution */}
-          <div className="rounded-xl border border-[#E2E8F0] bg-white p-6 space-y-4 shadow-subtle">
-            <h2 className="text-base font-bold text-[#0F172A] font-display flex items-center gap-2">
-              <Sparkles className="w-4 h-4 text-[#1B3B6F]" />
-              2. Problem & Solution Mechanics
-            </h2>
-
-            <div>
-              <label className="block text-xs font-semibold text-[#0F172A] mb-1">
-                The Critical Market Problem <span className="text-[#1B3B6F]">*</span>
-              </label>
-              <textarea
-                required
-                rows={3}
-                placeholder="Who suffers from this problem, why do legacy alternatives fail, and what is the cost of inaction?"
-                value={formData.problem}
-                onChange={(e) => setFormData({ ...formData, problem: e.target.value })}
-                className="w-full px-3.5 py-2.5 bg-[#FAFBFD] border border-[#E2E8F0] rounded-lg text-[#0F172A] placeholder-[#94A3B8] focus:outline-none focus:border-[#1B3B6F] text-xs sm:text-sm"
-              />
-            </div>
-
-            <div>
-              <label className="block text-xs font-semibold text-[#0F172A] mb-1">
-                Your Proprietary Breakthrough Solution <span className="text-[#1B3B6F]">*</span>
-              </label>
-              <textarea
-                required
-                rows={3}
-                placeholder="Explain your technical defensibility, proprietary algorithms, and 10x improvement..."
-                value={formData.solution}
-                onChange={(e) => setFormData({ ...formData, solution: e.target.value })}
-                className="w-full px-3.5 py-2.5 bg-[#FAFBFD] border border-[#E2E8F0] rounded-lg text-[#0F172A] placeholder-[#94A3B8] focus:outline-none focus:border-[#1B3B6F] text-xs sm:text-sm"
-              />
-            </div>
-          </div>
-
-          {/* 3. Market, Stage & Capital Target */}
-          <div className="rounded-xl border border-[#E2E8F0] bg-white p-6 space-y-4 shadow-subtle">
-            <h2 className="text-base font-bold text-[#0F172A] font-display flex items-center gap-2">
-              <DollarSign className="w-4 h-4 text-[#2E7D52]" />
-              3. Sector, Stage & Capital Target
-            </h2>
-
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+    <PortalLayout role="FOUNDER" activeItem="new_project" title="New project">
+      <div className="mx-auto max-w-3xl">
+        {created ? (
+          <Card className="space-y-5">
+            <div className="flex items-start gap-3">
+              <CheckCircle2 className="mt-0.5 h-6 w-6 shrink-0 text-positive" />
               <div>
-                <label className="block text-xs font-semibold text-[#0F172A] mb-1">
-                  Industry Sector <span className="text-[#1B3B6F]">*</span>
-                </label>
-                <select
-                  value={formData.industry}
-                  onChange={(e) => setFormData({ ...formData, industry: e.target.value })}
-                  className="w-full px-3 py-2.5 bg-[#FAFBFD] border border-[#E2E8F0] rounded-lg text-[#0F172A] text-xs sm:text-sm focus:outline-none focus:border-[#1B3B6F]"
-                >
-                  {industries.map((ind) => (
-                    <option key={ind} value={ind}>
-                      {ind}
-                    </option>
-                  ))}
-                </select>
-              </div>
-
-              <div>
-                <label className="block text-xs font-semibold text-[#0F172A] mb-1">
-                  Startup Stage <span className="text-[#1B3B6F]">*</span>
-                </label>
-                <select
-                  value={formData.stage}
-                  onChange={(e) => setFormData({ ...formData, stage: e.target.value })}
-                  className="w-full px-3 py-2.5 bg-[#FAFBFD] border border-[#E2E8F0] rounded-lg text-[#0F172A] text-xs sm:text-sm focus:outline-none focus:border-[#1B3B6F]"
-                >
-                  {stages.map((stg) => (
-                    <option key={stg} value={stg}>
-                      {stg}
-                    </option>
-                  ))}
-                </select>
-              </div>
-
-              <div>
-                <label className="block text-xs font-semibold text-[#0F172A] mb-1">
-                  Funding Required (USD) <span className="text-[#1B3B6F]">*</span>
-                </label>
-                <div className="relative">
-                  <span className="absolute left-3 top-2.5 text-[#64748B] text-sm">$</span>
-                  <input
-                    type="number"
-                    required
-                    min={1000}
-                    step={1000}
-                    value={formData.funding_required}
-                    onChange={(e) =>
-                      setFormData({ ...formData, funding_required: parseFloat(e.target.value) || 0 })
-                    }
-                    className="w-full pl-7 pr-3.5 py-2.5 bg-[#FAFBFD] border border-[#E2E8F0] rounded-lg text-[#0F172A] text-xs sm:text-sm focus:outline-none focus:border-[#1B3B6F]"
-                  />
-                </div>
-              </div>
-            </div>
-
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 pt-2">
-              <div>
-                <label className="block text-xs font-semibold text-[#0F172A] mb-1">
-                  Business Model <span className="text-[#1B3B6F]">*</span>
-                </label>
-                <select
-                  value={formData.business_model}
-                  onChange={(e) => setFormData({ ...formData, business_model: e.target.value })}
-                  className="w-full px-3 py-2.5 bg-[#FAFBFD] border border-[#E2E8F0] rounded-lg text-[#0F172A] text-xs sm:text-sm focus:outline-none focus:border-[#1B3B6F]"
-                >
-                  {businessModels.map((bm) => (
-                    <option key={bm} value={bm}>
-                      {bm}
-                    </option>
-                  ))}
-                </select>
-              </div>
-
-              <div>
-                <label className="block text-xs font-semibold text-[#0F172A] mb-1">
-                  Target Customer & Market ICP <span className="text-[#1B3B6F]">*</span>
-                </label>
-                <input
-                  type="text"
-                  required
-                  placeholder="e.g., Cardiology clinics & telemetry hospital providers"
-                  value={formData.target_market}
-                  onChange={(e) => setFormData({ ...formData, target_market: e.target.value })}
-                  className="w-full px-3.5 py-2.5 bg-[#FAFBFD] border border-[#E2E8F0] rounded-lg text-[#0F172A] placeholder-[#94A3B8] focus:outline-none focus:border-[#1B3B6F] text-xs sm:text-sm"
-                />
-              </div>
-            </div>
-          </div>
-
-          {/* 4. Web Presence & Materials */}
-          <div className="rounded-xl border border-[#E2E8F0] bg-white p-6 space-y-4 shadow-subtle">
-            <h2 className="text-base font-bold text-[#0F172A] font-display flex items-center gap-2">
-              <Layers className="w-4 h-4 text-[#64748B]" />
-              4. Pitch Deck & Links
-            </h2>
-
-            {/* Direct Pitch Deck File Upload Zone */}
-            <div className="p-4 bg-[#F8FAFC] border-2 border-dashed border-[#CBD5E1] rounded-xl text-center space-y-2">
-              <input
-                type="file"
-                id="pitch-deck-file"
-                accept=".pdf,.pptx,.docx"
-                className="hidden"
-                onChange={(e) => {
-                  const file = e.target.files?.[0];
-                  if (!file) return;
-                  if (file.size > 25 * 1024 * 1024) {
-                    setErrorMessage("The pitch deck must be 25 MB or smaller.");
-                    return;
-                  }
-                  setErrorMessage(null);
-                  setPendingDeck(file);
-                }}
-              />
-              <label
-                htmlFor="pitch-deck-file"
-                className="cursor-pointer inline-flex items-center gap-2 py-2 px-4 rounded-lg bg-white border border-[#E2E8F0] text-xs font-semibold text-[#1B3B6F] hover:bg-[#F1F5F9] shadow-xs transition-colors"
-              >
-                <Upload className="w-3.5 h-3.5 text-[#1B3B6F]" />
-                {pendingDeck ? "Choose a Different File" : "Attach Pitch Deck (PDF, PPTX, DOCX up to 25MB)"}
-              </label>
-
-              {pendingDeck ? (
-                <div className="mt-2 p-2.5 rounded-lg bg-[#E8F5E9] border border-[#C8E6C9] text-xs text-[#1E5236] flex items-center justify-between">
-                  <span className="flex items-center gap-1.5 font-medium">
-                    <CheckCircle2 className="w-4 h-4 text-[#2E7D52]" />
-                    Attached: <strong>{pendingDeck.name}</strong> ({Math.round(pendingDeck.size / 1024)} KB)
-                  </span>
-                  <span className="text-[10px] text-[#2E7D52] flex items-center gap-1">
-                    <Lock className="w-3 h-3" /> Uploaded privately when you submit
-                  </span>
-                </div>
-              ) : (
-                <p className="text-[11px] text-[#64748B]">
-                  Your deck is stored privately with the project and read by the AI analysis. You can add more materials later.
+                <h1 className="text-xl font-semibold text-ink">{created.title} is saved</h1>
+                <p className="mt-1 text-sm text-muted">
+                  {created.is_published
+                    ? "It's published, so investors whose criteria fit can now find it."
+                    : "It's private. Only you can see it until you publish."}
                 </p>
-              )}
-            </div>
-
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-              <div>
-                <label className="block text-xs font-semibold text-[#0F172A] mb-1">
-                  Product Website URL
-                </label>
-                <input
-                  type="url"
-                  placeholder="https://example.com"
-                  value={formData.website}
-                  onChange={(e) => setFormData({ ...formData, website: e.target.value })}
-                  className="w-full px-3.5 py-2.5 bg-[#FAFBFD] border border-[#E2E8F0] rounded-lg text-[#0F172A] placeholder-[#94A3B8] focus:outline-none focus:border-[#1B3B6F] text-xs sm:text-sm"
-                />
-              </div>
-
-              <div>
-                <label className="block text-xs font-semibold text-[#0F172A] mb-1">
-                  External Pitch Deck Link (optional)
-                </label>
-                <input
-                  type="text"
-                  placeholder="https://docsend.com/…"
-                  value={formData.pitch_deck_url}
-                  onChange={(e) => setFormData({ ...formData, pitch_deck_url: e.target.value })}
-                  className="w-full px-3.5 py-2.5 bg-[#FAFBFD] border border-[#E2E8F0] rounded-lg text-[#0F172A] placeholder-[#94A3B8] focus:outline-none focus:border-[#1B3B6F] text-xs sm:text-sm font-mono text-[11px]"
-                />
               </div>
             </div>
-
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-              <div>
-                <label className="block text-xs font-semibold text-[#0F172A] mb-1">
-                  GitHub Repository
-                </label>
-                <input
-                  type="url"
-                  placeholder="https://github.com/your-org/your-repo"
-                  value={formData.github_url}
-                  onChange={(e) => setFormData({ ...formData, github_url: e.target.value })}
-                  className="w-full px-3.5 py-2.5 bg-[#FAFBFD] border border-[#E2E8F0] rounded-lg text-[#0F172A] placeholder-[#94A3B8] focus:outline-none focus:border-[#1B3B6F] text-xs sm:text-sm"
-                />
-                <p className="text-[10px] text-[#94A3B8] mt-1">Public repos are read during analysis (code, README, tests, CI).</p>
+            {created.readiness_score != null && (
+              <div className="rounded-lg bg-canvas px-4 py-3 text-sm">
+                <span className="text-muted">First readiness score: </span>
+                <span className="font-semibold text-ink">{Math.round(created.readiness_score)} / 100</span>
+                <p className="mt-1 text-muted">
+                  This is a quick check of your answers. Open the project to run the full AI review of your deck and code.
+                </p>
               </div>
-              <div>
-                <label className="block text-xs font-semibold text-[#0F172A] mb-1">
-                  Demo / Product Link
-                </label>
-                <input
-                  type="url"
-                  placeholder="https://youtu.be/... or https://app.example.com"
-                  value={formData.demo_url}
-                  onChange={(e) => setFormData({ ...formData, demo_url: e.target.value })}
-                  className="w-full px-3.5 py-2.5 bg-[#FAFBFD] border border-[#E2E8F0] rounded-lg text-[#0F172A] placeholder-[#94A3B8] focus:outline-none focus:border-[#1B3B6F] text-xs sm:text-sm"
-                />
-              </div>
+            )}
+            {deckWarning && <p className="rounded-lg bg-warning-soft px-4 py-3 text-sm text-warning">{deckWarning}</p>}
+            <div className="flex flex-wrap gap-2">
+              <ButtonLink href={`/founder/projects/${created.id}`}>
+                <Sparkles className="h-4 w-4" />
+                Open project and run review
+              </ButtonLink>
+              <ButtonLink href="/founder/dashboard" variant="secondary">
+                Go to overview
+              </ButtonLink>
+              <button
+                type="button"
+                className={buttonClass("ghost")}
+                onClick={() => {
+                  setCreated(null);
+                  setFormKey((k) => k + 1);
+                }}
+              >
+                Add another project
+              </button>
             </div>
-          </div>
-
-          {/* Privacy Confirmation Option */}
-          <div className="p-4 rounded-xl border border-[#E2E8F0] bg-[#F1F5F9] flex items-start gap-3">
-            <input
-              type="checkbox"
-              id="makePublicNow"
-              checked={makePublicNow}
-              onChange={(e) => setMakePublicNow(e.target.checked)}
-              className="mt-1 accent-[#1B3B6F] w-4 h-4"
+          </Card>
+        ) : (
+          <>
+            <PageHeader title="New project" description="Tell us about your startup. It stays private until you publish it." />
+            <ProjectForm
+              key={formKey}
+              mode="create"
+              initial={EMPTY_PROJECT}
+              submitting={submitting}
+              error={error}
+              submitLabel="Create project"
+              cancelHref="/founder/dashboard"
+              onSubmit={handleSubmit}
             />
-            <label htmlFor="makePublicNow" className="text-xs text-[#0F172A] cursor-pointer">
-              <span className="font-semibold block">Publish to investors now</span>
-              <span className="text-[#64748B] block mt-0.5">
-                Leave this off to keep the project private while you review your readiness feedback.
-              </span>
-            </label>
-          </div>
-
-          {/* Actions */}
-          <div className="flex items-center justify-end gap-3 pt-4 border-t border-[#E2E8F0]">
-            <Link
-              href="/founder/dashboard"
-              className="px-4 py-2 text-xs sm:text-sm font-medium text-[#64748B] hover:text-[#0F172A] transition-colors"
-            >
-              Cancel
-            </Link>
-            <button
-              type="submit"
-              disabled={submitting}
-              className="px-6 py-2.5 rounded-lg text-xs sm:text-sm font-medium text-white bg-[#1B3B6F] hover:bg-[#142C54] shadow-sm transition-all flex items-center gap-2 disabled:opacity-50"
-            >
-              {submitting ? (
-                <>
-                  <Cpu className="w-4 h-4 animate-spin" />
-                  Creating Project...
-                </>
-              ) : (
-                <>
-                  <Sparkles className="w-4 h-4" />
-                  Create Project
-                </>
-              )}
-            </button>
-          </div>
-        </form>
+          </>
+        )}
       </div>
     </PortalLayout>
   );

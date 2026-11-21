@@ -7,7 +7,8 @@ import { Footer } from "@/components/Footer";
 
 export function AppShell({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
-  const isPortal = pathname?.startsWith("/founder") || pathname?.startsWith("/investor");
+  const isPortal =
+    pathname?.startsWith("/founder") || pathname?.startsWith("/investor") || pathname?.startsWith("/dealroom");
 
   if (isPortal) {
     return <>{children}</>;
