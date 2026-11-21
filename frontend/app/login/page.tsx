@@ -96,6 +96,12 @@ function LoginForm() {
           </p>
         )}
 
+        {searchParams.get("reset") === "1" && !error && (
+          <p role="status" className="mb-5 text-xs text-[#2E7D52] bg-[#E8F5E9] border border-[#C8E6C9] rounded-lg px-3 py-2">
+            Your password was updated. Sign in with the new one.
+          </p>
+        )}
+
         <form onSubmit={handleLogin} className="space-y-4 text-xs sm:text-sm">
           {/* Role selector */}
           <div>
