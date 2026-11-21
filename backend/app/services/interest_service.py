@@ -28,13 +28,19 @@ class InterestService:
         project_industry = project.get("industry", "DeepTech") if project else "DeepTech"
 
         # Lookup investor details
-        investor = await pg.fetch_one("SELECT name, firm FROM investor_profiles WHERE user_id = %s", [investor_id])
-        investor_name = investor.get("name", "Dr. Sarah Lin") if investor else "Dr. Sarah Lin"
-        investor_firm = investor.get("firm", "Apex Horizon Ventures") if investor else "Apex Horizon Ventures"
+        # Profile first, then the investor's own account (never another user's demo identity).
+        investor = await pg.fetch_one(
+            "SELECT p.name, p.firm, u.name AS account_name, u.organization AS account_org "
+            "FROM app_users u FULL OUTER JOIN investor_profiles p ON p.user_id = u.id "
+            "WHERE u.id = %s OR p.user_id = %s LIMIT 1",
+            [investor_id, investor_id],
+        ) or {}
+        investor_name = investor.get("name") or investor.get("account_name") or "Investor"
+        investor_firm = investor.get("firm") or investor.get("account_org") or "Independent investor"
 
         # Lookup founder details
         founder = await pg.fetch_one("SELECT name FROM founder_profiles WHERE user_id = %s", [founder_id])
-        founder_name = founder.get("name", "Founding Team") if founder else "Founding Team"
+        founder_name = (founder or {}).get("name") or "Founding Team"
 
         int_id = f"intro-{canonical_project_id}-{investor_id}"
 
@@ -231,20 +237,16 @@ class InterestService:
                     doc["project_title"] = p.get("title")
                     doc["project_industry"] = p.get("industry")
                 else:
-                    doc["project_title"] = "NeuroPulse AI"
-                    doc["project_industry"] = "Healthcare & AI"
+                    doc["project_title"] = f"Project #{doc['project_id']}"
+                    doc["project_industry"] = None
 
             if not doc.get("investor_name"):
                 inv = await pg.fetch_one(
                     "SELECT name, firm FROM investor_profiles WHERE user_id = %s",
-                    [doc.get("investor_id") or "investor-001"],
-                )
-                if inv:
-                    doc["investor_name"] = inv.get("name", "Dr. Sarah Lin")
-                    doc["investor_firm"] = inv.get("firm", "Apex Horizon Ventures")
-                else:
-                    doc["investor_name"] = "Dr. Sarah Lin"
-                    doc["investor_firm"] = "Apex Horizon Ventures"
+                    [doc.get("investor_id")],
+                ) or {}
+                doc["investor_name"] = inv.get("name") or "Investor"
+                doc["investor_firm"] = inv.get("firm") or doc.get("investor_firm")
 
         return docs
 

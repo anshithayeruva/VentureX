@@ -265,7 +265,8 @@ class MatchService:
             "project_id": proj_id_val,
             "project_title": project_title,
             "investor_id": inv_id_val,
-            "investor_name": investor_profile.get("name", "Angel Partner"),
+            # A profile can exist with an empty name; matches.investor_name is NOT NULL.
+            "investor_name": investor_profile.get("name") or firm_name or "Investor",
             "investor_firm": firm_name,
             "founder_id": project.get("founder_id", "founder-001"),
             "match_score": match_score,

@@ -10,6 +10,14 @@ from app.schemas.investor import (
 
 logger = logging.getLogger(__name__)
 
+
+async def account_defaults(user_id: str, org_field: str) -> Dict[str, Any]:
+    """Name and organization from the user's account (set at sign-up/onboarding), for new profiles."""
+    row = await pg.fetch_one("SELECT name, organization FROM app_users WHERE id = %s", [user_id])
+    if not row:
+        return {}
+    return {k: v for k, v in (("name", row.get("name")), (org_field, row.get("organization"))) if v}
+
 DEFAULT_INVESTOR_USER_ID = "investor-001"
 
 DEFAULT_SETTINGS = {
@@ -67,7 +75,8 @@ class InvestorService:
                 }
             else:
                 # A real signed-in investor starts with an empty profile.
-                doc = {"user_id": user_id, **(defaults or {})}
+                # A real signed-in user starts from their account name/organization.
+                doc = {"user_id": user_id, **(await account_defaults(user_id, "firm")), **(defaults or {})}
             doc.update({"settings": DEFAULT_SETTINGS, "created_at": now, "updated_at": now})
             profile = await pg.upsert("investor_profiles", doc, ["user_id"], update=["updated_at"])
 
@@ -107,6 +116,9 @@ class InvestorService:
         investor_id: str = DEFAULT_INVESTOR_USER_ID,
     ) -> Dict[str, Any]:
         await cls.get_or_create_preferences(investor_id)
+        # Matching runs over investor profiles, so make sure this investor has one
+        # (normally created at onboarding) before recomputing their matches.
+        await cls.get_or_create_profile(investor_id)
         fields = {
             k: v
             for k, v in data.model_dump(exclude_unset=True).items()
