@@ -1,11 +1,12 @@
 "use client";
 
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import {
   Bell,
   Briefcase,
+  ChevronDown,
   Heart,
   LayoutGrid,
   LogOut,
@@ -44,7 +45,6 @@ interface NavItem {
   label: string;
   href: string;
   icon: React.ComponentType<{ className?: string }>;
-  count?: number;
 }
 
 export function PortalLayout({ role, children, activeItem, onSelectItem, title }: PortalLayoutProps) {
@@ -94,12 +94,6 @@ export function PortalLayout({ role, children, activeItem, onSelectItem, title }
         { id: "preferences", label: "Criteria", href: "/investor/preferences", icon: Sliders },
       ];
 
-  const secondary: NavItem[] = [
-    { id: "notifications", label: "Notifications", href: `${base}?tab=notifications`, icon: Bell, count: unread },
-    { id: "profile", label: "Profile", href: `${base}?tab=profile`, icon: User },
-    { id: "settings", label: "Settings", href: `${base}?tab=settings`, icon: Settings },
-  ];
-
   const initials =
     (me?.name || me?.email || "?")
       .split(/[\s@.]+/)
@@ -128,19 +122,12 @@ export function PortalLayout({ role, children, activeItem, onSelectItem, title }
         }}
         aria-current={current ? "page" : undefined}
         className={cx(
-          "flex items-center justify-between gap-2 rounded-lg px-2.5 py-1.5 text-sm transition-colors",
+          "flex items-center gap-2.5 rounded-lg px-2.5 py-1.5 text-sm transition-colors",
           current ? "bg-surface text-ink font-medium shadow-subtle ring-1 ring-line" : "text-muted hover:text-ink hover:bg-subtle"
         )}
       >
-        <span className="flex items-center gap-2.5">
-          <Icon className={cx("w-4 h-4", current ? "text-accent" : "text-faint")} />
-          {item.label}
-        </span>
-        {!!item.count && (
-          <span className="min-w-5 rounded-full bg-accent px-1.5 text-center text-[11px] font-semibold leading-5 text-white">
-            {item.count > 99 ? "99+" : item.count}
-          </span>
-        )}
+        <Icon className={cx("w-4 h-4", current ? "text-accent" : "text-faint")} />
+        {item.label}
       </Link>
     );
   };
@@ -174,52 +161,15 @@ export function PortalLayout({ role, children, activeItem, onSelectItem, title }
 
       <nav className="flex-1 overflow-y-auto px-3 space-y-0.5" aria-label="Workspace">
         {primary.map(renderItem)}
-        <div className="my-3 border-t border-line" />
-        {secondary.map(renderItem)}
       </nav>
-
-      <div className="border-t border-line p-3">
-        <div className="flex items-center gap-2.5 rounded-lg px-1.5 py-1.5">
-          <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-accent-soft text-xs font-semibold text-accent">
-            {initials}
-          </div>
-          <div className="min-w-0 flex-1">
-            <div className="truncate text-sm font-medium text-ink">{me?.name || me?.email || "Signed in"}</div>
-            {me?.name && me?.email && <div className="truncate text-xs text-muted">{me.email}</div>}
-          </div>
-          <button
-            type="button"
-            onClick={signOut}
-            title="Sign out"
-            aria-label="Sign out"
-            className="rounded-md p-1.5 text-faint hover:bg-subtle hover:text-ink"
-          >
-            <LogOut className="w-4 h-4" />
-          </button>
-        </div>
-      </div>
     </div>
   );
 
+  const notificationsActive = activeItem === "notifications";
+
   return (
     <div className="min-h-screen bg-canvas text-ink md:flex">
-      {/* Mobile top bar */}
-      <div className="sticky top-0 z-30 flex h-14 items-center justify-between border-b border-line bg-surface px-4 md:hidden">
-        <Link href="/" className="flex items-center gap-2">
-          <BrandMark size={26} className="border-transparent" />
-          <span className="text-sm font-semibold">VentureX</span>
-        </Link>
-        <button
-          type="button"
-          onClick={() => setDrawerOpen(true)}
-          className="rounded-md p-1.5 text-muted hover:bg-subtle hover:text-ink"
-          aria-label="Open navigation"
-        >
-          <Menu className="w-5 h-5" />
-        </button>
-      </div>
-
-      {/* Sidebar: fixed on desktop, drawer on mobile */}
+      {/* Sidebar: sticky on desktop, drawer on mobile */}
       <aside
         className={cx(
           "fixed inset-y-0 left-0 z-50 w-60 border-r border-line bg-canvas transition-transform duration-200",
@@ -233,9 +183,141 @@ export function PortalLayout({ role, children, activeItem, onSelectItem, title }
         <div className="fixed inset-0 z-40 bg-ink/30 md:hidden" onClick={() => setDrawerOpen(false)} aria-hidden="true" />
       )}
 
-      <main className="min-w-0 flex-1 bg-surface md:min-h-screen md:border-l-0">
-        <div className="mx-auto w-full max-w-6xl px-4 py-6 sm:px-8 sm:py-10">{children}</div>
-      </main>
+      <div className="flex min-w-0 flex-1 flex-col bg-surface md:min-h-screen">
+        {/* Top bar */}
+        <header className="sticky top-0 z-30 flex h-14 items-center justify-between gap-3 border-b border-line bg-surface/95 px-4 backdrop-blur sm:px-8">
+          <div className="flex items-center gap-2 md:hidden">
+            <button
+              type="button"
+              onClick={() => setDrawerOpen(true)}
+              className="-ml-1.5 rounded-md p-1.5 text-muted hover:bg-subtle hover:text-ink"
+              aria-label="Open navigation"
+            >
+              <Menu className="w-5 h-5" />
+            </button>
+            <Link href="/" className="flex items-center gap-2">
+              <BrandMark size={24} className="border-transparent" />
+              <span className="text-sm font-semibold">VentureX</span>
+            </Link>
+          </div>
+          <div className="hidden md:block" />
+
+          <div className="flex items-center gap-1.5">
+            <Link
+              href={`${base}?tab=notifications`}
+              aria-label={unread ? `Notifications, ${unread} unread` : "Notifications"}
+              title="Notifications"
+              aria-current={notificationsActive ? "page" : undefined}
+              className={cx(
+                "relative rounded-lg p-2 transition-colors",
+                notificationsActive ? "bg-subtle text-ink" : "text-muted hover:bg-subtle hover:text-ink"
+              )}
+            >
+              <Bell className="w-5 h-5" />
+              {unread > 0 && (
+                <span className="absolute -right-0.5 -top-0.5 min-w-[18px] rounded-full bg-accent px-1 text-center text-[10px] font-semibold leading-[18px] text-white ring-2 ring-surface">
+                  {unread > 99 ? "99+" : unread}
+                </span>
+              )}
+            </Link>
+            <AccountMenu
+              initials={initials}
+              name={me?.name}
+              email={me?.email}
+              workspace={isFounder ? "Founder" : "Investor"}
+              profileHref={`${base}?tab=profile`}
+              settingsHref={`${base}?tab=settings`}
+              onSignOut={signOut}
+            />
+          </div>
+        </header>
+
+        <main className="flex-1">
+          <div className="mx-auto w-full max-w-6xl px-4 py-6 sm:px-8 sm:py-10">{children}</div>
+        </main>
+      </div>
+    </div>
+  );
+}
+
+/** Avatar button with a small menu: who is signed in, Profile, Settings, Sign out. */
+function AccountMenu({
+  initials,
+  name,
+  email,
+  workspace,
+  profileHref,
+  settingsHref,
+  onSignOut,
+}: {
+  initials: string;
+  name?: string | null;
+  email?: string | null;
+  workspace: string;
+  profileHref: string;
+  settingsHref: string;
+  onSignOut: () => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const ref = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!open) return;
+    const onDown = (e: MouseEvent) => {
+      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false);
+    };
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") setOpen(false);
+    };
+    document.addEventListener("mousedown", onDown);
+    document.addEventListener("keydown", onKey);
+    return () => {
+      document.removeEventListener("mousedown", onDown);
+      document.removeEventListener("keydown", onKey);
+    };
+  }, [open]);
+
+  const itemClass = "flex w-full items-center gap-2.5 rounded-md px-2.5 py-2 text-sm text-ink-2 hover:bg-subtle hover:text-ink";
+
+  return (
+    <div className="relative" ref={ref}>
+      <button
+        type="button"
+        onClick={() => setOpen((v) => !v)}
+        aria-haspopup="menu"
+        aria-expanded={open}
+        aria-label="Account menu"
+        className="flex items-center gap-1 rounded-full p-0.5 hover:bg-subtle"
+      >
+        <span className="flex h-8 w-8 items-center justify-center rounded-full bg-accent-soft text-xs font-semibold text-accent">
+          {initials}
+        </span>
+        <ChevronDown className={cx("h-4 w-4 text-faint transition-transform", open && "rotate-180")} />
+      </button>
+
+      {open && (
+        <div role="menu" className="absolute right-0 mt-2 w-64 rounded-xl border border-line bg-surface p-1.5 shadow-elevated">
+          <div className="px-2.5 py-2">
+            <div className="truncate text-sm font-medium text-ink">{name || email || "Signed in"}</div>
+            {name && email && <div className="truncate text-xs text-muted">{email}</div>}
+            <div className="mt-1 text-xs text-faint">{workspace} workspace</div>
+          </div>
+          <div className="my-1 border-t border-line" />
+          <Link role="menuitem" href={profileHref} onClick={() => setOpen(false)} className={itemClass}>
+            <User className="h-4 w-4 text-faint" />
+            Profile
+          </Link>
+          <Link role="menuitem" href={settingsHref} onClick={() => setOpen(false)} className={itemClass}>
+            <Settings className="h-4 w-4 text-faint" />
+            Settings
+          </Link>
+          <div className="my-1 border-t border-line" />
+          <button role="menuitem" type="button" onClick={onSignOut} className={itemClass}>
+            <LogOut className="h-4 w-4 text-faint" />
+            Sign out
+          </button>
+        </div>
+      )}
     </div>
   );
 }
