@@ -287,6 +287,12 @@ class MatchService:
             logger.warning("Project %s not found for match computation", project_id)
             return []
 
+        # Private drafts are never matched or announced to investors. Unpublishing a project
+        # also withdraws any matches it had.
+        if not project.get("is_published"):
+            await pg.execute("DELETE FROM matches WHERE project_id = %s", [project["id"]])
+            return []
+
         # Load all investor profiles with their preferences in one query
         investors = await pg.fetch_all(
             """
@@ -332,7 +338,7 @@ class MatchService:
                                 desc=f"'{p_title}' in {p_ind} aligns strongly with your target sector, stage, and check size ({score}% match).",
                                 badge="Match",
                                 badge_variant="success",
-                                link="/investor/dashboard?tab=matches",
+                                link="/investor/dashboard?tab=recommended",
                             )
                     except Exception as e:
                         logger.warning("Failed to emit high-match notification: %s", e)
@@ -356,7 +362,8 @@ class MatchService:
         if not pref:
             pref = investor.get("preferences") or {}
 
-        projects = await pg.fetch_all("SELECT * FROM projects ORDER BY created_at LIMIT 200")
+        # Only published projects can be matched (drafts are private to their founder).
+        projects = await pg.fetch_all("SELECT * FROM projects WHERE is_published ORDER BY created_at LIMIT 200")
 
         results = []
         for project in projects:
@@ -384,7 +391,7 @@ class MatchService:
                                 desc=f"'{p_title}' in {p_ind} aligns strongly with your target sector, stage, and check size ({score}% match).",
                                 badge="Match",
                                 badge_variant="success",
-                                link="/investor/dashboard?tab=matches",
+                                link="/investor/dashboard?tab=recommended",
                             )
                     except Exception as e:
                         logger.warning("Failed to emit high-match notification: %s", e)
@@ -424,7 +431,8 @@ class MatchService:
             logger.info("No matches stored yet; running initial dynamic match synthesis...")
             await cls.recompute_all_matches()
 
-        where: List[str] = []
+        # Matches are only ever shown for published projects.
+        where: List[str] = ["project_id IN (SELECT id FROM projects WHERE is_published)"]
         params: List[Any] = []
         if project_id:
             try:

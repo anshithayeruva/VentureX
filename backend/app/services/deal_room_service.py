@@ -405,7 +405,7 @@ class DealRoomService:
             "name": doc_in.name,
             "url": doc_in.url,
             "type": doc_in.type,
-            "size_kb": doc_in.size_kb or 1024,
+            "size_kb": doc_in.size_kb,
         }
 
         # Add to shared documents in room
