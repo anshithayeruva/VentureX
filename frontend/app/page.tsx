@@ -23,6 +23,7 @@ import { ProjectCard } from "@/components/ProjectCard";
 import { StatCard } from "@/components/StatCard";
 import { api, MOCK_PROJECTS } from "@/lib/api";
 import { Project } from "@/types";
+import { BrandMark } from "@/components/BrandMark";
 
 export default function HomePage() {
   const [projects, setProjects] = useState<Project[]>(MOCK_PROJECTS);
@@ -137,9 +138,7 @@ export default function HomePage() {
             <div className="md:col-span-3 bg-[#0F1E36] p-4 text-white border-r border-[#182C4C] flex flex-col justify-between hidden sm:flex">
               <div className="space-y-4">
                 <div className="flex items-center gap-2 pb-3 border-b border-[#182C4C]">
-                  <div className="w-7 h-7 rounded-lg bg-[#182C4C] border border-[#223E68] flex items-center justify-center font-bold text-xs">
-                    V<span className="text-[#38BDF8]">X</span>
-                  </div>
+                  <BrandMark size={28} className="border-transparent" />
                   <span className="font-bold text-sm tracking-tight font-display text-white">Venture X</span>
                 </div>
 

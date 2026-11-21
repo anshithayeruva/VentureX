@@ -25,6 +25,7 @@ import {
 import { Badge } from "@/components/Badge";
 import { api } from "@/lib/api";
 import { DealRoom } from "@/types";
+import { BrandMark } from "@/components/BrandMark";
 
 function DealRoomsContent() {
   const searchParams = useSearchParams();
@@ -87,9 +88,10 @@ function DealRoomsContent() {
           <div className="flex items-center gap-3">
             <Link
               href={role === "FOUNDER" ? "/founder/dashboard" : "/investor/dashboard"}
-              className="w-9 h-9 rounded-xl bg-[#0F1E36] text-white flex items-center justify-center font-display font-extrabold text-xs shadow-sm"
+              className="shrink-0"
+              aria-label="VentureX home"
             >
-              V<span className="text-[#38BDF8]">X</span>
+              <BrandMark size={36} className="rounded-xl" />
             </Link>
             <div>
               <div className="flex items-center gap-2">

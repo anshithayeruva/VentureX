@@ -26,6 +26,7 @@ import {
 import { Badge } from "@/components/Badge";
 import { api, MeResponse } from "@/lib/api";
 import { authClient, clearApiToken } from "@/lib/auth/client";
+import { BrandMark } from "@/components/BrandMark";
 
 interface PortalLayoutProps {
   role: "FOUNDER" | "INVESTOR";
@@ -147,9 +148,7 @@ export function PortalLayout({
       {/* Mobile Top Header */}
       <div className="md:hidden flex items-center justify-between px-4 py-3 bg-[#0F1E36] border-b border-[#1F3354] text-white sticky top-0 z-40 shadow-sm">
         <div className="flex items-center gap-2">
-          <div className="w-7 h-7 rounded-lg bg-[#0B1628] border border-[#1F3354] flex items-center justify-center font-bold text-xs text-white">
-            V<span className="text-[#38BDF8]">X</span>
-          </div>
+          <BrandMark size={30} className="border-transparent" />
           <span className="font-bold text-sm tracking-tight font-display">
             Venture<span className="text-[#38BDF8]">X</span>
           </span>
@@ -177,9 +176,7 @@ export function PortalLayout({
           {/* Sidebar Brand Header */}
           <div className="h-16 px-5 flex items-center justify-between border-b border-[#182C4C] bg-[#0B1628]">
             <Link href="/" className="flex items-center gap-2.5">
-              <div className="w-8 h-8 rounded-lg bg-[#182C4C] border border-[#223E68] flex items-center justify-center font-bold text-sm shadow-sm font-display text-white">
-                V<span className="text-[#38BDF8]">X</span>
-              </div>
+              <BrandMark size={34} className="border-transparent" />
               <div className="flex flex-col">
                 <span className="font-bold text-base tracking-tight font-display text-white">
                   Venture<span className="text-[#38BDF8]">X</span>
