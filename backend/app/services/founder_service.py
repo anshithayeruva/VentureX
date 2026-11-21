@@ -6,6 +6,14 @@ from app.schemas.founder import FounderProfileUpdate, FounderSettings
 
 logger = logging.getLogger(__name__)
 
+
+async def account_defaults(user_id: str, org_field: str) -> Dict[str, Any]:
+    """Name and organization from the user's account (set at sign-up/onboarding), for new profiles."""
+    row = await pg.fetch_one("SELECT name, organization FROM app_users WHERE id = %s", [user_id])
+    if not row:
+        return {}
+    return {k: v for k, v in (("name", row.get("name")), (org_field, row.get("organization"))) if v}
+
 DEFAULT_FOUNDER_USER_ID = "founder-001"
 
 DEFAULT_SETTINGS = {
@@ -50,7 +58,8 @@ class FounderService:
             }
         else:
             # A real signed-in founder starts with an empty profile.
-            doc = {"user_id": user_id, **(defaults or {})}
+            # A real signed-in user starts from their account name/organization.
+            doc = {"user_id": user_id, **(await account_defaults(user_id, "company")), **(defaults or {})}
         doc.update({"settings": DEFAULT_SETTINGS, "created_at": now, "updated_at": now})
         return await pg.upsert("founder_profiles", doc, ["user_id"], update=["updated_at"])
 

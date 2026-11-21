@@ -60,15 +60,23 @@ let cachedToken: { token: string; expiresAt: number } | null = null;
 let pendingToken: Promise<string | null> | null = null;
 
 async function fetchToken(): Promise<string | null> {
+  // Call the same-origin Neon Auth endpoint directly (what authClient.token() does), with a
+  // timeout: a token request that never settles must not block every API call behind it.
   try {
-    const { data, error } = await authClient.token();
-    if (error || !data?.token) {
+    const res = await fetch("/api/auth/token", {
+      credentials: "include",
+      cache: "no-store",
+      signal: AbortSignal.timeout(10_000),
+    });
+    const data = res.ok ? await res.json() : null;
+    if (!data?.token) {
       cachedToken = null;
       return null;
     }
     cachedToken = { token: data.token, expiresAt: tokenExpiry(data.token) };
     return data.token;
   } catch {
+    cachedToken = null;
     return null;
   }
 }
