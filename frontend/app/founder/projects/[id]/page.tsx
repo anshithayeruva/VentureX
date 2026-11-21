@@ -33,6 +33,7 @@ export default function ProjectOverviewPage({ params }: { params: Promise<{ id: 
   const [isPublished, setIsPublished] = useState(false);
   const [publishing, setPublishing] = useState(false);
   const [notFound, setNotFound] = useState(false);
+  const [matchCount, setMatchCount] = useState<number | null>(null);
 
   useEffect(() => {
     let mounted = true;
@@ -44,6 +45,9 @@ export default function ProjectOverviewPage({ params }: { params: Promise<{ id: 
       }
       setProject(item);
       setIsPublished(Boolean(item.is_published));
+    });
+    api.getMatches().then((matches) => {
+      if (mounted) setMatchCount(matches.filter((m) => String(m.project_id) === String(projectId)).length);
     });
     return () => {
       mounted = false;
@@ -145,7 +149,7 @@ export default function ProjectOverviewPage({ params }: { params: Promise<{ id: 
                   : "bg-[#1B3B6F] text-white hover:bg-[#142C54] border-transparent"
               }`}
             >
-              {isPublished ? "Set to Private Draft" : "Publish to Syndicate"}
+              {isPublished ? "Make private" : "Publish to investors"}
             </button>
             <Link
               href={`/founder/projects/${project.id}/edit`}
@@ -190,10 +194,10 @@ export default function ProjectOverviewPage({ params }: { params: Promise<{ id: 
           <div className="rounded-xl border border-[#E2E8F0] bg-white p-5 shadow-subtle flex items-center justify-between">
             <div>
               <span className="text-[10px] font-semibold uppercase tracking-wider text-[#64748B] block">
-                Syndicate Matches
+                Investor matches
               </span>
               <span className="text-xl font-bold text-[#0F172A] font-display mt-0.5 block">
-                3 Qualified Funds
+                {matchCount == null ? "—" : isPublished ? matchCount : "Publish to match"}
               </span>
             </div>
             <Link
@@ -298,7 +302,7 @@ export default function ProjectOverviewPage({ params }: { params: Promise<{ id: 
 
                 <div className="pt-2 border-t border-[#E2E8F0]">
                   <span className="text-[#64748B] block">Created:</span>
-                  <span className="text-[#0F172A] font-mono text-[11px]">
+                  <span className="text-[#0F172A]">
                     {new Date(project.created_at).toLocaleDateString()}
                   </span>
                 </div>

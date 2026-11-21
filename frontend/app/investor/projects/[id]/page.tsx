@@ -70,7 +70,7 @@ export default function InvestorProjectDetailsPage({ params }: { params: Promise
           <p className="text-sm font-semibold text-[#0F172A]">Project not found</p>
           <p className="text-xs text-[#64748B]">It may have been unpublished, or it isn&apos;t visible to your account.</p>
           <Link href="/investor/dashboard" className="inline-block text-xs font-semibold text-[#1B3B6F] hover:underline">
-            Back to dealflow
+            Back to dashboard
           </Link>
         </div>
       </PortalLayout>
@@ -116,7 +116,7 @@ export default function InvestorProjectDetailsPage({ params }: { params: Promise
           className="inline-flex items-center gap-1.5 text-xs font-semibold text-[#64748B] hover:text-[#0F172A] transition-colors"
         >
           <ArrowLeft className="w-3.5 h-3.5" />
-          Back to Dealflow Pipeline
+          Back to dashboard
         </Link>
 
         {/* Top Header Panel */}
@@ -126,9 +126,6 @@ export default function InvestorProjectDetailsPage({ params }: { params: Promise
               <Badge variant="secondary">{project.industry}</Badge>
               <Badge variant="outline">{project.stage}</Badge>
               <Badge variant="outline">{project.business_model}</Badge>
-              <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full bg-[#E8F5E9] border border-[#A3E635] text-[#2E7D52] text-xs font-medium">
-                <ShieldCheck className="w-3.5 h-3.5 text-[#2E7D52]" /> Founder-Approved Mandate
-              </span>
             </div>
 
             <h1 className="text-2xl sm:text-3xl font-bold text-[#0F172A] font-display">
@@ -150,22 +147,22 @@ export default function InvestorProjectDetailsPage({ params }: { params: Promise
               } disabled:opacity-70`}
             >
               <UserCheck className="w-4 h-4" />
-              {submitting ? "Requesting..." : requested ? "Intro Requested ✓" : "Request Introduction"}
+              {submitting ? "Sending…" : requested ? "Intro requested" : "Request intro"}
             </button>
           </div>
         </div>
 
-        {/* Semantic Mandate Fit Card */}
+        {/* Why this startup fits */}
         {matchItem && (
           <div className="rounded-xl border border-[#E2E8F0] bg-[#F1F5F9] p-5 shadow-subtle space-y-3">
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-2">
                 <Sparkles className="w-4 h-4 text-[#1B3B6F]" />
-                <span className="text-xs font-bold text-[#0F172A] font-display uppercase tracking-wider">
-                  Semantic Thesis Alignment: {matchItem.match_score.toFixed(1)}% Match
+                <span className="text-sm font-semibold text-[#0F172A]">
+                  Why it fits your criteria
                 </span>
               </div>
-              <Badge variant="success">High Conviction</Badge>
+              <Badge variant="success">{Math.round(matchItem.match_score)}% fit</Badge>
             </div>
 
             <div className="space-y-1.5 text-xs text-[#64748B]">

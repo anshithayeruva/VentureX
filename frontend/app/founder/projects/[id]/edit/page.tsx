@@ -152,17 +152,9 @@ export default function EditProjectPage({ params }: { params: Promise<{ id: stri
         </Link>
 
         <div className="border-b border-[#E2E8F0] pb-6">
-          <div className="flex items-center gap-2 mb-1">
-            <Badge variant="secondary">Editing Venture</Badge>
-            <span className="text-xs text-[#64748B] font-mono flex items-center gap-1">
-              <Lock className="w-3 h-3 text-[#1B3B6F]" /> ID: #{projectId}
-            </span>
-          </div>
-          <h1 className="text-2xl sm:text-3xl font-bold text-[#0F172A] font-display">
-            Edit Project Profile
-          </h1>
+          <h1 className="text-2xl font-semibold text-[#0F172A]">Edit project</h1>
           <p className="text-xs sm:text-sm text-[#64748B] mt-0.5">
-            Update your startup narrative and dealflow parameters.
+            Update your project details.
           </p>
         </div>
 

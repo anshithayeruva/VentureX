@@ -107,23 +107,14 @@ export default function InvestorPreferencesPage() {
           className="inline-flex items-center gap-1.5 text-xs font-semibold text-[#64748B] hover:text-[#0F172A] transition-colors"
         >
           <ArrowLeft className="w-3.5 h-3.5" />
-          Back to Dealflow Dashboard
+          Back to dashboard
         </Link>
 
         {/* Header */}
         <div className="border-b border-[#E2E8F0] pb-6">
-          <div className="flex items-center gap-2 mb-1">
-            <Badge variant="success">Investment Mandate</Badge>
-            <span className="text-xs text-[#64748B] font-mono flex items-center gap-1">
-              <ShieldCheck className="w-3.5 h-3.5 text-[#2E7D52]" /> Vector Cosine Indexing
-            </span>
-          </div>
-          <h1 className="text-2xl sm:text-3xl font-bold text-[#0F172A] font-display">
-            Investment Matching Criteria
-          </h1>
-          <p className="text-xs sm:text-sm text-[#64748B] mt-0.5">
-            Configure your thesis parameters. Venture X indexes incoming founder projects against your
-            target sectors, ticket sizes, and stages for high-precision semantic matching.
+          <h1 className="text-2xl font-semibold text-[#0F172A]">Investment criteria</h1>
+          <p className="text-sm text-[#64748B] mt-1">
+            Tell us what you invest in. We match you with published startups that fit.
           </p>
         </div>
 
@@ -131,7 +122,7 @@ export default function InvestorPreferencesPage() {
           <div className="p-4 rounded-xl bg-[#E8F5E9] border border-[#A3E635] text-[#2E7D52] text-xs sm:text-sm flex items-center justify-between shadow-subtle">
             <div className="flex items-center gap-2">
               <CheckCircle2 className="w-5 h-5 text-[#2E7D52]" />
-              <span>Investment criteria saved! Embeddings updated for semantic dealflow.</span>
+              <span>Criteria saved. Your matches have been updated.</span>
             </div>
             <button
               onClick={() => router.push("/investor/dashboard")}
@@ -299,7 +290,7 @@ export default function InvestorPreferencesPage() {
             </div>
           </div>
 
-          {/* Geographic Mandate */}
+          {/* Geography */}
           <div className="rounded-xl border border-[#E2E8F0] bg-white p-6 space-y-3 shadow-subtle">
             <h2 className="text-sm sm:text-base font-bold text-[#0F172A] font-display">
               4. Geographic Scope
@@ -327,7 +318,7 @@ export default function InvestorPreferencesPage() {
               className="px-6 py-2.5 rounded-lg text-xs sm:text-sm font-medium text-white bg-[#1B3B6F] hover:bg-[#142C54] transition-colors shadow-sm flex items-center gap-1.5"
             >
               <Save className="w-4 h-4" />
-              {loading ? "Vectorizing Filters..." : "Save Mandate Preferences"}
+              {loading ? "Saving…" : "Save criteria"}
             </button>
           </div>
         </form>

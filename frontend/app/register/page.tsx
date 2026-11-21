@@ -1,18 +1,30 @@
 "use client";
 
-import React, { useState, useSyncExternalStore } from "react";
+import React, { Suspense, useState, useSyncExternalStore } from "react";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { Rocket, Briefcase } from "lucide-react";
 import { authClient, clearApiToken, insecureOriginWarning, noSubscribe, sessionWasKept } from "@/lib/auth/client";
 import { api } from "@/lib/api";
 import { BrandMark } from "@/components/BrandMark";
 
 export default function RegisterPage() {
+  return (
+    <Suspense fallback={null}>
+      <RegisterForm />
+    </Suspense>
+  );
+}
+
+function RegisterForm() {
   const router = useRouter();
+  const searchParams = useSearchParams();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
-  const [role, setRole] = useState<"FOUNDER" | "INVESTOR">("FOUNDER");
+  // "/register?role=investor" opens with the investor option selected.
+  const [role, setRole] = useState<"FOUNDER" | "INVESTOR">(
+    searchParams.get("role")?.toUpperCase() === "INVESTOR" ? "INVESTOR" : "FOUNDER"
+  );
   const [fullName, setFullName] = useState("");
   const [organization, setOrganization] = useState("");
   const [error, setError] = useState<string | null>(null);
@@ -73,10 +85,10 @@ export default function RegisterPage() {
         <div className="text-center mb-7">
           <BrandMark size={48} className="mb-3 rounded-xl" />
           <h1 className="text-2xl font-bold text-[#0F172A] tracking-tight font-display">
-            Create Venture X Account
+            Create your VentureX account
           </h1>
           <p className="text-xs text-[#64748B] mt-1">
-            Choose your account workspace to activate tailored workflows.
+            Free to start. Tell us whether you&apos;re raising or investing.
           </p>
         </div>
 
@@ -89,7 +101,7 @@ export default function RegisterPage() {
         <form onSubmit={handleRegister} className="space-y-4 text-xs sm:text-sm">
           {/* Role selector */}
           <div>
-            <label className="block text-xs font-semibold text-[#0F172A] mb-1.5">Select Workspace</label>
+            <label className="block text-xs font-semibold text-[#0F172A] mb-1.5">I am a</label>
             <div className="grid grid-cols-2 gap-2">
               <button
                 type="button"
@@ -101,7 +113,7 @@ export default function RegisterPage() {
                 }`}
               >
                 <Rocket className="w-3.5 h-3.5" />
-                Founder Workspace
+                Founder
               </button>
               <button
                 type="button"
@@ -113,7 +125,7 @@ export default function RegisterPage() {
                 }`}
               >
                 <Briefcase className="w-3.5 h-3.5" />
-                Investor Portal
+                Investor
               </button>
             </div>
           </div>
@@ -123,7 +135,7 @@ export default function RegisterPage() {
             <input
               type="text"
               required
-              placeholder="e.g. Jordan Vance"
+              placeholder="Your name"
               value={fullName}
               onChange={(e) => setFullName(e.target.value)}
               className="w-full px-3.5 py-2.5 bg-[#F8FAFC] border border-[#E2E8F0] rounded-lg text-[#0F172A] placeholder-[#94A3B8] focus:outline-none focus:border-[#1B3B6F]"
@@ -132,7 +144,7 @@ export default function RegisterPage() {
 
           <div>
             <label className="block text-xs font-semibold text-[#0F172A] mb-1">
-              {role === "FOUNDER" ? "Startup / Venture Name" : "Investment Firm / Syndicate"}
+              {role === "FOUNDER" ? "Startup name" : "Firm or fund"}
             </label>
             <input
               type="text"
@@ -144,11 +156,11 @@ export default function RegisterPage() {
           </div>
 
           <div>
-            <label className="block text-xs font-semibold text-[#0F172A] mb-1">Work Email</label>
+            <label className="block text-xs font-semibold text-[#0F172A] mb-1">Email</label>
             <input
               type="email"
               required
-              placeholder="jordan@venture.com"
+              placeholder="you@company.com"
               value={email}
               onChange={(e) => setEmail(e.target.value)}
               className="w-full px-3.5 py-2.5 bg-[#F8FAFC] border border-[#E2E8F0] rounded-lg text-[#0F172A] placeholder-[#94A3B8] focus:outline-none focus:border-[#1B3B6F]"
@@ -180,7 +192,7 @@ export default function RegisterPage() {
             disabled={pending}
             className="w-full mt-2 py-2.5 rounded-lg text-xs sm:text-sm font-medium text-white bg-[#1B3B6F] hover:bg-[#142C54] transition-all shadow-sm disabled:opacity-60 disabled:cursor-wait"
           >
-            {pending ? "Creating account…" : `Create ${role === "FOUNDER" ? "Founder" : "Investor"} Account`}
+            {pending ? "Creating account…" : "Create account"}
           </button>
         </form>
 

@@ -96,12 +96,8 @@ function DealRoomsContent() {
             <div>
               <div className="flex items-center gap-2">
                 <h1 className="text-xl font-bold text-[#0F172A] font-display">
-                  Secure Deal Rooms
+                  Deal rooms
                 </h1>
-                <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-semibold bg-[#E8F5E9] text-[#2E7D52] border border-[#A3E635]">
-                  <span className="w-1.5 h-1.5 rounded-full bg-[#2E7D52] animate-pulse" />
-                  Tamper-Evident Recording Active
-                </span>
               </div>
               <p className="text-xs text-[#64748B]">
                 Private messaging and document sharing between matched founders and investors.
@@ -146,29 +142,10 @@ function DealRoomsContent() {
 
       {/* Main Container */}
       <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 space-y-6">
-        {/* Compliance & Security Banner */}
-        <div className="rounded-xl border border-[#CBD5E1] bg-gradient-to-r from-[#0F1E36] to-[#1E3A8A] text-white p-5 shadow-elevated flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
-          <div className="flex items-start gap-3">
-            <div className="p-2.5 rounded-lg bg-white/10 border border-white/20 mt-0.5">
-              <ShieldCheck className="w-5 h-5 text-[#38BDF8]" />
-            </div>
-            <div>
-              <div className="text-sm font-bold flex items-center gap-2">
-                Private, Tamper-Evident Deal Rooms
-                <Badge variant="outline" className="border-white/30 text-white bg-white/10 text-[10px]">
-                  SHA-256 Chained
-                </Badge>
-              </div>
-              <p className="text-xs text-white/80 mt-1 max-w-2xl leading-relaxed">
-                Only the founder and investor in a room can open it. Every message is linked to the one before it
-                with a SHA-256 hash, so any later change to the conversation history can be detected.
-              </p>
-            </div>
-          </div>
-          <div className="text-xs text-white/70 bg-black/20 px-3.5 py-2 rounded-lg border border-white/10 whitespace-nowrap">
-            🔒 Participants only
-          </div>
-        </div>
+        <p className="flex items-center gap-2 text-sm text-[#64748B]">
+          <Lock className="w-4 h-4" />
+          Only the founder and investor in a room can see what&apos;s shared in it.
+        </p>
 
         {/* Filters and Search Bar */}
         <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3">
@@ -234,7 +211,7 @@ function DealRoomsContent() {
             {filteredRooms.map((room) => {
               const counterpartyName = role === "FOUNDER" ? room.investor_name : room.founder_name;
               const counterpartyFirm =
-                role === "FOUNDER" ? room.investor_firm || "Institutional Investor" : room.founder_company || "Founder";
+                role === "FOUNDER" ? room.investor_firm || "Investor" : room.founder_company || "Founder";
 
               return (
                 <div
@@ -297,9 +274,8 @@ function DealRoomsContent() {
 
                   {/* Footer actions */}
                   <div className="pt-3 border-t border-[#E2E8F0] flex items-center justify-between text-xs">
-                    <span className="text-[11px] text-[#64748B] flex items-center gap-1 font-mono">
-                      <span className="w-1.5 h-1.5 rounded-full bg-emerald-500" />
-                      hash: {room.audit_trail_hash ? `${room.audit_trail_hash.substring(0, 10)}...` : "active"}
+                    <span className="text-[#64748B]">
+                      {room.messages_count === 1 ? "1 message" : `${room.messages_count ?? 0} messages`}
                     </span>
 
                     <Link

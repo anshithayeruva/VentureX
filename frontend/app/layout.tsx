@@ -3,9 +3,9 @@ import "./globals.css";
 import { AppShell } from "@/components/AppShell";
 
 export const metadata: Metadata = {
-  title: "VentureX — AI-Powered Founder & Investor Matching Platform",
+  title: "VentureX — Get ready to raise",
   description:
-    "Intelligently connect early-stage startup founders with relevant investors, syndicates, and capital opportunities via explainable AI readiness analysis and vector embeddings.",
+    "Private AI feedback on your pitch, and introductions to investors who fit.",
 };
 
 export default function RootLayout({

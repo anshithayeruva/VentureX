@@ -122,18 +122,9 @@ export default function NewProjectPage() {
 
         {/* Header */}
         <div className="border-b border-[#E2E8F0] pb-6">
-          <div className="flex items-center gap-2 mb-1">
-            <Badge variant="primary">Confidential Intake</Badge>
-            <span className="text-xs text-[#64748B] font-mono flex items-center gap-1">
-              <Lock className="w-3 h-3 text-[#1B3B6F]" /> Private by Default
-            </span>
-          </div>
-          <h1 className="text-2xl sm:text-3xl font-bold text-[#0F172A] font-display">
-            Create Startup Profile
-          </h1>
-          <p className="text-xs sm:text-sm text-[#64748B] mt-0.5">
-            Document your core technology and venture mechanics. The AI Readiness Engine evaluates completeness
-            while keeping all materials confidential to your founder account.
+          <h1 className="text-2xl font-semibold text-[#0F172A]">New project</h1>
+          <p className="text-sm text-[#64748B] mt-1">
+            Tell us about your startup. It stays private until you publish it.
           </p>
         </div>
 
@@ -143,7 +134,7 @@ export default function NewProjectPage() {
             <div className="flex items-center gap-2.5 text-[#2E7D52]">
               <CheckCircle2 className="w-6 h-6 text-[#2E7D52]" />
               <h2 className="text-lg sm:text-xl font-bold text-[#0F172A] font-display">
-                Project Profile Created Successfully!
+                Project created
               </h2>
             </div>
             <p className="text-xs sm:text-sm text-[#1E5236]">
@@ -152,11 +143,11 @@ export default function NewProjectPage() {
 
             <div className="p-4 rounded-lg bg-white border border-[#E2E8F0] space-y-2 shadow-subtle">
               <div className="flex items-center justify-between">
-                <span className="text-xs text-[#64748B] font-semibold uppercase tracking-wider flex items-center gap-1.5">
+                <span className="text-sm text-[#64748B] flex items-center gap-1.5">
                   <Sparkles className="w-3.5 h-3.5 text-[#1B3B6F]" />
-                  Baseline Readiness Score:
+                  First readiness score
                 </span>
-                <span className="text-lg font-mono font-bold text-[#1B3B6F]">
+                <span className="text-lg font-semibold text-[#1B3B6F]">
                   {successResult.readiness_score != null ? `${successResult.readiness_score}` : "—"}
                 </span>
               </div>
@@ -460,7 +451,7 @@ export default function NewProjectPage() {
                 </label>
                 <input
                   type="text"
-                  placeholder="https://docsend.com/view/demo"
+                  placeholder="https://docsend.com/…"
                   value={formData.pitch_deck_url}
                   onChange={(e) => setFormData({ ...formData, pitch_deck_url: e.target.value })}
                   className="w-full px-3.5 py-2.5 bg-[#FAFBFD] border border-[#E2E8F0] rounded-lg text-[#0F172A] placeholder-[#94A3B8] focus:outline-none focus:border-[#1B3B6F] text-xs sm:text-sm font-mono text-[11px]"
@@ -507,9 +498,9 @@ export default function NewProjectPage() {
               className="mt-1 accent-[#1B3B6F] w-4 h-4"
             />
             <label htmlFor="makePublicNow" className="text-xs text-[#0F172A] cursor-pointer">
-              <span className="font-semibold block">Publish immediately to verified syndicate investors</span>
+              <span className="font-semibold block">Publish to investors now</span>
               <span className="text-[#64748B] block mt-0.5">
-                Leave unchecked to keep this project completely private in your founder workspace while you review the readiness report.
+                Leave this off to keep the project private while you review your readiness feedback.
               </span>
             </label>
           </div>
