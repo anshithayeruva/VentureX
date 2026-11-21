@@ -1,9 +1,9 @@
 import logging
 import json
 from typing import List, Optional, Dict
-from fastapi import APIRouter, Depends, HTTPException, status, Query, WebSocket, WebSocketDisconnect
+from fastapi import APIRouter, Depends, File, Form, HTTPException, status, Query, UploadFile, WebSocket, WebSocketDisconnect
 from fastapi.encoders import jsonable_encoder
-from fastapi.responses import Response
+from fastapi.responses import FileResponse, Response
 
 from app.schemas.dealroom import (
     DealRoom,
@@ -16,6 +16,7 @@ from app.schemas.dealroom import (
     DealRoomAuditLog,
 )
 from app.core.auth import CurrentUser, require_user, user_from_token
+from app.services import dealroom_files
 from app.services.deal_room_service import DealRoomService
 from app.utils.pdf_generator import PDFGenerator
 
@@ -257,6 +258,9 @@ async def sign_nda(room_id: str, nda_in: NDASignInput, user: CurrentUser = Depen
 async def share_document(room_id: str, doc_in: DocumentShareInput, user: CurrentUser = Depends(require_user)):
     """Upload or share a confidential pitch deck, financial model, or cap table into the Deal Room."""
     await _require_participant(room_id, user)
+    # Links only: files are uploaded through POST /{room_id}/files, which stores them privately.
+    if not doc_in.url.lower().startswith(("https://", "http://")):
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Share a link that starts with https://")
     doc_in = doc_in.model_copy(update=_as_sender(user))
     try:
         updated_room = await DealRoomService.share_document(room_id, doc_in)
@@ -265,6 +269,45 @@ async def share_document(room_id: str, doc_in: DocumentShareInput, user: Current
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e))
     except Exception as e:
         raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(e))
+
+
+@router.post("/{room_id}/files", response_model=DealRoom)
+async def upload_room_file(
+    room_id: str,
+    file: UploadFile = File(...),
+    type: str = Form("other"),
+    name: Optional[str] = Form(None),
+    user: CurrentUser = Depends(require_user),
+):
+    """Upload a file into the deal room. It is stored privately and only the room's two
+    participants can download it (GET /{room_id}/files/{file_id})."""
+    await _require_participant(room_id, user)
+    try:
+        file_id, original, size_kb = await dealroom_files.save(room_id, file)
+    except ValueError as e:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
+    doc_in = DocumentShareInput(
+        name=(name or "").strip() or original,
+        url=dealroom_files.file_url(room_id, file_id),
+        type=type or "other",
+        size_kb=size_kb,
+        **_as_sender(user),
+    )
+    try:
+        return await DealRoomService.share_document(room_id, doc_in)
+    except ValueError as e:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e))
+
+
+@router.get("/{room_id}/files/{file_id}")
+async def download_room_file(room_id: str, file_id: str, user: CurrentUser = Depends(require_user)):
+    """Download a file shared in the deal room (participants only)."""
+    await _require_participant(room_id, user)
+    found = dealroom_files.locate(room_id, file_id)
+    if not found:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="File not found")
+    path, filename, content_type = found
+    return FileResponse(path, media_type=content_type, filename=filename)
 
 
 @router.get("/{room_id}/transcript")

@@ -842,49 +842,36 @@ export const api = {
     return { id: interestId, status };
   },
 
-  async getNotifications(
-    role?: "FOUNDER" | "INVESTOR",
-    userId?: string,
-    unreadOnly?: boolean
-  ): Promise<NotificationItem[]> {
+  // Notifications are always the signed-in user's own (the backend scopes them by token).
+  // The `role` argument is kept for existing callers and ignored. On any failure these return
+  // empty results: never sample data.
+  async getNotifications(role?: "FOUNDER" | "INVESTOR", unreadOnly?: boolean): Promise<NotificationItem[]> {
     try {
       const params = new URLSearchParams();
-      if (role) params.append("role", role);
-      if (userId) params.append("user_id", userId);
       if (unreadOnly) params.append("unread_only", "true");
       const res = await apiFetch(`${API_BASE_URL}/notifications?${params.toString()}`, { cache: "no-store" });
       if (res.ok) {
         const data = await res.json();
-        // An empty list is a real answer (e.g. a new account); sample data is only for an unreachable backend.
         if (Array.isArray(data)) return data;
       }
     } catch {
-      // Clean fallback to in-memory notification cache without throwing console warnings
+      // network error: show nothing rather than sample data
     }
-    return localNotifications.filter((n) => {
-      if (role && n.target_role && n.target_role !== role) return false;
-      if (unreadOnly && n.read) return false;
-      return true;
-    });
+    return [];
   },
 
-  async getUnreadNotificationCount(role?: "FOUNDER" | "INVESTOR", userId?: string): Promise<number> {
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+  async getUnreadNotificationCount(role?: "FOUNDER" | "INVESTOR"): Promise<number> {
     try {
-      const params = new URLSearchParams();
-      if (role) params.append("role", role);
-      if (userId) params.append("user_id", userId);
-      const res = await apiFetch(`${API_BASE_URL}/notifications/unread-count?${params.toString()}`, { cache: "no-store" });
+      const res = await apiFetch(`${API_BASE_URL}/notifications/unread-count`, { cache: "no-store" });
       if (res.ok) {
         const data = await res.json();
         return data.unread_count ?? 0;
       }
     } catch {
-      // Fallback
+      // network error
     }
-    return localNotifications.filter((n) => {
-      if (role && n.target_role && n.target_role !== role) return false;
-      return !n.read;
-    }).length;
+    return 0;
   },
 
   async markNotificationRead(id: string | number): Promise<boolean> {
@@ -1086,42 +1073,36 @@ export const api = {
     return [];
   },
 
-  async uploadFile(
-    file: File,
-    category: string = "general"
-  ): Promise<{
-    filename: string;
-    original_name: string;
-    url: string;
-    size_kb: number;
-    content_type: string;
-    insights?: any;
-  } | null> {
-    try {
-      const formData = new FormData();
-      formData.append("file", file);
-      formData.append("category", category);
+  /**
+   * Upload a file into a deal room. The backend stores it privately; only the room's two
+   * participants can download it (see downloadDealRoomFile). Throws with the server's message.
+   */
+  async uploadDealRoomFile(roomId: string, file: File, name: string, type: string): Promise<DealRoom> {
+    const form = new FormData();
+    form.append("file", file);
+    form.append("name", name);
+    form.append("type", type);
+    const res = await apiFetch(`${API_BASE_URL}/dealrooms/${roomId}/files`, { method: "POST", body: form });
+    await throwForStatus(res, "Could not upload the file");
+    return res.json();
+  },
 
-      const res = await apiFetch(`${API_BASE_URL}/upload`, {
-        method: "POST",
-        body: formData,
-      });
+  /** True for a file stored in a deal room (downloaded with the user's token), false for an external link. */
+  isDealRoomFile(url: string): boolean {
+    return /^\/dealrooms\/[A-Za-z0-9_-]+\/files\/[0-9a-f]{32}$/.test(url);
+  },
 
-      if (res.ok) {
-        return await res.json();
-      }
-    } catch {
-      // Fallback simulation for offline mode
-    }
-
-    const fakeUrl = URL.createObjectURL(file);
-    return {
-      filename: `${Date.now()}_${file.name}`,
-      original_name: file.name,
-      url: fakeUrl,
-      size_kb: Math.round(file.size / 1024),
-      content_type: file.type || "application/octet-stream",
-    };
+  async downloadDealRoomFile(url: string, name: string): Promise<void> {
+    const res = await apiFetch(`${API_BASE_URL}${url}`);
+    await throwForStatus(res, "Could not download the file");
+    const objectUrl = URL.createObjectURL(await res.blob());
+    const a = document.createElement("a");
+    a.href = objectUrl;
+    a.download = name;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    URL.revokeObjectURL(objectUrl);
   },
 
   async downloadProjectReadinessPDF(

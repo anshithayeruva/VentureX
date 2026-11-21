@@ -78,8 +78,8 @@ function DealRoomContent({ params }: PageProps) {
   const [docName, setDocName] = useState("");
   const [docUrl, setDocUrl] = useState("");
   const [docType, setDocType] = useState("pitch_deck");
-  const [docSizeKb, setDocSizeKb] = useState<number | undefined>(undefined);
-  const [uploadingDoc, setUploadingDoc] = useState(false);
+  const [docFile, setDocFile] = useState<File | null>(null);
+  const [docError, setDocError] = useState<string | null>(null);
 
   const [newStage, setNewStage] = useState("DUE_DILIGENCE");
   const [stageNote, setStageNote] = useState("");
@@ -243,28 +243,49 @@ function DealRoomContent({ params }: PageProps) {
     setBusy(null);
   };
 
+  const resetDocForm = () => {
+    setDocName("");
+    setDocUrl("");
+    setDocFile(null);
+    setDocError(null);
+  };
+
+  // A file is uploaded privately to the room (only its two members can download it);
+  // otherwise the founder or investor shares an https link.
   const shareDocument = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!docName.trim() || !docUrl.trim()) return;
-    setBusy("doc");
-    const updated = await api.shareDealRoomDocument(roomId, {
-      name: docName.trim(),
-      url: docUrl.trim(),
-      type: docType,
-      size_kb: docSizeKb,
-      sender_id: currentUserId,
-      sender_role: role,
-      sender_name: currentUserName,
-    });
-    if (updated) {
-      setRoom(updated);
-      setShowDocModal(false);
-      setDocName("");
-      setDocUrl("");
-      setDocSizeKb(undefined);
-      await fetchRoomData();
+    const name = docName.trim();
+    if (!name) return;
+    if (!docFile && !/^https?:\/\//i.test(docUrl.trim())) {
+      setDocError("Choose a file, or paste a link that starts with https://");
+      return;
     }
-    setBusy(null);
+    setBusy("doc");
+    setDocError(null);
+    try {
+      const updated = docFile
+        ? await api.uploadDealRoomFile(roomId, docFile, name, docType)
+        : await api.shareDealRoomDocument(roomId, {
+            name,
+            url: docUrl.trim(),
+            type: docType,
+            sender_id: currentUserId,
+            sender_role: role,
+            sender_name: currentUserName,
+          });
+      if (updated) {
+        setRoom(updated);
+        setShowDocModal(false);
+        resetDocForm();
+        await fetchRoomData();
+      } else {
+        setDocError("Couldn't share that. Please try again.");
+      }
+    } catch (err) {
+      setDocError(err instanceof Error ? err.message : "Couldn't share that. Please try again.");
+    } finally {
+      setBusy(null);
+    }
   };
 
   const downloadPdf = async () => {
@@ -415,19 +436,18 @@ function DealRoomContent({ params }: PageProps) {
                       >
                         <p className="whitespace-pre-wrap">{msg.content}</p>
                         {msg.attachments?.map((att, i) => (
-                          <a
+                          <DocLink
                             key={i}
-                            href={att.url}
-                            target="_blank"
-                            rel="noopener noreferrer"
+                            url={att.url}
+                            name={att.name}
                             className={cx(
-                              "mt-2 flex items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-xs",
+                              "mt-2 flex w-full items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-left text-xs",
                               mine ? "bg-white/15 hover:bg-white/25" : "bg-surface hover:bg-canvas"
                             )}
                           >
                             <FileText className="h-3.5 w-3.5 shrink-0" />
                             <span className="truncate">{att.name}</span>
-                          </a>
+                          </DocLink>
                         ))}
                       </div>
                     </div>
@@ -501,15 +521,14 @@ function DealRoomContent({ params }: PageProps) {
                           {doc.size_kb ? ` · ${doc.size_kb} KB` : ""}
                         </div>
                       </div>
-                      <a
-                        href={doc.url}
-                        target="_blank"
-                        rel="noopener noreferrer"
+                      <DocLink
+                        url={doc.url}
+                        name={doc.name}
                         className="rounded-md p-1.5 text-faint hover:bg-subtle hover:text-ink"
-                        aria-label={`Open ${doc.name}`}
+                        label={`Open ${doc.name}`}
                       >
-                        <ExternalLink className="h-4 w-4" />
-                      </a>
+                        {api.isDealRoomFile(doc.url) ? <Download className="h-4 w-4" /> : <ExternalLink className="h-4 w-4" />}
+                      </DocLink>
                     </li>
                   ))}
                 </ul>
@@ -538,36 +557,51 @@ function DealRoomContent({ params }: PageProps) {
 
       {/* Share a document */}
       {showDocModal && (
-        <Modal title="Share a document" onClose={() => setShowDocModal(false)}>
+        <Modal
+          title="Share a document"
+          onClose={() => {
+            setShowDocModal(false);
+            resetDocForm();
+          }}
+        >
           <form onSubmit={shareDocument} className="space-y-4">
             <div>
               <input
                 id="room-file"
                 type="file"
+                accept=".pdf,.pptx,.docx,.xlsx,.csv,.txt,.md,.png,.jpg,.jpeg"
                 className="hidden"
-                onChange={async (e) => {
+                onChange={(e) => {
                   const file = e.target.files?.[0];
                   if (!file) return;
-                  setUploadingDoc(true);
-                  const uploaded = await api.uploadFile(file, "dealroom_attachment");
-                  if (uploaded) {
-                    setDocName(uploaded.original_name);
-                    setDocUrl(uploaded.url);
-                    setDocSizeKb(uploaded.size_kb);
+                  if (file.size > 25 * 1024 * 1024) {
+                    setDocError("The file must be 25 MB or smaller.");
+                    return;
                   }
-                  setUploadingDoc(false);
+                  setDocFile(file);
+                  setDocError(null);
+                  if (!docName.trim()) setDocName(file.name);
                 }}
               />
               <label
                 htmlFor="room-file"
                 className="flex cursor-pointer items-center gap-3 rounded-lg border border-dashed border-line-strong px-4 py-4 hover:bg-canvas"
               >
-                {docUrl && docSizeKb ? <Check className="h-5 w-5 text-positive" /> : <Paperclip className="h-5 w-5 text-faint" />}
-                <span className="text-sm">
-                  <span className="block font-medium text-ink">{uploadingDoc ? "Uploading…" : "Upload a file"}</span>
-                  <span className="block text-muted">Up to 25 MB, or paste a link below.</span>
+                {docFile ? <Check className="h-5 w-5 text-positive" /> : <Paperclip className="h-5 w-5 text-faint" />}
+                <span className="min-w-0 text-sm">
+                  <span className="block truncate font-medium text-ink">{docFile ? docFile.name : "Upload a file"}</span>
+                  <span className="block text-muted">
+                    {docFile
+                      ? `${Math.max(1, Math.round(docFile.size / 1024))} KB · only you and ${otherName} can open it`
+                      : "Up to 25 MB. Only the two of you can open it. Or paste a link below."}
+                  </span>
                 </span>
               </label>
+              {docFile && (
+                <button type="button" onClick={() => setDocFile(null)} className="mt-1.5 text-sm text-muted hover:text-ink">
+                  Remove file
+                </button>
+              )}
             </div>
             <Field label="Name" htmlFor="doc-name">
               <input id="doc-name" required className={inputClass} value={docName} onChange={(e) => setDocName(e.target.value)} />
@@ -581,21 +615,34 @@ function DealRoomContent({ params }: PageProps) {
                 ))}
               </select>
             </Field>
-            <Field label="Link" htmlFor="doc-url">
-              <input
-                id="doc-url"
-                required
-                className={inputClass}
-                placeholder="https://… (Drive, Dropbox, DocSend)"
-                value={docUrl}
-                onChange={(e) => setDocUrl(e.target.value)}
-              />
-            </Field>
+            {!docFile && (
+              <Field label="Link" htmlFor="doc-url">
+                <input
+                  id="doc-url"
+                  type="url"
+                  className={inputClass}
+                  placeholder="https://… (Drive, Dropbox, DocSend)"
+                  value={docUrl}
+                  onChange={(e) => setDocUrl(e.target.value)}
+                />
+              </Field>
+            )}
+            {docError && (
+              <p role="alert" className="text-sm text-danger">
+                {docError}
+              </p>
+            )}
             <div className="flex justify-end gap-2 pt-2">
-              <Button variant="ghost" onClick={() => setShowDocModal(false)}>
+              <Button
+                variant="ghost"
+                onClick={() => {
+                  setShowDocModal(false);
+                  resetDocForm();
+                }}
+              >
                 Cancel
               </Button>
-              <button type="submit" className={buttonClass("primary")} disabled={uploadingDoc || busy === "doc"}>
+              <button type="submit" className={buttonClass("primary")} disabled={busy === "doc"}>
                 {busy === "doc" ? "Sharing…" : "Share"}
               </button>
             </div>
@@ -680,6 +727,48 @@ function DealRoomContent({ params }: PageProps) {
         </div>
       )}
     </PortalLayout>
+  );
+}
+
+/** A shared document: a private room file downloads with the user's token; an external link opens in a new tab. */
+function DocLink({
+  url,
+  name,
+  className,
+  label,
+  children,
+}: {
+  url: string;
+  name: string;
+  className?: string;
+  label?: string;
+  children: React.ReactNode;
+}) {
+  if (api.isDealRoomFile(url)) {
+    return (
+      <button
+        type="button"
+        className={className}
+        aria-label={label}
+        title="Download"
+        onClick={() => api.downloadDealRoomFile(url, name).catch((e: Error) => window.alert(e.message))}
+      >
+        {children}
+      </button>
+    );
+  }
+  if (!/^https?:\/\//i.test(url)) {
+    // Older uploads that were stored publicly are no longer served.
+    return (
+      <span className={cx(className, "opacity-60")} title="This file is no longer available">
+        {children}
+      </span>
+    );
+  }
+  return (
+    <a href={url} target="_blank" rel="noopener noreferrer" className={className} aria-label={label}>
+      {children}
+    </a>
   );
 }
 
