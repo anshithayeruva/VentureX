@@ -14,7 +14,7 @@ import {
   ReadinessReport,
   AnalysisHistoryItem,
 } from "@/types";
-import { getApiToken } from "@/lib/auth/client";
+import { clearApiToken, getApiToken } from "@/lib/auth/client";
 
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000/api";
 
@@ -22,13 +22,23 @@ const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000/a
  * fetch() against the FastAPI backend, attaching the signed-in user's
  * Neon Auth JWT as a Bearer token when there is a session.
  */
-async function apiFetch(input: string, init: RequestInit = {}): Promise<Response> {
+async function apiFetch(input: string, init: RequestInit = {}, retried = false): Promise<Response> {
   const headers = new Headers(init.headers);
+  let sentToken = false;
   if (typeof window !== "undefined" && !headers.has("Authorization")) {
     const token = await getApiToken();
-    if (token) headers.set("Authorization", `Bearer ${token}`);
+    if (token) {
+      headers.set("Authorization", `Bearer ${token}`);
+      sentToken = true;
+    }
   }
-  return fetch(input, { ...init, headers });
+  const res = await fetch(input, { ...init, headers });
+  // A cached token can expire or belong to an ended session: refresh once and retry.
+  if (res.status === 401 && sentToken && !retried && !(init.body instanceof ReadableStream)) {
+    clearApiToken();
+    return apiFetch(input, init, true);
+  }
+  return res;
 }
 
 /** Throw an Error carrying the API's `detail` message for a failed response. */
@@ -398,7 +408,8 @@ export const api = {
       const res = await apiFetch(url.toString(), { headers, cache: "no-store" });
       if (res.ok) {
         const data = await res.json();
-        if (Array.isArray(data) && data.length > 0) return data;
+        // An empty list is a real answer (e.g. a new account); sample data is only for an unreachable backend.
+        if (Array.isArray(data)) return data;
       }
     } catch {
       // Fallback to local projects
@@ -409,11 +420,10 @@ export const api = {
   async getProject(id: number | string): Promise<Project | null> {
     try {
       const res = await apiFetch(`${API_BASE_URL}/projects/${id}`, { cache: "no-store" });
-      if (res.ok) {
-        return await res.json();
-      }
+      // The backend answered: a 404 means "not found or not yours", not "show a sample project".
+      return res.ok ? await res.json() : null;
     } catch {
-      // Fallback to local
+      // Backend unreachable: fall back to local sample data
     }
     return localProjects.find((p) => String(p.id) === String(id)) || null;
   },
@@ -466,14 +476,14 @@ export const api = {
         headers,
         body: JSON.stringify(data),
       });
-      if (res.ok) {
-        const updated = await res.json();
-        const idx = localProjects.findIndex((p) => String(p.id) === String(id));
-        if (idx !== -1) localProjects[idx] = updated;
-        return updated;
-      }
-    } catch {
-      // Fallback
+      await throwForStatus(res, "Could not save the project");
+      const updated = await res.json();
+      const idx = localProjects.findIndex((p) => String(p.id) === String(id));
+      if (idx !== -1) localProjects[idx] = updated;
+      return updated;
+    } catch (err) {
+      // Real API errors (validation, ownership) surface to the form; only a down backend uses local mode.
+      if (!(err instanceof TypeError)) throw err;
     }
 
     const idx = localProjects.findIndex((p) => String(p.id) === String(id));
@@ -597,7 +607,8 @@ export const api = {
       const res = await apiFetch(`${API_BASE_URL}/matches`, { headers, cache: "no-store" });
       if (res.ok) {
         const data = await res.json();
-        if (Array.isArray(data) && data.length > 0) return data;
+        // An empty list is a real answer (e.g. a new account); sample data is only for an unreachable backend.
+        if (Array.isArray(data)) return data;
       }
     } catch {
       // Fallback
@@ -844,7 +855,8 @@ export const api = {
       const res = await apiFetch(`${API_BASE_URL}/notifications?${params.toString()}`, { cache: "no-store" });
       if (res.ok) {
         const data = await res.json();
-        if (Array.isArray(data) && data.length > 0) return data;
+        // An empty list is a real answer (e.g. a new account); sample data is only for an unreachable backend.
+        if (Array.isArray(data)) return data;
       }
     } catch {
       // Clean fallback to in-memory notification cache without throwing console warnings

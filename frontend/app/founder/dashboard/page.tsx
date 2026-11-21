@@ -44,7 +44,7 @@ import { ProjectCard } from "@/components/ProjectCard";
 import { InvestorCard } from "@/components/InvestorCard";
 import { StatCard } from "@/components/StatCard";
 import { PortalLayout } from "@/components/PortalLayout";
-import { api, MOCK_PROJECTS, MOCK_MATCHES } from "@/lib/api";
+import { api } from "@/lib/api";
 import { Project, MatchItem, ProjectInterest, NotificationItem } from "@/types";
 
 function FounderDashboardContent() {
@@ -52,8 +52,8 @@ function FounderDashboardContent() {
   const tabParam = searchParams.get("tab");
 
   const [activeTab, setActiveTab] = useState<string>("overview");
-  const [projects, setProjects] = useState<Project[]>(MOCK_PROJECTS);
-  const [matches, setMatches] = useState<MatchItem[]>(MOCK_MATCHES);
+  const [projects, setProjects] = useState<Project[]>([]);
+  const [matches, setMatches] = useState<MatchItem[]>([]);
   const [interests, setInterests] = useState<ProjectInterest[]>([]);
   const [statusProcessing, setStatusProcessing] = useState<string | null>(null);
   const [introTabFilter, setIntroTabFilter] = useState<"all" | "pending" | "accepted" | "declined">("all");
@@ -233,11 +233,26 @@ function FounderDashboardContent() {
   };
 
   const handleExportReadinessReport = async () => {
-    const activeProject = projects[0] || MOCK_PROJECTS[0];
+    const activeProject = projects[0];
+    if (!activeProject) return; // nothing to export until the founder has a project
     setExportingReport(true);
     await api.downloadProjectReadinessPDF(activeProject.id, activeProject.title);
     setExportingReport(false);
   };
+
+  // Readiness of the founder's strongest project (null until they have one).
+  const scoredProjects = projects.filter((p) => typeof p.readiness_score === "number");
+  const bestReadiness = scoredProjects.length
+    ? Math.max(...scoredProjects.map((p) => p.readiness_score as number))
+    : null;
+  const readinessLabel =
+    bestReadiness == null ? "No projects yet"
+    : bestReadiness >= 85 ? "Ready for Review"
+    : bestReadiness >= 70 ? "Nearly Ready"
+    : "Needs Work";
+  const newThisQuarter = projects.filter(
+    (p) => p.created_at && Date.now() - new Date(p.created_at).getTime() < 90 * 24 * 3600 * 1000
+  ).length;
 
   const filteredMatches = matches.filter(
     (m) =>
@@ -319,14 +334,14 @@ function FounderDashboardContent() {
             <StatCard
               label="Active Projects"
               value={projects.length}
-              change="+1 this quarter"
+              change={newThisQuarter ? `+${newThisQuarter} this quarter` : undefined}
               icon={Rocket}
               subtext="Confidential workspace"
             />
             <StatCard
               label="AI Readiness Score"
-              value="92.4"
-              change="Ready for Review"
+              value={bestReadiness != null ? bestReadiness.toFixed(1) : "—"}
+              change={readinessLabel}
               icon={Sparkles}
               subtext="Gap Analysis Engine v2"
             />
@@ -552,7 +567,7 @@ function FounderDashboardContent() {
                         <td className="px-4 py-3.5">
                           <div className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-[#EBF2FA] text-[#1B3B6F] font-semibold text-xs border border-[#BFD7EE]">
                             <Sparkles className="w-3 h-3" />
-                            {proj.readiness_score?.toFixed(1) || "88.0"}
+                            {proj.readiness_score != null ? proj.readiness_score.toFixed(1) : "—"}
                           </div>
                         </td>
                         <td className="px-4 py-3.5">
@@ -670,7 +685,7 @@ function FounderDashboardContent() {
                 <div className="mt-8 text-center">
                   <div className="inline-flex items-center justify-center w-40 h-40 rounded-full border-8 border-[#1B3B6F] bg-[#EBF2FA] relative shadow-inner">
                     <div className="text-center">
-                      <span className="text-5xl font-extrabold text-[#1B3B6F] font-display">92.4</span>
+                      <span className="text-5xl font-extrabold text-[#1B3B6F] font-display">{bestReadiness != null ? bestReadiness.toFixed(1) : "—"}</span>
                       <span className="block text-[10px] text-[#64748B] uppercase font-mono mt-0.5 tracking-wider">
                         out of 100
                       </span>
@@ -977,7 +992,7 @@ function FounderDashboardContent() {
                           </a>
 
                           <Link
-                            href={`/dealroom/room-neuropulse-blueshift?role=FOUNDER`}
+                            href={item.deal_room?.room_id ? `/dealroom/${item.deal_room.room_id}` : "/dealroom"}
                             className="p-3 bg-white border border-[#C8E6C9] hover:border-[#2E7D52] rounded-lg text-xs font-medium text-[#0F172A] transition-all flex items-center justify-between shadow-subtle group"
                           >
                             <span className="flex items-center gap-2">

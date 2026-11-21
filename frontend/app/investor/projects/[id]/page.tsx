@@ -16,7 +16,7 @@ import {
 } from "lucide-react";
 import { Badge } from "@/components/Badge";
 import { PortalLayout } from "@/components/PortalLayout";
-import { api, MOCK_PROJECTS, MOCK_MATCHES } from "@/lib/api";
+import { api } from "@/lib/api";
 import { Project, MatchItem } from "@/types";
 
 export default function InvestorProjectDetailsPage({ params }: { params: Promise<{ id: string }> }) {
@@ -27,23 +27,23 @@ export default function InvestorProjectDetailsPage({ params }: { params: Promise
   const [matchItem, setMatchItem] = useState<MatchItem | null>(null);
   const [requested, setRequested] = useState(false);
   const [submitting, setSubmitting] = useState(false);
+  const [notFound, setNotFound] = useState(false);
 
   useEffect(() => {
     let mounted = true;
     api.getProject(projectId).then((fetched) => {
       if (!mounted) return;
-      const found =
-        fetched ||
-        MOCK_PROJECTS.find((p) => String(p.id) === String(projectId)) ||
-        MOCK_PROJECTS[0];
+      if (!fetched) {
+        setNotFound(true);
+        return;
+      }
+      const found = fetched;
       setProject(found);
 
       api.getMatches().then((allMatches) => {
         if (!mounted) return;
         const matchFound =
-          allMatches.find((m) => String(m.project_id) === String(found.id)) ||
-          MOCK_MATCHES.find((m) => String(m.project_id) === String(found.id)) ||
-          null;
+          allMatches.find((m) => String(m.project_id) === String(found.id)) || null;
         setMatchItem(matchFound);
       });
 
@@ -62,6 +62,20 @@ export default function InvestorProjectDetailsPage({ params }: { params: Promise
       mounted = false;
     };
   }, [projectId]);
+
+  if (notFound) {
+    return (
+      <PortalLayout role="INVESTOR" activeItem="browse" title="Project Details">
+        <div className="max-w-xl mx-auto mt-10 rounded-xl border border-[#E2E8F0] bg-white p-8 text-center space-y-3 shadow-subtle">
+          <p className="text-sm font-semibold text-[#0F172A]">Project not found</p>
+          <p className="text-xs text-[#64748B]">It may have been unpublished, or it isn&apos;t visible to your account.</p>
+          <Link href="/investor/dashboard" className="inline-block text-xs font-semibold text-[#1B3B6F] hover:underline">
+            Back to dealflow
+          </Link>
+        </div>
+      </PortalLayout>
+    );
+  }
 
   if (!project) {
     return (

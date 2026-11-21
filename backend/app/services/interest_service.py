@@ -254,6 +254,16 @@ class InterestService:
         return await pg.fetch_one("SELECT * FROM project_interests WHERE id = %s", [str(interest_id)])
 
     @classmethod
+    async def link_deal_room(cls, interest_id: Union[int, str], room_id: str) -> Optional[Dict[str, Any]]:
+        """Record the deal room id on the intro so dashboards can open it."""
+        await pg.execute(
+            "UPDATE project_interests SET deal_room = COALESCE(deal_room, '{}'::jsonb) || %s, updated_at = now() "
+            "WHERE id = %s",
+            [pg.Jsonb({"room_id": room_id}), str(interest_id)],
+        )
+        return await cls.get_by_id(interest_id)
+
+    @classmethod
     async def delete_interest(cls, interest_id: Union[int, str]) -> bool:
         """Withdraw/remove an introduction request."""
         deleted = await pg.execute("DELETE FROM project_interests WHERE id = %s", [str(interest_id)])

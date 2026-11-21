@@ -97,13 +97,22 @@ class NotificationService:
         return [_serialize(r) for r in rows]
 
     @classmethod
-    async def mark_as_read(cls, notification_id: str) -> bool:
-        """Mark a single notification as read."""
+    async def mark_as_read(
+        cls,
+        notification_id: str,
+        user_id: Optional[str] = None,
+        target_role: Optional[str] = None,
+    ) -> bool:
+        """Mark a single notification as read (only one addressed to this user or their role)."""
         try:
             nid = int(notification_id)
         except (TypeError, ValueError):
             return False
-        return await pg.execute("UPDATE notifications SET read = TRUE WHERE id = %s AND NOT read", [nid]) > 0
+        return await pg.execute(
+            "UPDATE notifications SET read = TRUE WHERE id = %s AND NOT read "
+            "AND (user_id = %s OR (user_id IS NULL AND target_role = %s))",
+            [nid, user_id, (target_role or "").upper()],
+        ) > 0
 
     @classmethod
     async def mark_all_read(

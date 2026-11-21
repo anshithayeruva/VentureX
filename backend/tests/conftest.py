@@ -24,3 +24,11 @@ def signed_in_founder():
     app.dependency_overrides[get_current_user] = _user
     yield TEST_FOUNDER
     app.dependency_overrides.pop(get_current_user, None)
+
+
+@pytest.fixture(scope="module")
+def client():
+    """App client with lifespan (opens the Neon transport, applies schema, seeds demo data)."""
+    from starlette.testclient import TestClient
+    with TestClient(app) as test_client:
+        yield test_client

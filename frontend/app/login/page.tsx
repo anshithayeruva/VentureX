@@ -3,7 +3,7 @@
 import React, { useState, useSyncExternalStore } from "react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
-import { authClient, insecureOriginWarning, noSubscribe, sessionWasKept } from "@/lib/auth/client";
+import { authClient, clearApiToken, insecureOriginWarning, noSubscribe, sessionWasKept } from "@/lib/auth/client";
 import { api } from "@/lib/api";
 
 const HOME_FOR_ROLE = {
@@ -41,6 +41,7 @@ function LoginForm() {
     setError(null);
     setPending(true);
     try {
+      clearApiToken(); // never reuse a previous account's token
       const { error: signInError } = await authClient.signIn.email({ email, password });
       if (signInError) {
         setError(

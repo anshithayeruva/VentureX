@@ -189,6 +189,8 @@ export interface DealRoomDetails {
   pitch_deck_url?: string;
   financial_model_url?: string;
   cap_table_verified?: boolean;
+  /** Set when the founder accepts the intro and the deal room is opened. */
+  room_id?: string;
 }
 
 export interface ProjectInterest {

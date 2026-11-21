@@ -37,7 +37,7 @@ import { Badge } from "@/components/Badge";
 import { ProjectCard } from "@/components/ProjectCard";
 import { StatCard } from "@/components/StatCard";
 import { PortalLayout } from "@/components/PortalLayout";
-import { api, MOCK_PROJECTS, MOCK_MATCHES } from "@/lib/api";
+import { api } from "@/lib/api";
 import { Project, MatchItem, ProjectInterest, NotificationItem } from "@/types";
 
 function InvestorDashboardContent() {
@@ -45,8 +45,8 @@ function InvestorDashboardContent() {
   const tabParam = useSearchParams().get("tab");
 
   const [activeTab, setActiveTab] = useState<string>("overview");
-  const [projects, setProjects] = useState<Project[]>(MOCK_PROJECTS);
-  const [matches, setMatches] = useState<MatchItem[]>(MOCK_MATCHES);
+  const [projects, setProjects] = useState<Project[]>([]);
+  const [matches, setMatches] = useState<MatchItem[]>([]);
   const [selectedIndustry, setSelectedIndustry] = useState<string>("All");
   const [searchQuery, setSearchQuery] = useState<string>("");
   const [savedInterests, setSavedInterests] = useState<string[]>([]);
@@ -657,7 +657,7 @@ function InvestorDashboardContent() {
                           </a>
 
                           <Link
-                            href={`/dealroom/room-neuropulse-blueshift?role=INVESTOR`}
+                            href={interest.deal_room?.room_id ? `/dealroom/${interest.deal_room.room_id}` : "/dealroom"}
                             className="p-3 bg-white border border-[#C8E6C9] hover:border-[#2E7D52] rounded-lg text-xs font-medium text-[#0F172A] transition-all flex items-center justify-between shadow-subtle group"
                           >
                             <span className="flex items-center gap-2">

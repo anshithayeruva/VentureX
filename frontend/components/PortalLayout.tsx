@@ -24,8 +24,8 @@ import {
   Sliders,
 } from "lucide-react";
 import { Badge } from "@/components/Badge";
-import { api } from "@/lib/api";
-import { authClient } from "@/lib/auth/client";
+import { api, MeResponse } from "@/lib/api";
+import { authClient, clearApiToken } from "@/lib/auth/client";
 
 interface PortalLayoutProps {
   role: "FOUNDER" | "INVESTOR";
@@ -56,8 +56,18 @@ export function PortalLayout({
 }: PortalLayoutProps) {
   const pathname = usePathname();
   const router = useRouter();
-  const { data: session } = authClient.useSession();
-  const sessionUser = session?.user;
+  // Load the signed-in user from the API (reliable on a full page load, unlike the
+  // client session hook, which only fills after an in-page sign-in).
+  const [sessionUser, setSessionUser] = useState<MeResponse | null>(null);
+  useEffect(() => {
+    let active = true;
+    api.getMe().then((me) => {
+      if (active) setSessionUser(me);
+    }).catch(() => {});
+    return () => {
+      active = false;
+    };
+  }, []);
   const initials =
     (sessionUser?.name || sessionUser?.email || "?")
       .split(/[\s@.]+/)
@@ -68,6 +78,7 @@ export function PortalLayout({
 
   const handleSignOut = async () => {
     await authClient.signOut();
+    clearApiToken();
     router.replace("/login");
     router.refresh();
   };

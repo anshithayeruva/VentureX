@@ -39,18 +39,17 @@ function DealRoomsContent() {
 
   useEffect(() => {
     let mounted = true;
-    setLoading(true);
-    const userId = role === "FOUNDER" ? "founder-001" : "investor-001";
-    api.getDealRooms({ user_id: userId, role }).then((data) => {
-      if (mounted) {
-        setDealRooms(data);
-        setLoading(false);
-      }
+    // The backend returns only the signed-in user's rooms; the account's role sets the view.
+    Promise.all([api.getMe().catch(() => null), api.getDealRooms()]).then(([me, data]) => {
+      if (!mounted) return;
+      if (me?.role) setRole(me.role);
+      setDealRooms(data);
+      setLoading(false);
     });
     return () => {
       mounted = false;
     };
-  }, [role]);
+  }, []);
 
   const filteredRooms = dealRooms.filter((room) => {
     const matchesSearch =

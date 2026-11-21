@@ -15,7 +15,7 @@ import {
 } from "lucide-react";
 import { Badge } from "@/components/Badge";
 import { PortalLayout } from "@/components/PortalLayout";
-import { api, MOCK_PROJECTS } from "@/lib/api";
+import { api } from "@/lib/api";
 import { Project, ProjectCreateInput } from "@/types";
 
 export default function EditProjectPage({ params }: { params: Promise<{ id: string }> }) {
@@ -25,6 +25,8 @@ export default function EditProjectPage({ params }: { params: Promise<{ id: stri
 
   const [saving, setSaving] = useState(false);
   const [saveSuccess, setSaveSuccess] = useState(false);
+  const [saveError, setSaveError] = useState<string | null>(null);
+  const [loadState, setLoadState] = useState<"loading" | "ready" | "not_found">("loading");
   const [formData, setFormData] = useState<ProjectCreateInput>({
     title: "",
     tagline: "",
@@ -75,8 +77,14 @@ export default function EditProjectPage({ params }: { params: Promise<{ id: stri
   ];
 
   useEffect(() => {
-    const found = MOCK_PROJECTS.find((p) => p.id === projectId) || MOCK_PROJECTS[0];
-    if (found) {
+    let active = true;
+    api.getProject(projectId).then((found) => {
+      if (!active) return;
+      if (!found) {
+        setLoadState("not_found");
+        return;
+      }
+      setLoadState("ready");
       setFormData({
         title: found.title,
         tagline: found.tagline || "",
@@ -93,20 +101,44 @@ export default function EditProjectPage({ params }: { params: Promise<{ id: stri
         github_url: found.github_url || "",
         demo_url: found.demo_url || "",
       });
-    }
+    });
+    return () => {
+      active = false;
+    };
   }, [projectId]);
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setSaving(true);
-    setTimeout(() => {
-      setSaving(false);
+    setSaveError(null);
+    try {
+      await api.updateProject(projectId, formData);
       setSaveSuccess(true);
-      setTimeout(() => {
-        router.push(`/founder/projects/${projectId}`);
-      }, 1500);
-    }, 600);
+      setTimeout(() => router.push(`/founder/projects/${projectId}`), 1200);
+    } catch (err) {
+      setSaveError(err instanceof Error ? err.message : "Could not save the project.");
+    } finally {
+      setSaving(false);
+    }
   };
+
+  if (loadState !== "ready") {
+    return (
+      <PortalLayout role="FOUNDER" activeItem="projects" title="Edit Project">
+        {loadState === "loading" ? (
+          <div className="p-8 text-center text-xs text-[#64748B]">Loading project…</div>
+        ) : (
+          <div className="max-w-xl mx-auto mt-10 rounded-xl border border-[#E2E8F0] bg-white p-8 text-center space-y-3 shadow-subtle">
+          <p className="text-sm font-semibold text-[#0F172A]">Project not found</p>
+          <p className="text-xs text-[#64748B]">It may have been removed, or it isn&apos;t visible to your account.</p>
+          <Link href="/founder/projects" className="inline-block text-xs font-semibold text-[#1B3B6F] hover:underline">
+            Back to your projects
+          </Link>
+        </div>
+        )}
+      </PortalLayout>
+    );
+  }
 
   return (
     <PortalLayout role="FOUNDER" activeItem="projects" title={`Edit ${formData.title || "Project"}`}>
@@ -257,6 +289,12 @@ export default function EditProjectPage({ params }: { params: Promise<{ id: stri
               </div>
             </div>
           </div>
+
+          {saveError && (
+            <p role="alert" className="text-xs text-[#B91C1C] bg-[#FEF2F2] border border-[#FECACA] rounded-lg px-3 py-2">
+              {saveError}
+            </p>
+          )}
 
           <div className="flex items-center justify-end gap-3 pt-4 border-t border-[#E2E8F0]">
             <Link

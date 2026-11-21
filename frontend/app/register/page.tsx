@@ -4,7 +4,7 @@ import React, { useState, useSyncExternalStore } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { Rocket, Briefcase } from "lucide-react";
-import { authClient, insecureOriginWarning, noSubscribe, sessionWasKept } from "@/lib/auth/client";
+import { authClient, clearApiToken, insecureOriginWarning, noSubscribe, sessionWasKept } from "@/lib/auth/client";
 import { api } from "@/lib/api";
 
 export default function RegisterPage() {
@@ -28,6 +28,7 @@ export default function RegisterPage() {
     }
     setPending(true);
     try {
+      clearApiToken(); // never reuse a previous account's token
       const { error: signUpError } = await authClient.signUp.email({
         email,
         password,
