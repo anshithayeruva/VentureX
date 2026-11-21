@@ -27,11 +27,11 @@ export default function RootLayout({
           crossOrigin="anonymous"
         />
         <link
-          href="https://fonts.googleapis.com/css2?family=Inter:wght@100..900&family=Plus+Jakarta+Sans:wght@200..800&display=swap"
+          href="https://fonts.googleapis.com/css2?family=Inter:wght@400..700&display=swap"
           rel="stylesheet"
         />
       </head>
-      <body className="min-h-screen bg-[#F8FAFC] text-[#0F172A] flex flex-col antialiased selection:bg-[#EBF2FA] selection:text-[#1B3B6F]">
+      <body className="min-h-screen bg-canvas text-ink flex flex-col antialiased selection:bg-accent-soft selection:text-accent">
         <AppShell>{children}</AppShell>
       </body>
     </html>

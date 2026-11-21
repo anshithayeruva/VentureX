@@ -1,111 +1,125 @@
 "use client";
 
-import React, { useState, useEffect, Suspense } from "react";
+import React, { Suspense, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import {
-  Briefcase,
-  Rocket,
-  Sparkles,
-  Layers,
-  Search,
-  Filter,
-  Heart,
-  User,
-  Sliders,
-  CheckCircle2,
-  Building2,
-  DollarSign,
-  TrendingUp,
-  ShieldCheck,
+  ArrowRight,
   Bell,
-  Settings,
-  ArrowUpRight,
-  UserCheck,
-  Clock,
-  Unlock,
-  Lock,
+  Check,
+  CheckCircle2,
   ExternalLink,
-  Calendar,
-  MessageSquare,
-  Mail,
-  Phone,
   FileText,
-  CheckCheck,
+  Globe,
+  Heart,
+  Mail,
+  MessagesSquare,
+  Rocket,
+  Search,
+  Sliders,
+  Sparkles,
+  User,
 } from "lucide-react";
-import { Badge } from "@/components/Badge";
-import { ProjectCard } from "@/components/ProjectCard";
-import { StatCard } from "@/components/StatCard";
 import { PortalLayout } from "@/components/PortalLayout";
+import {
+  Button,
+  ButtonLink,
+  Card,
+  EmptyState,
+  Field,
+  FormFooter,
+  LoadingRows,
+  PageHeader,
+  Section,
+  Segmented,
+  Stat,
+  Tag,
+  Toggle,
+  buttonClass,
+  cx,
+  inputClass,
+} from "@/components/ui";
 import { api } from "@/lib/api";
-import { Project, MatchItem, ProjectInterest, NotificationItem } from "@/types";
+import { formatMoney, timeAgo } from "@/lib/format";
+import { InvestorPreference, MatchItem, NotificationItem, Project, ProjectInterest } from "@/types";
+
+type Tab = "overview" | "recommended" | "browse" | "interests" | "notifications" | "profile" | "settings";
+type Connection = "none" | "pending" | "accepted" | "declined";
+
+const TAB_COPY: Record<Tab, { title: string; description: string }> = {
+  overview: { title: "Overview", description: "Startups that fit your criteria and where your intro requests stand." },
+  recommended: {
+    title: "Recommended",
+    description: "Published startups ranked by how well they fit your criteria, with the reasons.",
+  },
+  browse: { title: "Browse", description: "Every startup founders have published." },
+  interests: {
+    title: "My interests",
+    description: "Intro requests you've sent. When a founder accepts, a private deal room opens.",
+  },
+  notifications: { title: "Notifications", description: "Replies from founders and new matches." },
+  profile: { title: "Profile", description: "What founders see about you when you request an intro." },
+  settings: { title: "Settings", description: "Alerts and contact preferences." },
+};
+const TABS = Object.keys(TAB_COPY) as Tab[];
 
 function InvestorDashboardContent() {
   const searchParams = useSearchParams();
-  const tabParam = useSearchParams().get("tab");
+  const tabParam = searchParams.get("tab") as Tab | null;
+  const activeTab: Tab = tabParam && TABS.includes(tabParam) ? tabParam : "overview";
 
-  const [activeTab, setActiveTab] = useState<string>("overview");
   const [projects, setProjects] = useState<Project[]>([]);
+  const [loaded, setLoaded] = useState(false);
   const [matches, setMatches] = useState<MatchItem[]>([]);
-  const [selectedIndustry, setSelectedIndustry] = useState<string>("All");
-  const [searchQuery, setSearchQuery] = useState<string>("");
-  const [savedInterests, setSavedInterests] = useState<string[]>([]);
-  const [interestsList, setInterestsList] = useState<ProjectInterest[]>([]);
-  const [connectingProjectId, setConnectingProjectId] = useState<string | null>(null);
-  const [connectFeedback, setConnectFeedback] = useState<{
-    message: string;
-    type: "success" | "info";
-  } | null>(null);
+  const [interests, setInterests] = useState<ProjectInterest[]>([]);
   const [notifications, setNotifications] = useState<NotificationItem[]>([]);
-  const [unreadNotifCount, setUnreadNotifCount] = useState<number>(0);
+  const [prefs, setPrefs] = useState<InvestorPreference | null>(null);
 
+  const [industry, setIndustry] = useState("All");
+  const [query, setQuery] = useState("");
+  const [connectingId, setConnectingId] = useState<string | null>(null);
+  const [interestFilter, setInterestFilter] = useState<"all" | "pending" | "accepted" | "declined">("all");
+  const [notice, setNotice] = useState<string | null>(null);
 
-  const [investorProfile, setInvestorProfile] = useState({
-    name: "Dr. Sarah Lin",
-    firm: "Apex Horizon Ventures",
-    title: "General Partner",
-    bio: "Investing in Healthcare AI, MedTech diagnostics, and clinical automation infrastructure.",
-    location: "New York & Boston",
-    thesis: "Leading Seed and Series A rounds for high-defensibility technical founders solving critical clinical bottleneck problems.",
-    minCheck: "$500,000",
-    maxCheck: "$1,500,000",
+  const [profile, setProfile] = useState({
+    name: "",
+    firm: "",
+    title: "",
+    bio: "",
+    location: "",
+    thesis: "",
+    minCheck: "",
+    maxCheck: "",
   });
   const [profileSaved, setProfileSaved] = useState(false);
-  const [settingsSaved, setSettingsSaved] = useState(false);
-
   const [settings, setSettings] = useState({
     autoNotifyHighConviction: true,
     weeklyDealflowSummary: true,
     directFounderMessaging: true,
   });
-
-  useEffect(() => {
-    if (tabParam) {
-      setActiveTab(tabParam);
-    }
-  }, [tabParam]);
+  const [settingsSaved, setSettingsSaved] = useState(false);
 
   useEffect(() => {
     let mounted = true;
-    api.getProjects().then((data) => {
-      if (mounted && data.length > 0) setProjects(data);
-    });
-    api.getMatches().then((data) => {
-      if (mounted && data.length > 0) setMatches(data);
-    });
+    Promise.all([
+      api.getProjects().then((data) => mounted && setProjects(data)),
+      api.getMatches().then((data) => mounted && setMatches(data)),
+      api.getInterests().then((data) => mounted && Array.isArray(data) && setInterests(data)),
+    ]).finally(() => mounted && setLoaded(true));
+    api.getInvestorPreferences().then((data) => mounted && setPrefs(data));
+    api.getNotifications("INVESTOR").then((data) => mounted && Array.isArray(data) && setNotifications(data));
     api.getInvestorProfile().then((data) => {
       if (mounted && data) {
-        setInvestorProfile((prev) => ({
-          ...prev,
-          name: data.name || prev.name,
-          firm: data.firm || prev.firm,
-          title: data.title || prev.title,
-          bio: data.bio || prev.bio,
-          location: data.location || prev.location,
-          thesis: data.thesis || prev.thesis,
-          minCheck: data.min_check || prev.minCheck,
-          maxCheck: data.max_check || prev.maxCheck,
-        }));
+        setProfile({
+          name: data.name || "",
+          firm: data.firm || "",
+          title: data.title || "",
+          bio: data.bio || "",
+          location: data.location || "",
+          thesis: data.thesis || "",
+          minCheck: data.min_check || "",
+          maxCheck: data.max_check || "",
+        });
       }
     });
     api.getInvestorSettings().then((data) => {
@@ -117,581 +131,403 @@ function InvestorDashboardContent() {
         });
       }
     });
-    api.getInterests().then((data) => {
-      if (mounted && Array.isArray(data)) {
-        setInterestsList(data);
-        setSavedInterests(
-          Array.from(new Set(data.map((item: ProjectInterest) => String(item.project_id))))
-        );
-      }
-    });
-    api.getNotifications("INVESTOR").then((data) => {
-      if (mounted && Array.isArray(data)) {
-        setNotifications(data);
-        setUnreadNotifCount(data.filter((n) => !n.read).length);
-      }
-    });
     return () => {
       mounted = false;
     };
   }, []);
 
-  const handleMarkAsRead = async (id: string | number) => {
-    await api.markNotificationRead(id);
-    setNotifications((prev) =>
-      prev.map((n) => (n.id === id ? { ...n, read: true } : n))
-    );
-    setUnreadNotifCount((prev) => Math.max(0, prev - 1));
+  const projectById = useMemo(() => new Map(projects.map((p) => [String(p.id), p])), [projects]);
+  // Only matches whose project is published and visible to this investor.
+  const sortedMatches = useMemo(
+    () =>
+      matches.filter((m) => projectById.has(String(m.project_id))).sort((a, b) => b.match_score - a.match_score),
+    [matches, projectById]
+  );
+  const industries = useMemo(
+    () => ["All", ...Array.from(new Set(projects.map((p) => p.industry).filter(Boolean))).sort()],
+    [projects]
+  );
+  const browseProjects = projects.filter((p) => {
+    const q = query.trim().toLowerCase();
+    const inIndustry = industry === "All" || p.industry === industry;
+    const inSearch =
+      !q || [p.title, p.tagline, p.description, p.industry].some((v) => v?.toLowerCase().includes(q));
+    return inIndustry && inSearch;
+  });
+  const visibleInterests = interests.filter((i) => interestFilter === "all" || i.status === interestFilter);
+  const unreadCount = notifications.filter((n) => !n.read).length;
+  const pendingCount = interests.filter((i) => i.status === "pending").length;
+  const acceptedCount = interests.filter((i) => i.status === "accepted").length;
+
+  const connectionFor = (projectId: number | string): Connection => {
+    const mine = interests.filter((i) => String(i.project_id) === String(projectId));
+    if (mine.some((i) => i.status === "accepted")) return "accepted";
+    if (mine.some((i) => i.status === "pending")) return "pending";
+    if (mine.some((i) => i.status === "declined")) return "declined";
+    return "none";
   };
 
-  const handleMarkAllAsRead = async () => {
-    await api.markAllNotificationsRead("INVESTOR");
-    setNotifications((prev) => prev.map((n) => ({ ...n, read: true })));
-    setUnreadNotifCount(0);
-  };
+  /* ---------- actions ---------- */
 
-  const getProjectConnectionStatus = (
-    projectId: number | string
-  ): "none" | "pending" | "accepted" | "declined" => {
-    const matching = interestsList.filter(
-      (item) => String(item.project_id) === String(projectId)
-    );
-    if (matching.length === 0) return "none";
-    if (matching.some((m) => m.status === "accepted")) return "accepted";
-    if (matching.some((m) => m.status === "pending")) return "pending";
-    if (matching.some((m) => m.status === "declined")) return "declined";
-    return "pending";
-  };
-
-  const handleConnect = async (project: Project) => {
-    const pid = String(project.id);
-    const currentStatus = getProjectConnectionStatus(project.id);
-
-    // If already connected/pending, navigate directly to My Interests & Deal Rooms
-    if (currentStatus === "pending" || currentStatus === "accepted") {
-      setActiveTab("interests");
-      return;
-    }
-
-    setConnectingProjectId(pid);
+  const requestIntro = async (project: Project) => {
+    setConnectingId(String(project.id));
     try {
       const created = await api.expressInterest({
         project_id: project.id,
         project_title: project.title,
         project_industry: project.industry,
-        message: `Interested in reviewing ${project.title}'s confidential materials and discussing potential ${project.stage} investment fit.`,
+        message: `Interested in learning more about ${project.title} and discussing the ${project.stage} round.`,
       });
       if (created) {
-        setInterestsList((prev) => {
-          const filtered = prev.filter((item) => String(item.id) !== String(created.id));
-          return [created, ...filtered];
-        });
-        setSavedInterests((prev) => (prev.includes(pid) ? prev : [...prev, pid]));
-        setConnectFeedback({
-          type: "success",
-          message: `Introduction request sent to ${project.title}! Track approval and deal room access in My Interests.`,
-        });
-        setTimeout(() => setConnectFeedback(null), 6000);
+        setInterests((prev) => [created, ...prev.filter((i) => String(i.id) !== String(created.id))]);
+        flash(`Intro requested for ${project.title}. You'll be notified when the founder replies.`);
       }
     } finally {
-      setConnectingProjectId(null);
+      setConnectingId(null);
     }
   };
 
-  const handleWithdrawInterest = async (interest: ProjectInterest) => {
+  const withdraw = async (interest: ProjectInterest) => {
     await api.withdrawInterest(interest.id);
-    setInterestsList((prev) => {
-      const next = prev.filter((item) => String(item.id) !== String(interest.id));
-      setSavedInterests(
-        Array.from(new Set(next.map((item) => String(item.project_id))))
-      );
-      return next;
-    });
-    setConnectFeedback({
-      type: "info",
-      message: `Introduction request for ${interest.project_title || `Project #${interest.project_id}`} has been withdrawn.`,
-    });
-    setTimeout(() => setConnectFeedback(null), 4000);
+    setInterests((prev) => prev.filter((i) => String(i.id) !== String(interest.id)));
+    flash(`Request for ${interest.project_title || "this project"} withdrawn.`);
   };
 
-  const filteredProjects = projects.filter((p) => {
-    const matchesIndustry =
-      selectedIndustry === "All" || p.industry.toLowerCase().includes(selectedIndustry.toLowerCase());
-    const matchesSearch =
-      searchQuery === "" ||
-      p.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      p.description.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      p.industry.toLowerCase().includes(searchQuery.toLowerCase());
-    return matchesIndustry && matchesSearch;
-  });
+  const flash = (message: string) => {
+    setNotice(message);
+    setTimeout(() => setNotice(null), 5000);
+  };
 
-  return (
-    <PortalLayout
-      role="INVESTOR"
-      activeItem={activeTab}
-      onSelectItem={(tab) => setActiveTab(tab)}
-      title={
-        activeTab === "overview"
-          ? "Dealflow Overview"
-          : activeTab === "recommended"
-          ? "Recommended Projects"
-          : activeTab === "browse"
-          ? "Browse Startups"
-          : activeTab === "interests"
-          ? `My Interests (${savedInterests.length})`
-          : activeTab === "notifications"
-          ? "Notifications"
-          : activeTab === "profile"
-          ? "Investor Profile"
-          : "Settings"
-      }
-    >
-      {/* Header Bar */}
-      <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4 pb-6 mb-8 border-b border-[#E2E8F0]">
-        <div>
-          <div className="flex items-center gap-2 mb-1">
-            <Badge variant="success">Investor Portal</Badge>
-            <span className="text-xs text-[#64748B] font-mono flex items-center gap-1">
-              <ShieldCheck className="w-3.5 h-3.5 text-[#2E7D52]" /> Verified Dealflow
-            </span>
-          </div>
-          <h1 className="text-2xl sm:text-3xl font-bold text-[#0F172A] font-display">
-            {activeTab === "overview" && "Investor Dealflow"}
-            {activeTab === "recommended" && "Thesis-Matched Recommendations"}
-            {activeTab === "browse" && "Explore Startup Pipeline"}
-            {activeTab === "interests" && "Expressed Founder Introductions"}
-            {activeTab === "notifications" && "Investor Notifications"}
-            {activeTab === "profile" && "Fund & Partner Profile"}
-            {activeTab === "settings" && "Dealflow & Notification Preferences"}
-          </h1>
-          <p className="text-xs sm:text-sm text-[#64748B] mt-0.5">
-            {activeTab === "overview" && "Discover vetted early-stage startups matched against your fund mandate."}
-            {activeTab === "recommended" && "Curated deals ranked by high-dimensional vector similarity and check size criteria."}
-            {activeTab === "browse" && "Filter founder-approved ventures across sectors, stages, and business models."}
-            {activeTab === "interests" && "Startups you have flagged for introduction requests and data room access."}
-            {activeTab === "notifications" && "Alerts for new founder submissions matching your thesis filters."}
-            {activeTab === "profile" && "Firm identity and investment thesis visible to matched founders."}
-            {activeTab === "settings" && "Configure dealflow alerts and direct founder contact thresholds."}
-          </p>
-        </div>
+  const markRead = async (id: string | number) => {
+    await api.markNotificationRead(id);
+    setNotifications((prev) => prev.map((n) => (n.id === id ? { ...n, read: true } : n)));
+  };
 
-        <div className="flex items-center gap-2.5">
-          <Link
-            href="/investor/preferences"
-            className="px-4 py-2 text-xs sm:text-sm font-medium text-white bg-[#1B3B6F] hover:bg-[#142C54] rounded-lg transition-all shadow-sm flex items-center gap-1.5"
-          >
-            <Sliders className="w-4 h-4 text-[#93C5FD]" />
-            Edit Investment Criteria
+  const markAllRead = async () => {
+    await api.markAllNotificationsRead("INVESTOR");
+    setNotifications((prev) => prev.map((n) => ({ ...n, read: true })));
+  };
+
+  const saveProfile = async (e: React.FormEvent) => {
+    e.preventDefault();
+    await api.updateInvestorProfile({
+      name: profile.name,
+      firm: profile.firm,
+      title: profile.title,
+      bio: profile.bio,
+      location: profile.location,
+      thesis: profile.thesis,
+      min_check: profile.minCheck,
+      max_check: profile.maxCheck,
+    });
+    setProfileSaved(true);
+    setTimeout(() => setProfileSaved(false), 3000);
+  };
+
+  const saveSettings = async (e: React.FormEvent) => {
+    e.preventDefault();
+    await api.updateInvestorSettings({
+      auto_notify_high_conviction: settings.autoNotifyHighConviction,
+      weekly_dealflow_summary: settings.weeklyDealflowSummary,
+      direct_founder_messaging: settings.directFounderMessaging,
+    });
+    setSettingsSaved(true);
+    setTimeout(() => setSettingsSaved(false), 3000);
+  };
+
+  /* ---------- pieces ---------- */
+
+  const introAction = (project: Project) => {
+    const status = connectionFor(project.id);
+    if (status === "accepted")
+      return (
+        <ButtonLink href="/investor/dashboard?tab=interests" variant="secondary">
+          <MessagesSquare className="w-4 h-4" />
+          Connected
+        </ButtonLink>
+      );
+    if (status === "pending") return <Tag tone="warning">Intro requested</Tag>;
+    if (status === "declined") return <Tag>Founder declined</Tag>;
+    const busy = connectingId === String(project.id);
+    return (
+      <Button onClick={() => requestIntro(project)} disabled={busy}>
+        {busy ? "Sending…" : "Request intro"}
+      </Button>
+    );
+  };
+
+  const projectCard = (project: Project, match?: MatchItem) => (
+    <Card key={project.id} className="flex flex-col">
+      <div className="flex items-start justify-between gap-3">
+        <div className="min-w-0">
+          <Link href={`/investor/projects/${project.id}`} className="text-sm font-medium text-ink hover:underline">
+            {project.title}
           </Link>
+          <div className="text-sm text-muted">
+            {project.stage} · {project.industry}
+          </div>
+        </div>
+        {match && <Tag tone={match.match_score >= 85 ? "positive" : "accent"}>{Math.round(match.match_score)}% fit</Tag>}
+      </div>
+      {(project.tagline || project.description) && (
+        <p className="mt-3 text-sm text-ink-2 line-clamp-2">{project.tagline || project.description}</p>
+      )}
+      {match?.reasons?.length ? (
+        <ul className="mt-3 space-y-1">
+          {match.reasons.slice(0, 3).map((r) => (
+            <li key={r.category} className="flex gap-2 text-sm text-muted">
+              <CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0 text-positive" />
+              <span className="line-clamp-2">{r.explanation}</span>
+            </li>
+          ))}
+        </ul>
+      ) : null}
+      <div className="mt-auto flex items-center justify-between gap-3 pt-4">
+        <div className="text-sm">
+          <span className="text-muted">Raising </span>
+          <span className="font-medium text-ink tabular-nums">{formatMoney(project.funding_required)}</span>
+        </div>
+        <div className="flex items-center gap-2">
+          <Link href={`/investor/projects/${project.id}`} className={buttonClass("ghost")}>
+            Details
+          </Link>
+          {introAction(project)}
         </div>
       </div>
+    </Card>
+  );
 
-      {/* Live Connection Feedback Banner */}
-      {connectFeedback && (
-        <div
-          className={`mb-6 p-3.5 rounded-xl border flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs shadow-subtle ${
-            connectFeedback.type === "success"
-              ? "bg-[#E8F5E9] border-[#C8E6C9] text-[#1E5236]"
-              : "bg-[#F1F5F9] border-[#CBD5E1] text-[#334155]"
-          }`}
-        >
-          <span className="flex items-center gap-2 font-medium">
-            <CheckCircle2 className="w-4 h-4 shrink-0 text-[#2E7D52]" />
-            {connectFeedback.message}
-          </span>
-          <div className="flex items-center gap-2 self-end sm:self-auto">
-            {activeTab !== "interests" && connectFeedback.type === "success" && (
-              <button
-                type="button"
-                onClick={() => {
-                  setActiveTab("interests");
-                  setConnectFeedback(null);
-                }}
-                className="px-3 py-1 rounded-lg bg-[#2E7D52] hover:bg-[#1E5236] text-white font-semibold transition-colors whitespace-nowrap"
-              >
-                View My Interests →
-              </button>
-            )}
-            <button
-              type="button"
-              onClick={() => setConnectFeedback(null)}
-              className="px-2 py-1 text-[11px] font-semibold opacity-70 hover:opacity-100"
-            >
-              Dismiss
-            </button>
-          </div>
+  const matchedCards = (list: MatchItem[]) =>
+    list
+      .map((m) => {
+        const project = projectById.get(String(m.project_id));
+        return project ? projectCard(project, m) : null;
+      })
+      .filter(Boolean);
+
+  const copy = TAB_COPY[activeTab];
+  const criteriaSummary = prefs
+    ? [
+        prefs.preferred_industries?.length ? prefs.preferred_industries.join(", ") : null,
+        prefs.preferred_stages?.length ? prefs.preferred_stages.join(", ") : null,
+        prefs.min_investment || prefs.max_investment
+          ? `${formatMoney(prefs.min_investment)} – ${formatMoney(prefs.max_investment)}`
+          : null,
+      ].filter(Boolean)
+    : [];
+
+  return (
+    <PortalLayout role="INVESTOR" activeItem={activeTab} title={copy.title}>
+      <PageHeader
+        title={activeTab === "overview" && profile.name ? `Welcome back, ${profile.name.split(" ")[0]}` : copy.title}
+        description={copy.description}
+        actions={
+          activeTab === "notifications" && unreadCount > 0 ? (
+            <Button variant="secondary" onClick={markAllRead}>
+              <Check className="w-4 h-4" />
+              Mark all as read
+            </Button>
+          ) : activeTab === "recommended" ? (
+            <ButtonLink href="/investor/preferences" variant="secondary">
+              <Sliders className="w-4 h-4" />
+              Edit criteria
+            </ButtonLink>
+          ) : null
+        }
+      />
+
+      {notice && (
+        <div role="status" className="mb-6 flex items-center gap-2 rounded-lg bg-positive-soft px-4 py-3 text-sm text-positive">
+          <CheckCircle2 className="h-4 w-4 shrink-0" />
+          {notice}
         </div>
       )}
 
-      {/* 1. Overview Tab */}
+      {/* ---------------- Overview ---------------- */}
       {activeTab === "overview" && (
-        <div className="space-y-8">
-          {/* Top Stat Summary */}
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-            <StatCard
-              label="Recommended Deals"
-              value={matches.length}
-              change="90%+ fit score"
-              icon={Sparkles}
-              subtext="Matched by AI thesis"
-            />
-            <StatCard
-              label="Pipeline Startups"
-              value={projects.length}
-              change="3 new this week"
-              icon={Rocket}
-              subtext="Active founder pitches"
-            />
-            <StatCard
-              label="Expressed Interests"
-              value={savedInterests.length}
-              change="Intros Active"
-              icon={Heart}
-              subtext="Direct founder dialog"
-            />
-            <StatCard
-              label="Target Allocation"
-              value="$500K - $1.5M"
-              change="Seed Mandate"
-              icon={DollarSign}
-              subtext="Apex Horizon Fund II"
-            />
+        <div className="space-y-10">
+          <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
+            <Stat label="Matches" value={sortedMatches.length} hint={`${sortedMatches.filter((m) => m.match_score >= 85).length} strong fits`} icon={Sparkles} />
+            <Stat label="Published startups" value={projects.length} hint="Open to intro requests" icon={Rocket} />
+            <Stat label="Intros pending" value={pendingCount} hint="Waiting on founders" icon={Heart} />
+            <Stat label="Deal rooms" value={acceptedCount} hint="Founders who accepted" icon={MessagesSquare} />
           </div>
 
-          {/* Current Mandate Card */}
-          <div className="rounded-xl border border-[#E2E8F0] bg-[#F1F5F9] p-5 flex flex-col md:flex-row items-start md:items-center justify-between gap-6 shadow-subtle">
-            <div className="space-y-1">
-              <span className="text-[10px] uppercase font-semibold text-[#64748B] tracking-wider block">
-                Active Fund Target Criteria
-              </span>
-              <h3 className="text-base sm:text-lg font-bold text-[#0F172A] font-display">
-                Healthcare AI, DeepTech & Enterprise SaaS ($500K - $1.5M Seed)
-              </h3>
-              <p className="text-xs text-[#64748B] max-w-xl leading-relaxed">
-                Startups are filtered automatically against your minimum check size of $500,000 and Seed stage threshold.
-                Founder privacy is strictly preserved.
-              </p>
-            </div>
-            <Link
-              href="/investor/preferences"
-              className="px-4 py-2 text-xs font-medium text-[#0F172A] bg-white border border-[#E2E8F0] hover:bg-[#F8FAFC] rounded-lg transition-colors whitespace-nowrap shadow-subtle"
-            >
-              Adjust Match Preferences
-            </Link>
-          </div>
-
-          {/* High-Conviction Matches */}
-          <div className="space-y-4">
-            <div className="flex items-center justify-between">
-              <div>
-                <h2 className="text-lg font-bold text-[#0F172A] font-display flex items-center gap-2">
-                  <Sparkles className="w-4 h-4 text-[#1B3B6F]" />
-                  High-Conviction Thesis Matches
-                </h2>
-                <p className="text-xs text-[#64748B]">Founder-approved profiles verified for your fund criteria.</p>
+          <Card className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+            <div className="min-w-0">
+              <div className="text-sm text-muted">Your criteria</div>
+              <div className="mt-1 text-sm font-medium text-ink">
+                {criteriaSummary.length ? criteriaSummary.join(" · ") : "Not set yet"}
               </div>
-              <button
-                onClick={() => setActiveTab("recommended")}
-                className="text-xs font-semibold text-[#1B3B6F] hover:text-[#142C54]"
-              >
-                View all ({matches.length}) →
-              </button>
             </div>
+            <ButtonLink href="/investor/preferences" variant="secondary" className="shrink-0">
+              {criteriaSummary.length ? "Edit" : "Set criteria"}
+            </ButtonLink>
+          </Card>
 
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-              {projects.slice(0, 3).map((p) => (
-                <ProjectCard
-                  key={p.id}
-                  project={p}
-                  isInvestorView={true}
-                  connectionStatus={getProjectConnectionStatus(p.id)}
-                  isConnecting={connectingProjectId === String(p.id)}
-                  onConnect={(proj) => handleConnect(proj)}
-                />
-              ))}
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* 2. Recommended Projects Tab */}
-      {activeTab === "recommended" && (
-        <div className="space-y-6">
-          <div>
-            <h2 className="text-lg font-bold text-[#0F172A] font-display">Semantic Vector Recommendations</h2>
-            <p className="text-xs text-[#64748B]">
-              Ranked by vector cosine similarity against your investment mandate. Private founder scores are omitted per privacy protocol.
-            </p>
-          </div>
-
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-            {projects.map((project) => (
-              <ProjectCard
-                key={project.id}
-                project={project}
-                isInvestorView={true}
-                connectionStatus={getProjectConnectionStatus(project.id)}
-                isConnecting={connectingProjectId === String(project.id)}
-                onConnect={(proj) => handleConnect(proj)}
+          <Section title="Best fits for you" action={sortedMatches.length > 4 && <TabLink tab="recommended">See all</TabLink>}>
+            {!loaded ? (
+              <LoadingRows />
+            ) : sortedMatches.length === 0 ? (
+              <EmptyState
+                icon={Sparkles}
+                title="No matches yet"
+                description="Set your criteria and we'll match you with published startups that fit."
+                action={<ButtonLink href="/investor/preferences">Set criteria</ButtonLink>}
               />
-            ))}
-          </div>
+            ) : (
+              <div className="grid gap-4 lg:grid-cols-2">{matchedCards(sortedMatches.slice(0, 4))}</div>
+            )}
+          </Section>
         </div>
       )}
 
-      {/* 3. Browse Projects Tab */}
+      {/* ---------------- Recommended ---------------- */}
+      {activeTab === "recommended" &&
+        (!loaded ? (
+          <LoadingRows />
+        ) : sortedMatches.length === 0 ? (
+          <EmptyState
+            icon={Sparkles}
+            title="No matches yet"
+            description="Matches appear when published startups fit your industries, stages and check size."
+            action={<ButtonLink href="/investor/preferences">Set criteria</ButtonLink>}
+          />
+        ) : (
+          <div className="grid gap-4 lg:grid-cols-2">{matchedCards(sortedMatches)}</div>
+        ))}
+
+      {/* ---------------- Browse ---------------- */}
       {activeTab === "browse" && (
-        <div className="space-y-6">
-          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-            {/* Industry Filter Buttons */}
-            <div className="flex flex-wrap items-center gap-1.5">
-              <span className="text-xs font-semibold text-[#64748B] mr-1 flex items-center gap-1">
-                <Filter className="w-3.5 h-3.5" /> Sector:
-              </span>
-              {["All", "Healthcare", "ClimateTech", "Cybersecurity", "Fintech"].map((ind) => (
-                <button
-                  key={ind}
-                  onClick={() => setSelectedIndustry(ind)}
-                  className={`px-3 py-1 rounded-lg text-xs font-medium transition-all ${
-                    selectedIndustry === ind
-                      ? "bg-[#1B3B6F] text-white shadow-sm"
-                      : "bg-white text-[#64748B] hover:text-[#0F172A] border border-[#E2E8F0]"
-                  }`}
-                >
-                  {ind}
-                </button>
-              ))}
-            </div>
-
-            {/* Search Input */}
-            <div className="relative w-full sm:w-64">
-              <Search className="w-3.5 h-3.5 text-[#94A3B8] absolute left-3 top-2.5" />
+        <div className="space-y-5">
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+            <div className="relative w-full sm:max-w-sm">
+              <Search className="pointer-events-none absolute left-3 top-2.5 h-4 w-4 text-faint" />
               <input
-                type="text"
-                placeholder="Search startups or tech..."
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-                className="w-full pl-8 pr-3 py-1.5 text-xs bg-white border border-[#E2E8F0] rounded-lg focus:outline-none focus:border-[#1B3B6F]"
+                type="search"
+                placeholder="Search startups"
+                value={query}
+                onChange={(e) => setQuery(e.target.value)}
+                className={cx(inputClass, "pl-9")}
               />
             </div>
+            {industries.length > 2 && (
+              <select
+                aria-label="Filter by industry"
+                value={industry}
+                onChange={(e) => setIndustry(e.target.value)}
+                className={cx(inputClass, "sm:w-56")}
+              >
+                {industries.map((ind) => (
+                  <option key={ind} value={ind}>
+                    {ind === "All" ? "All industries" : ind}
+                  </option>
+                ))}
+              </select>
+            )}
           </div>
-
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-            {filteredProjects.map((project) => (
-              <ProjectCard
-                key={project.id}
-                project={project}
-                isInvestorView={true}
-                connectionStatus={getProjectConnectionStatus(project.id)}
-                isConnecting={connectingProjectId === String(project.id)}
-                onConnect={(proj) => handleConnect(proj)}
-              />
-            ))}
-          </div>
+          {!loaded ? (
+            <LoadingRows />
+          ) : projects.length === 0 ? (
+            <EmptyState icon={Rocket} title="No published startups yet" description="Check back soon." />
+          ) : browseProjects.length === 0 ? (
+            <EmptyState compact title="No startups match that search" />
+          ) : (
+            <div className="grid gap-4 lg:grid-cols-2">
+              {browseProjects.map((p) => projectCard(p, matches.find((m) => String(m.project_id) === String(p.id))))}
+            </div>
+          )}
         </div>
       )}
 
-      {/* 4. My Interests Tab */}
+      {/* ---------------- My interests ---------------- */}
       {activeTab === "interests" && (
-        <div className="space-y-6">
-          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-            <div>
-              <h2 className="text-lg font-bold text-[#0F172A] font-display flex items-center gap-2">
-                <Heart className="w-5 h-5 text-[#1B3B6F]" />
-                Deal Rooms & Expressed Introductions
-              </h2>
-              <p className="text-xs text-[#64748B]">
-                Track introduction requests to founders. Once approved by the founding team, their confidential data room, direct messaging channel, and meeting scheduler unlock below.
-              </p>
-            </div>
-            <button
-              onClick={() => setActiveTab("browse")}
-              className="px-3.5 py-1.5 text-xs font-medium text-white bg-[#1B3B6F] hover:bg-[#142C54] rounded-lg transition-colors shadow-sm self-start sm:self-auto"
-            >
-              Browse More Startups
-            </button>
-          </div>
-
-          {interestsList.length === 0 ? (
-            <div className="text-center py-16 border border-dashed border-[#E2E8F0] rounded-xl bg-white shadow-subtle space-y-2">
-              <Heart className="w-8 h-8 text-[#94A3B8] mx-auto mb-1" />
-              <h4 className="text-sm font-bold text-[#0F172A] font-display">No Expressed Interests Yet</h4>
-              <p className="text-xs text-[#64748B] max-w-sm mx-auto">
-                Browse our dealflow catalog and click &quot;Request Introduction&quot; to initiate a confidential deal room dialogue.
-              </p>
-              <button
-                onClick={() => setActiveTab("browse")}
-                className="mt-2 px-4 py-2 text-xs font-semibold text-white bg-[#1B3B6F] hover:bg-[#142C54] rounded-lg shadow-sm"
-              >
-                Explore Dealflow Pipeline
-              </button>
-            </div>
+        <div className="space-y-5">
+          {interests.length > 0 && (
+            <Segmented
+              value={interestFilter}
+              onChange={setInterestFilter}
+              options={[
+                { value: "all", label: `All ${interests.length}` },
+                { value: "pending", label: `Pending ${pendingCount}` },
+                { value: "accepted", label: `Accepted ${acceptedCount}` },
+                { value: "declined", label: `Declined ${interests.filter((i) => i.status === "declined").length}` },
+              ]}
+            />
+          )}
+          {!loaded ? (
+            <LoadingRows />
+          ) : interests.length === 0 ? (
+            <EmptyState
+              icon={Heart}
+              title="No intro requests yet"
+              description="Find a startup you like and request an intro. The founder decides whether to connect."
+              action={<TabLink tab="browse" asButton>Browse startups</TabLink>}
+            />
+          ) : visibleInterests.length === 0 ? (
+            <EmptyState compact title="Nothing here" />
           ) : (
-            <div className="space-y-4">
-              {interestsList.map((interest) => {
-                const project = projects.find((p) => String(p.id) === String(interest.project_id));
-                const title = interest.project_title || project?.title || `Project #${interest.project_id}`;
-                const industry = interest.project_industry || project?.industry || "Technology";
-                const isAccepted = interest.status === "accepted";
-                const isPending = interest.status === "pending";
-
+            <div className="space-y-3">
+              {visibleInterests.map((interest) => {
+                const project = projectById.get(String(interest.project_id));
+                const room = interest.deal_room;
                 return (
-                  <div
-                    key={interest.id}
-                    className="rounded-xl border border-[#E2E8F0] bg-white p-6 shadow-subtle hover:border-[#CBD5E1] transition-all space-y-4"
-                  >
-                    {/* Header with Title & Status */}
-                    <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-3 pb-3 border-b border-[#F1F5F9]">
-                      <div>
-                        <div className="flex items-center gap-2.5 flex-wrap">
-                          <h3 className="text-base font-bold text-[#0F172A] font-display">{title}</h3>
-                          <Badge variant="primary">{industry}</Badge>
-                          {project && <Badge variant="secondary">{project.stage}</Badge>}
+                  <Card key={interest.id} className="space-y-4">
+                    <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+                      <div className="min-w-0">
+                        <Link
+                          href={`/investor/projects/${interest.project_id}`}
+                          className="text-sm font-medium text-ink hover:underline"
+                        >
+                          {interest.project_title || project?.title || `Project #${interest.project_id}`}
+                        </Link>
+                        <div className="text-sm text-muted">
+                          {[project?.stage, interest.project_industry || project?.industry].filter(Boolean).join(" · ")}
+                          {interest.created_at && <> · requested {timeAgo(interest.created_at)}</>}
                         </div>
-                        {project && (
-                          <p className="text-xs text-[#64748B] mt-1 line-clamp-1">{project.tagline || project.description}</p>
-                        )}
                       </div>
-
-                      <div className="flex items-center gap-2">
-                        {isPending && (
-                          <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold bg-[#FEF3C7] border border-[#FDE68A] text-[#92400E]">
-                            <Clock className="w-3.5 h-3.5" />
-                            Pending Founder Review
-                          </span>
-                        )}
-                        {isAccepted && (
-                          <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold bg-[#E8F5E9] border border-[#C8E6C9] text-[#2E7D52]">
-                            <Unlock className="w-3.5 h-3.5" />
-                            Deal Room Unlocked
-                          </span>
-                        )}
-                        {interest.status === "declined" && (
-                          <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold bg-[#F1F5F9] border border-[#E2E8F0] text-[#64748B]">
-                            <Lock className="w-3.5 h-3.5" />
-                            Declined by Founder
-                          </span>
-                        )}
-                      </div>
+                      <InterestStatus status={interest.status} />
                     </div>
 
-                    {/* Introductory message */}
-                    {interest.message && (
-                      <div className="space-y-1">
-                        <span className="text-[10px] font-semibold uppercase tracking-wider text-[#64748B] block">
-                          Your Introduction Message:
-                        </span>
-                        <p className="text-xs text-[#475569] italic bg-[#F8FAFC] p-3 rounded-lg border border-[#F1F5F9]">
-                          &quot;{interest.message}&quot;
-                        </p>
+                    {interest.status === "pending" && (
+                      <div className="flex items-center justify-between gap-3 text-sm text-muted">
+                        The founder hasn&apos;t replied yet.
+                        <Button variant="ghost" onClick={() => withdraw(interest)}>
+                          Withdraw
+                        </Button>
                       </div>
                     )}
 
-                    {/* Pending State Banner */}
-                    {isPending && (
-                      <div className="p-3.5 rounded-lg bg-[#FFFBEB] border border-[#FDE68A] text-xs text-[#92400E] flex items-center justify-between">
-                        <span className="flex items-center gap-2">
-                          <Clock className="w-4 h-4 text-[#D97706] shrink-0" />
-                          Founder is reviewing your firm&apos;s thesis note. Once accepted, confidential data room materials unlock here.
-                        </span>
-                        <button
-                          type="button"
-                          onClick={() => handleWithdrawInterest(interest)}
-                          className="text-[11px] font-semibold text-[#92400E] hover:underline shrink-0 ml-2"
-                        >
-                          Withdraw Request
-                        </button>
-                      </div>
-                    )}
-
-                    {/* Unlocked Deal Room Panel */}
-                    {isAccepted && (
-                      <div className="rounded-xl border border-[#C8E6C9] bg-[#F4FBF6] p-4.5 space-y-3">
-                        <div className="flex items-center justify-between flex-wrap gap-2">
-                          <div className="flex items-center gap-2">
-                            <CheckCheck className="w-4 h-4 text-[#2E7D52]" />
-                            <h4 className="text-xs sm:text-sm font-bold text-[#1E5236] font-display">
-                              Confidential Deal Room Unlocked
-                            </h4>
-                          </div>
+                    {interest.status === "accepted" && (
+                      <div className="space-y-3">
+                        {interest.response_note && (
+                          <p className="rounded-lg bg-canvas px-3.5 py-2.5 text-sm text-ink-2">
+                            <span className="text-muted">Founder&apos;s note: </span>
+                            {interest.response_note}
+                          </p>
+                        )}
+                        <div className="flex flex-wrap gap-2">
+                          <ButtonLink href={room?.room_id ? `/dealroom/${room.room_id}` : "/dealroom?role=INVESTOR"}>
+                            <MessagesSquare className="w-4 h-4" />
+                            Open deal room
+                          </ButtonLink>
                           {interest.founder_email && (
-                            <a
-                              href={`mailto:${interest.founder_email}`}
-                              className="text-xs text-[#2E7D52] font-semibold flex items-center gap-1 hover:underline"
-                            >
-                              <Mail className="w-3.5 h-3.5" />
+                            <a href={`mailto:${interest.founder_email}`} className={buttonClass("secondary")}>
+                              <Mail className="w-4 h-4" />
                               {interest.founder_email}
                             </a>
                           )}
-                        </div>
-
-                        {interest.response_note && (
-                          <p className="text-xs text-[#1E5236] bg-white p-2.5 rounded-lg border border-[#C8E6C9]">
-                            <strong>Founder Note:</strong> &quot;{interest.response_note}&quot;
-                          </p>
-                        )}
-
-                        <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5 pt-1">
-                          {interest.deal_room?.pitch_deck_url && (
-                            <a
-                              href={interest.deal_room?.pitch_deck_url ?? undefined}
-                              target="_blank"
-                              rel="noopener noreferrer"
-                              className="p-3 bg-white border border-[#C8E6C9] hover:border-[#2E7D52] rounded-lg text-xs font-medium text-[#0F172A] transition-all flex items-center justify-between shadow-subtle group"
-                            >
-                              <span className="flex items-center gap-2 min-w-0">
-                                <FileText className="w-4 h-4 text-[#2E7D52] shrink-0" />
-                                <span className="truncate">Pitch Deck</span>
-                              </span>
-                              <ExternalLink className="w-3.5 h-3.5 text-[#94A3B8] group-hover:text-[#2E7D52] shrink-0" />
-                            </a>
-                          )}
-                          {interest.deal_room?.founder_linkedin && (
-                            <a
-                              href={interest.deal_room?.founder_linkedin ?? undefined}
-                              target="_blank"
-                              rel="noopener noreferrer"
-                              className="p-3 bg-white border border-[#C8E6C9] hover:border-[#2E7D52] rounded-lg text-xs font-medium text-[#0F172A] transition-all flex items-center justify-between shadow-subtle group"
-                            >
-                              <span className="flex items-center gap-2 min-w-0">
-                                <User className="w-4 h-4 text-[#2E7D52] shrink-0" />
-                                <span className="truncate">Founder LinkedIn</span>
-                              </span>
-                              <ExternalLink className="w-3.5 h-3.5 text-[#94A3B8] group-hover:text-[#2E7D52] shrink-0" />
-                            </a>
-                          )}
-                          {interest.deal_room?.founder_website && (
-                            <a
-                              href={interest.deal_room?.founder_website ?? undefined}
-                              target="_blank"
-                              rel="noopener noreferrer"
-                              className="p-3 bg-white border border-[#C8E6C9] hover:border-[#2E7D52] rounded-lg text-xs font-medium text-[#0F172A] transition-all flex items-center justify-between shadow-subtle group"
-                            >
-                              <span className="flex items-center gap-2 min-w-0">
-                                <ArrowUpRight className="w-4 h-4 text-[#2E7D52] shrink-0" />
-                                <span className="truncate">Company Website</span>
-                              </span>
-                              <ExternalLink className="w-3.5 h-3.5 text-[#94A3B8] group-hover:text-[#2E7D52] shrink-0" />
-                            </a>
-                          )}
-
-                          <Link
-                            href={interest.deal_room?.room_id ? `/dealroom/${interest.deal_room.room_id}` : "/dealroom"}
-                            className="p-3 bg-white border border-[#C8E6C9] hover:border-[#2E7D52] rounded-lg text-xs font-medium text-[#0F172A] transition-all flex items-center justify-between shadow-subtle group"
-                          >
-                            <span className="flex items-center gap-2">
-                              <MessageSquare className="w-4 h-4 text-[#2E7D52]" />
-                              Enter Secure Deal Room
-                            </span>
-                            <span className="text-[10px] font-bold text-[#2E7D52] bg-[#E8F5E9] px-2 py-0.5 rounded-full flex items-center gap-1">
-                              <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
-                              Encrypted
-                            </span>
-                          </Link>
+                          {room?.pitch_deck_url && <ExternalButton href={room.pitch_deck_url} icon={FileText} label="Pitch deck" />}
+                          {room?.founder_linkedin && <ExternalButton href={room.founder_linkedin} icon={User} label="LinkedIn" />}
+                          {room?.founder_website && <ExternalButton href={room.founder_website} icon={Globe} label="Website" />}
                         </div>
                       </div>
                     )}
-                  </div>
+
+                    {interest.status === "declined" && (
+                      <p className="text-sm text-muted">The founder decided not to connect this time.</p>
+                    )}
+                  </Card>
                 );
               })}
             </div>
@@ -699,291 +535,149 @@ function InvestorDashboardContent() {
         </div>
       )}
 
-      {/* 5. Notifications Tab */}
-      {activeTab === "notifications" && (
-        <div className="max-w-3xl mx-auto space-y-4">
-          <div className="flex items-center justify-between pb-3 border-b border-[#E2E8F0]">
-            <div className="flex items-center gap-2">
-              <h2 className="text-base font-bold text-[#0F172A] font-display">Investor Notifications</h2>
-              {unreadNotifCount > 0 ? (
-                <span className="px-2 py-0.5 rounded-full text-[11px] font-bold bg-[#EBF2FA] text-[#1B3B6F] border border-[#BFD7EE]">
-                  {unreadNotifCount} unread
-                </span>
-              ) : (
-                <span className="text-xs text-[#64748B]">All caught up</span>
-              )}
-            </div>
-            {unreadNotifCount > 0 && (
-              <button
-                onClick={handleMarkAllAsRead}
-                className="inline-flex items-center gap-1.5 text-xs font-semibold text-[#1B3B6F] hover:text-[#0F172A] transition-colors"
-              >
-                <CheckCheck className="w-4 h-4 text-[#1B3B6F]" />
-                Mark all as read
-              </button>
-            )}
-          </div>
-
-          {notifications.length === 0 ? (
-            <div className="p-8 text-center rounded-xl border border-dashed border-[#CBD5E1] bg-white">
-              <Bell className="w-8 h-8 text-[#94A3B8] mx-auto mb-2 opacity-50" />
-              <h3 className="text-sm font-bold text-[#0F172A]">No notifications yet</h3>
-              <p className="text-xs text-[#64748B] mt-1">
-                You will be notified when founders approve your deal room requests or new high-fit startups match your mandate.
-              </p>
-            </div>
-          ) : (
-            notifications.map((notif) => {
-              const isUnread = !notif.read;
-              return (
-                <div
-                  key={notif.id}
-                  className={`p-4 rounded-xl border transition-all ${
-                    isUnread
-                      ? "border-[#BFD7EE] bg-[#F8FAFC] shadow-sm"
-                      : "border-[#E2E8F0] bg-white shadow-subtle opacity-85"
-                  } space-y-2`}
-                >
-                  <div className="flex items-center justify-between gap-3">
-                    <div className="flex items-center gap-2 flex-wrap">
-                      {isUnread && (
-                        <span className="w-2 h-2 rounded-full bg-[#1B3B6F] animate-pulse" />
-                      )}
-                      <Badge variant={(notif.badge_variant as any) || "primary"}>
-                        {notif.badge}
-                      </Badge>
-                      <h4 className="text-xs sm:text-sm font-bold text-[#0F172A] font-display">
-                        {notif.title}
-                      </h4>
-                    </div>
-                    <span className="text-[11px] font-mono text-[#94A3B8] shrink-0">
-                      {notif.time || "Recently"}
-                    </span>
+      {/* ---------------- Notifications ---------------- */}
+      {activeTab === "notifications" &&
+        (notifications.length === 0 ? (
+          <EmptyState icon={Bell} title="You're all caught up" description="Founder replies and new matches will show up here." />
+        ) : (
+          <Card padded={false} className="max-w-3xl divide-y divide-line">
+            {notifications.map((n) => (
+              <div key={n.id} className="flex gap-3 px-5 py-4">
+                <span className={cx("mt-1.5 h-2 w-2 shrink-0 rounded-full", n.read ? "bg-transparent" : "bg-accent")} />
+                <div className="min-w-0 flex-1">
+                  <div className="flex items-baseline justify-between gap-3">
+                    <span className={cx("text-sm", n.read ? "text-ink-2" : "font-medium text-ink")}>{n.title}</span>
+                    <span className="shrink-0 text-xs text-faint">{n.time || (n.created_at ? timeAgo(n.created_at) : "")}</span>
                   </div>
-
-                  <p className="text-xs text-[#475569] leading-relaxed pl-0.5">
-                    {notif.desc}
-                  </p>
-
-                  <div className="flex items-center justify-between pt-1 border-t border-[#F1F5F9] text-xs">
-                    {notif.link ? (
-                      <Link
-                        href={notif.link}
-                        className="font-semibold text-[#1B3B6F] hover:text-[#0F172A] inline-flex items-center gap-1"
-                      >
-                        Open Target View →
+                  <p className="mt-0.5 text-sm text-muted">{n.desc}</p>
+                  <div className="mt-2 flex gap-3 text-sm">
+                    {n.link && (
+                      <Link href={n.link} className="font-medium text-accent hover:underline">
+                        View
                       </Link>
-                    ) : (
-                      <span />
                     )}
-
-                    {isUnread && (
-                      <button
-                        onClick={() => handleMarkAsRead(notif.id)}
-                        className="text-[11px] text-[#64748B] hover:text-[#0F172A] font-medium"
-                      >
+                    {!n.read && (
+                      <button type="button" onClick={() => markRead(n.id)} className="text-muted hover:text-ink">
                         Mark as read
                       </button>
                     )}
                   </div>
                 </div>
-              );
-            })
-          )}
-        </div>
-      )}
+              </div>
+            ))}
+          </Card>
+        ))}
 
-      {/* 6. Profile Tab */}
+      {/* ---------------- Profile ---------------- */}
       {activeTab === "profile" && (
-        <div className="max-w-2xl mx-auto rounded-xl border border-[#E2E8F0] bg-white p-6 sm:p-8 shadow-subtle">
-          <div className="flex items-center justify-between mb-6 pb-4 border-b border-[#E2E8F0]">
-            <div>
-              <h2 className="text-lg font-bold text-[#0F172A] font-display">Investor Profile</h2>
-              <p className="text-xs text-[#64748B]">Firm parameters and fund thesis displayed to matched founders.</p>
+        <Card className="max-w-2xl">
+          <form onSubmit={saveProfile} className="space-y-5">
+            <div className="grid gap-5 sm:grid-cols-2">
+              <Field label="Full name" htmlFor="ip-name">
+                <input id="ip-name" className={inputClass} value={profile.name} onChange={(e) => setProfile({ ...profile, name: e.target.value })} />
+              </Field>
+              <Field label="Title" htmlFor="ip-title">
+                <input id="ip-title" placeholder="e.g. Partner, Angel investor" className={inputClass} value={profile.title} onChange={(e) => setProfile({ ...profile, title: e.target.value })} />
+              </Field>
             </div>
-            <Badge variant="success">Accredited Partner</Badge>
-          </div>
-
-          {profileSaved && (
-            <div className="mb-6 p-3 rounded-lg bg-[#E8F5E9] border border-[#A3E635] text-[#2E7D52] text-xs flex items-center gap-2">
-              <CheckCircle2 className="w-4 h-4 text-[#2E7D52]" />
-              Investor profile saved successfully.
+            <div className="grid gap-5 sm:grid-cols-2">
+              <Field label="Firm or fund" htmlFor="ip-firm">
+                <input id="ip-firm" className={inputClass} value={profile.firm} onChange={(e) => setProfile({ ...profile, firm: e.target.value })} />
+              </Field>
+              <Field label="Location" htmlFor="ip-location">
+                <input id="ip-location" className={inputClass} value={profile.location} onChange={(e) => setProfile({ ...profile, location: e.target.value })} />
+              </Field>
             </div>
-          )}
-
-          <form
-            onSubmit={async (e) => {
-              e.preventDefault();
-              await api.updateInvestorProfile({
-                name: investorProfile.name,
-                firm: investorProfile.firm,
-                title: investorProfile.title,
-                bio: investorProfile.bio,
-                location: investorProfile.location,
-                thesis: investorProfile.thesis,
-                min_check: investorProfile.minCheck,
-                max_check: investorProfile.maxCheck,
-              });
-              setProfileSaved(true);
-              setTimeout(() => setProfileSaved(false), 3000);
-            }}
-            className="space-y-4 text-xs sm:text-sm"
-          >
-            <div>
-              <label className="block text-xs font-semibold text-[#0F172A] mb-1">Partner Full Name</label>
-              <input
-                type="text"
-                value={investorProfile.name}
-                onChange={(e) => setInvestorProfile({ ...investorProfile, name: e.target.value })}
-                className="w-full px-3 py-2 bg-[#F8FAFC] border border-[#E2E8F0] rounded-lg text-[#0F172A] focus:outline-none focus:border-[#1B3B6F]"
-              />
+            <Field label="Investment thesis" htmlFor="ip-thesis" hint="What you invest in and why, in a few lines.">
+              <textarea id="ip-thesis" rows={3} className={inputClass} value={profile.thesis} onChange={(e) => setProfile({ ...profile, thesis: e.target.value })} />
+            </Field>
+            <Field label="About you" htmlFor="ip-bio">
+              <textarea id="ip-bio" rows={2} className={inputClass} value={profile.bio} onChange={(e) => setProfile({ ...profile, bio: e.target.value })} />
+            </Field>
+            <div className="grid gap-5 sm:grid-cols-2">
+              <Field label="Smallest check" htmlFor="ip-min">
+                <input id="ip-min" placeholder="$50,000" className={inputClass} value={profile.minCheck} onChange={(e) => setProfile({ ...profile, minCheck: e.target.value })} />
+              </Field>
+              <Field label="Largest check" htmlFor="ip-max">
+                <input id="ip-max" placeholder="$500,000" className={inputClass} value={profile.maxCheck} onChange={(e) => setProfile({ ...profile, maxCheck: e.target.value })} />
+              </Field>
             </div>
-
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-              <div>
-                <label className="block text-xs font-semibold text-[#0F172A] mb-1">Firm / Fund Name</label>
-                <input
-                  type="text"
-                  value={investorProfile.firm}
-                  onChange={(e) => setInvestorProfile({ ...investorProfile, firm: e.target.value })}
-                  className="w-full px-3 py-2 bg-[#F8FAFC] border border-[#E2E8F0] rounded-lg text-[#0F172A] focus:outline-none focus:border-[#1B3B6F]"
-                />
-              </div>
-
-              <div>
-                <label className="block text-xs font-semibold text-[#0F172A] mb-1">Partner Title</label>
-                <input
-                  type="text"
-                  value={investorProfile.title}
-                  onChange={(e) => setInvestorProfile({ ...investorProfile, title: e.target.value })}
-                  className="w-full px-3 py-2 bg-[#F8FAFC] border border-[#E2E8F0] rounded-lg text-[#0F172A] focus:outline-none focus:border-[#1B3B6F]"
-                />
-              </div>
-            </div>
-
-            <div>
-              <label className="block text-xs font-semibold text-[#0F172A] mb-1">Fund Investment Thesis</label>
-              <textarea
-                rows={3}
-                value={investorProfile.thesis}
-                onChange={(e) => setInvestorProfile({ ...investorProfile, thesis: e.target.value })}
-                className="w-full px-3 py-2 bg-[#F8FAFC] border border-[#E2E8F0] rounded-lg text-[#0F172A] focus:outline-none focus:border-[#1B3B6F]"
-              />
-            </div>
-
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-              <div>
-                <label className="block text-xs font-semibold text-[#0F172A] mb-1">Minimum Check Size</label>
-                <input
-                  type="text"
-                  value={investorProfile.minCheck}
-                  onChange={(e) => setInvestorProfile({ ...investorProfile, minCheck: e.target.value })}
-                  className="w-full px-3 py-2 bg-[#F8FAFC] border border-[#E2E8F0] rounded-lg text-[#0F172A] focus:outline-none focus:border-[#1B3B6F]"
-                />
-              </div>
-
-              <div>
-                <label className="block text-xs font-semibold text-[#0F172A] mb-1">Maximum Check Size</label>
-                <input
-                  type="text"
-                  value={investorProfile.maxCheck}
-                  onChange={(e) => setInvestorProfile({ ...investorProfile, maxCheck: e.target.value })}
-                  className="w-full px-3 py-2 bg-[#F8FAFC] border border-[#E2E8F0] rounded-lg text-[#0F172A] focus:outline-none focus:border-[#1B3B6F]"
-                />
-              </div>
-            </div>
-
-            <div className="pt-4 border-t border-[#E2E8F0] flex justify-end">
-              <button
-                type="submit"
-                className="px-5 py-2 rounded-lg text-xs font-medium text-white bg-[#1B3B6F] hover:bg-[#142C54] transition-colors shadow-sm"
-              >
-                Save Investor Profile
-              </button>
-            </div>
+            <FormFooter saved={profileSaved} label="Save profile" />
           </form>
-        </div>
+        </Card>
       )}
 
-      {/* 7. Settings Tab */}
+      {/* ---------------- Settings ---------------- */}
       {activeTab === "settings" && (
-        <div className="max-w-2xl mx-auto rounded-xl border border-[#E2E8F0] bg-white p-6 sm:p-8 shadow-subtle">
-          <div className="flex items-center justify-between mb-6 pb-4 border-b border-[#E2E8F0]">
-            <div>
-              <h2 className="text-lg font-bold text-[#0F172A] font-display">Dealflow Settings</h2>
-              <p className="text-xs text-[#64748B]">Configure notifications and screening preferences.</p>
-            </div>
-            <Settings className="w-5 h-5 text-[#64748B]" />
-          </div>
-
-          {settingsSaved && (
-            <div className="mb-6 p-3 rounded-lg bg-[#E8F5E9] border border-[#A3E635] text-[#2E7D52] text-xs flex items-center gap-2">
-              <CheckCircle2 className="w-4 h-4 text-[#2E7D52]" />
-              Preferences updated successfully.
-            </div>
-          )}
-
-          <form
-            onSubmit={async (e) => {
-              e.preventDefault();
-              await api.updateInvestorSettings({
-                auto_notify_high_conviction: settings.autoNotifyHighConviction,
-                weekly_dealflow_summary: settings.weeklyDealflowSummary,
-                direct_founder_messaging: settings.directFounderMessaging,
-              });
-              setSettingsSaved(true);
-              setTimeout(() => setSettingsSaved(false), 3000);
-            }}
-            className="space-y-4 text-xs sm:text-sm"
-          >
-            <div className="flex items-start justify-between gap-4 p-3.5 rounded-lg bg-[#F8FAFC] border border-[#E2E8F0]">
-              <div>
-                <div className="font-semibold text-[#0F172A]">Real-time Notifications for &gt;90% Matches</div>
-                <div className="text-xs text-[#64748B] mt-0.5">
-                  Instant notification when a founder approves dealflow that fits your sector thesis.
-                </div>
-              </div>
-              <input
-                type="checkbox"
+        <Card className="max-w-2xl">
+          <form onSubmit={saveSettings} className="space-y-6">
+            <div className="divide-y divide-line">
+              <Toggle
+                label="Notify me about strong fits"
+                description="When a newly published startup closely fits your criteria."
                 checked={settings.autoNotifyHighConviction}
-                onChange={(e) => setSettings({ ...settings, autoNotifyHighConviction: e.target.checked })}
-                className="mt-1 accent-[#1B3B6F] w-4 h-4"
+                onChange={(v) => setSettings({ ...settings, autoNotifyHighConviction: v })}
               />
-            </div>
-
-            <div className="flex items-start justify-between gap-4 p-3.5 rounded-lg bg-[#F8FAFC] border border-[#E2E8F0]">
-              <div>
-                <div className="font-semibold text-[#0F172A]">Weekly Curated Dealflow Digest</div>
-                <div className="text-xs text-[#64748B] mt-0.5">
-                  Summary email delivered every Monday morning with highest conviction startups.
-                </div>
-              </div>
-              <input
-                type="checkbox"
+              <Toggle
+                label="Weekly summary"
+                description="A short weekly email with the best new fits."
                 checked={settings.weeklyDealflowSummary}
-                onChange={(e) => setSettings({ ...settings, weeklyDealflowSummary: e.target.checked })}
-                className="mt-1 accent-[#1B3B6F] w-4 h-4"
+                onChange={(v) => setSettings({ ...settings, weeklyDealflowSummary: v })}
+              />
+              <Toggle
+                label="Allow founders to message me"
+                description="Founders who accept your intro can message you in the deal room."
+                checked={settings.directFounderMessaging}
+                onChange={(v) => setSettings({ ...settings, directFounderMessaging: v })}
               />
             </div>
-
-            <div className="pt-4 border-t border-[#E2E8F0] flex justify-end">
-              <button
-                type="submit"
-                className="px-5 py-2 rounded-lg text-xs font-medium text-white bg-[#1B3B6F] hover:bg-[#142C54] transition-colors shadow-sm"
-              >
-                Save Settings
-              </button>
-            </div>
+            <FormFooter saved={settingsSaved} label="Save settings" />
           </form>
-        </div>
+        </Card>
       )}
     </PortalLayout>
   );
 }
 
+function TabLink({ tab, children, asButton = false }: { tab: Tab; children: React.ReactNode; asButton?: boolean }) {
+  return (
+    <Link
+      href={`/investor/dashboard?tab=${tab}`}
+      className={asButton ? buttonClass("primary") : "inline-flex items-center gap-1 font-medium text-accent hover:underline"}
+    >
+      {children}
+      {!asButton && <ArrowRight className="w-3.5 h-3.5" />}
+    </Link>
+  );
+}
+
+function InterestStatus({ status }: { status: ProjectInterest["status"] }) {
+  if (status === "accepted") return <Tag tone="positive">Accepted</Tag>;
+  if (status === "declined") return <Tag>Declined</Tag>;
+  return <Tag tone="warning">Waiting on founder</Tag>;
+}
+
+function ExternalButton({
+  href,
+  icon: Icon,
+  label,
+}: {
+  href: string;
+  icon: React.ComponentType<{ className?: string }>;
+  label: string;
+}) {
+  return (
+    <a href={href} target="_blank" rel="noopener noreferrer" className={buttonClass("secondary")}>
+      <Icon className="w-4 h-4" />
+      {label}
+      <ExternalLink className="w-3.5 h-3.5 text-faint" />
+    </a>
+  );
+}
+
 export default function InvestorDashboardPage() {
   return (
-    <Suspense fallback={<div className="p-8 text-center text-xs text-[#64748B]">Loading Investor Portal...</div>}>
+    <Suspense fallback={<div className="p-8 text-sm text-muted">Loading…</div>}>
       <InvestorDashboardContent />
     </Suspense>
   );

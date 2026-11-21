@@ -30,9 +30,9 @@ const CATEGORY_LABEL = Object.fromEntries(CATEGORIES.map((c) => [c.value, c.labe
 const ACCEPT = ".pdf,.pptx,.docx,.txt,.md,.csv,.png,.jpg,.jpeg";
 
 const SEVERITY_STYLE: Record<Severity, string> = {
-  high: "bg-[#FEF2F2] text-[#B91C1C] border-[#FECACA]",
-  medium: "bg-[#FFF7ED] text-[#9A3412] border-[#FED7AA]",
-  low: "bg-[#F1F5F9] text-[#475569] border-[#E2E8F0]",
+  high: "bg-danger-soft text-danger",
+  medium: "bg-warning-soft text-warning",
+  low: "bg-subtle text-ink-2",
 };
 
 function formatBytes(bytes: number): string {
@@ -42,16 +42,15 @@ function formatBytes(bytes: number): string {
 }
 
 function scoreColor(score: number | null | undefined): string {
-  if (score == null) return "#94A3B8";
-  if (score >= 85) return "#2E7D52";
-  if (score >= 70) return "#1B3B6F";
-  if (score >= 50) return "#B45309";
-  return "#B91C1C";
+  if (score == null) return "#98a2b3";
+  if (score >= 75) return "#1f7a4d";
+  if (score >= 50) return "#1d4e96";
+  return "#a15c07";
 }
 
 function Card({ children, className = "" }: { children: React.ReactNode; className?: string }) {
   return (
-    <section className={`rounded-xl border border-[#E2E8F0] bg-white p-5 sm:p-6 shadow-subtle ${className}`}>
+    <section className={`rounded-xl border border-line bg-surface p-5 sm:p-6 ${className}`}>
       {children}
     </section>
   );
@@ -59,7 +58,7 @@ function Card({ children, className = "" }: { children: React.ReactNode; classNa
 
 function SectionTitle({ icon, children }: { icon: React.ReactNode; children: React.ReactNode }) {
   return (
-    <h3 className="text-sm font-bold text-[#0F172A] uppercase tracking-wider font-display flex items-center gap-2">
+    <h3 className="text-base font-semibold text-ink flex items-center gap-2">
       {icon}
       {children}
     </h3>
@@ -156,12 +155,12 @@ export function ProjectIntelligence({
   };
 
   if (loading) {
-    return <Card><p className="text-xs text-[#64748B]">Loading project intelligence…</p></Card>;
+    return <Card><p className="text-sm text-muted">Loading project intelligence…</p></Card>;
   }
   if (loadError) {
     return (
       <Card>
-        <p role="alert" className="text-xs text-[#B91C1C]">{loadError}</p>
+        <p role="alert" className="text-sm text-danger">{loadError}</p>
       </Card>
     );
   }
@@ -174,12 +173,12 @@ export function ProjectIntelligence({
       <Card className="space-y-4">
         <div className="flex flex-wrap items-start justify-between gap-3">
           <div>
-            <SectionTitle icon={<FileText className="w-4 h-4 text-[#64748B]" />}>Project Materials</SectionTitle>
-            <p className="text-xs text-[#64748B] mt-1">
+            <SectionTitle icon={<FileText className="w-4 h-4 text-muted" />}>Project Materials</SectionTitle>
+            <p className="text-sm text-muted mt-1">
               Everything you already have. The analysis reads all of it together.
             </p>
           </div>
-          <span className="text-[11px] text-[#1B3B6F] flex items-center gap-1">
+          <span className="text-xs text-accent flex items-center gap-1">
             <Lock className="w-3 h-3" /> Private until you publish
           </span>
         </div>
@@ -189,7 +188,7 @@ export function ProjectIntelligence({
             aria-label="Document type"
             value={category}
             onChange={(e) => setCategory(e.target.value)}
-            className="px-3 py-2 bg-[#FAFBFD] border border-[#E2E8F0] rounded-lg text-[#0F172A] text-xs"
+            className="px-3 py-2 bg-canvas border border-line rounded-lg text-ink text-sm"
           >
             {CATEGORIES.map((c) => (
               <option key={c.value} value={c.value}>{c.label}</option>
@@ -207,41 +206,41 @@ export function ProjectIntelligence({
           <label
             htmlFor="project-material-input"
             aria-disabled={uploading}
-            className={`inline-flex items-center justify-center gap-2 px-4 py-2 rounded-lg text-xs font-semibold border transition-colors ${
+            className={`inline-flex items-center justify-center gap-2 px-4 py-2 rounded-lg text-sm font-semibold border transition-colors ${
               uploading
-                ? "bg-[#F1F5F9] text-[#94A3B8] border-[#E2E8F0] pointer-events-none"
-                : "bg-white text-[#1B3B6F] border-[#BFD7EE] hover:bg-[#EBF2FA] cursor-pointer"
+                ? "bg-subtle text-faint border-line pointer-events-none"
+                : "bg-surface text-accent border-accent-soft hover:bg-accent-soft cursor-pointer"
             }`}
           >
             <Upload className="w-3.5 h-3.5" />
             {uploading ? "Uploading…" : "Upload files"}
           </label>
-          <span className="text-[10px] text-[#94A3B8]">PDF, PPTX, DOCX, TXT, MD, CSV, PNG, JPG · up to 25 MB each</span>
+          <span className="text-xs text-faint">PDF, PPTX, DOCX, TXT, MD, CSV, PNG, JPG · up to 25 MB each</span>
         </div>
 
         {uploadError && (
-          <p role="alert" className="text-xs text-[#B91C1C] bg-[#FEF2F2] border border-[#FECACA] rounded-lg px-3 py-2">
+          <p role="alert" className="text-sm text-danger bg-danger-soft border border-danger-soft rounded-lg px-3 py-2">
             {uploadError}
           </p>
         )}
 
         {documents.length === 0 ? (
-          <p className="text-xs text-[#64748B] bg-[#F8FAFC] border border-dashed border-[#CBD5E1] rounded-lg px-4 py-6 text-center">
+          <p className="text-sm text-muted bg-canvas border border-dashed border-line-strong rounded-lg px-4 py-6 text-center">
             No materials yet. Start with your pitch deck, then add your business plan, market research or anything else
             investors would ask for.
           </p>
         ) : (
-          <ul className="divide-y divide-[#E2E8F0] border border-[#E2E8F0] rounded-lg">
+          <ul className="divide-y divide-line border border-line rounded-lg">
             {documents.map((doc) => (
               <li key={doc.id} className="flex flex-col sm:flex-row sm:items-center gap-2 px-3.5 py-2.5">
                 <div className="flex-1 min-w-0">
                   <div className="flex flex-wrap items-center gap-2">
-                    <span className="text-xs font-semibold text-[#0F172A] truncate">{doc.original_name}</span>
-                    <span className="text-[10px] px-2 py-0.5 rounded-full bg-[#EBF2FA] text-[#1B3B6F] border border-[#BFD7EE]">
+                    <span className="text-sm font-semibold text-ink truncate">{doc.original_name}</span>
+                    <span className="text-xs px-2 py-0.5 rounded-full bg-accent-soft text-accent border border-accent-soft">
                       {CATEGORY_LABEL[doc.category] ?? doc.category}
                     </span>
                   </div>
-                  <p className="text-[11px] text-[#64748B] mt-0.5">
+                  <p className="text-xs text-muted mt-0.5">
                     {formatBytes(doc.size_bytes)}
                     {doc.page_count ? ` · ${doc.page_count} page${doc.page_count === 1 ? "" : "s"}` : ""}
                     {doc.text_chars > 0 ? ` · ${doc.text_chars.toLocaleString()} characters of text` : ""}
@@ -252,7 +251,7 @@ export function ProjectIntelligence({
                   <button
                     type="button"
                     onClick={() => api.downloadProjectDocument(doc).catch((e) => setUploadError(e.message))}
-                    className="p-1.5 rounded text-[#64748B] hover:text-[#0F172A] hover:bg-[#F1F5F9]"
+                    className="p-1.5 rounded text-muted hover:text-ink hover:bg-subtle"
                     aria-label={`Download ${doc.original_name}`}
                     title="Download"
                   >
@@ -261,7 +260,7 @@ export function ProjectIntelligence({
                   <button
                     type="button"
                     onClick={() => handleDelete(doc)}
-                    className="p-1.5 rounded text-[#64748B] hover:text-[#B91C1C] hover:bg-[#FEF2F2]"
+                    className="p-1.5 rounded text-muted hover:text-danger hover:bg-danger-soft"
                     aria-label={`Remove ${doc.original_name}`}
                     title="Remove"
                   >
@@ -278,8 +277,8 @@ export function ProjectIntelligence({
       <Card className="space-y-5">
         <div className="flex flex-wrap items-start justify-between gap-3">
           <div>
-            <SectionTitle icon={<Sparkles className="w-4 h-4 text-[#1B3B6F]" />}>AI Readiness Analysis</SectionTitle>
-            <p className="text-xs text-[#64748B] mt-1">
+            <SectionTitle icon={<Sparkles className="w-4 h-4 text-accent" />}>AI Readiness Analysis</SectionTitle>
+            <p className="text-sm text-muted mt-1">
               Reads your profile, materials, GitHub repository and links together. Only you can see this.
             </p>
           </div>
@@ -287,7 +286,7 @@ export function ProjectIntelligence({
             type="button"
             onClick={handleAnalyze}
             disabled={analyzing}
-            className="px-4 py-2 rounded-lg text-xs font-medium text-white bg-[#1B3B6F] hover:bg-[#142C54] shadow-sm flex items-center gap-1.5 disabled:opacity-60 disabled:cursor-wait"
+            className="px-4 py-2 rounded-lg text-sm font-medium text-white bg-accent hover:bg-accent-hover flex items-center gap-1.5 disabled:opacity-60 disabled:cursor-wait"
           >
             {analyzing ? <Cpu className="w-3.5 h-3.5 animate-spin" /> : <Sparkles className="w-3.5 h-3.5" />}
             {analyzing ? "Analyzing…" : report?.analyzed_at ? "Re-analyze" : "Run Analysis"}
@@ -295,47 +294,47 @@ export function ProjectIntelligence({
         </div>
 
         {analyzing && (
-          <p className="text-xs text-[#1B3B6F] bg-[#EBF2FA] border border-[#BFD7EE] rounded-lg px-3 py-2">
+          <p className="text-sm text-accent bg-accent-soft border border-accent-soft rounded-lg px-3 py-2">
             Reading your materials and repository. An AI analysis usually takes one to two minutes.
           </p>
         )}
         {analyzeError && (
-          <p role="alert" className="text-xs text-[#B91C1C] bg-[#FEF2F2] border border-[#FECACA] rounded-lg px-3 py-2">
+          <p role="alert" className="text-sm text-danger bg-danger-soft border border-danger-soft rounded-lg px-3 py-2">
             {analyzeError}
           </p>
         )}
 
         {!report || !report.analyzed_at ? (
-          <p className="text-xs text-[#64748B] bg-[#F8FAFC] border border-dashed border-[#CBD5E1] rounded-lg px-4 py-6 text-center">
+          <p className="text-sm text-muted bg-canvas border border-dashed border-line-strong rounded-lg px-4 py-6 text-center">
             No analysis yet. Upload your materials, then run the analysis to get your readiness score, gaps and
             improvement suggestions.
           </p>
         ) : (
           <>
             {/* Score header */}
-            <div className="flex flex-col sm:flex-row sm:items-center gap-4 p-4 rounded-lg bg-[#F8FAFC] border border-[#E2E8F0]">
+            <div className="flex flex-col sm:flex-row sm:items-center gap-4 p-4 rounded-lg bg-canvas border border-line">
               <div className="flex items-baseline gap-1">
-                <span className="text-4xl font-bold font-display" style={{ color: scoreColor(report.readiness_score) }}>
+                <span className="text-4xl font-semibold" style={{ color: scoreColor(report.readiness_score) }}>
                   {report.readiness_score.toFixed(0)}
                 </span>
-                <span className="text-sm text-[#64748B]">/ 100</span>
+                <span className="text-sm text-muted">/ 100</span>
               </div>
               <div className="flex-1 space-y-1">
-                <p className="text-sm font-semibold text-[#0F172A]">{report.status_label}</p>
-                <div className="flex flex-wrap items-center gap-2 text-[11px] text-[#64748B]">
+                <p className="text-sm font-semibold text-ink">{report.status_label}</p>
+                <div className="flex flex-wrap items-center gap-2 text-xs text-muted">
                   {report.is_ai_generated ? (
-                    <span className="px-2 py-0.5 rounded-full bg-[#EBF2FA] text-[#1B3B6F] border border-[#BFD7EE]">
+                    <span className="px-2 py-0.5 rounded-full bg-accent-soft text-accent border border-accent-soft">
                       {report.model_version}
                     </span>
                   ) : (
-                    <span className="px-2 py-0.5 rounded-full bg-[#FFF7ED] text-[#9A3412] border border-[#FED7AA]">
+                    <span className="px-2 py-0.5 rounded-full bg-warning-soft text-warning border border-warning-soft">
                       Rule-based check · AI analysis not configured
                     </span>
                   )}
                   {report.analyzed_at && <span>Analyzed {new Date(report.analyzed_at).toLocaleString()}</span>}
                 </div>
                 {report.engine === "gemini" && (
-                  <p className="text-[11px] text-[#9A3412]">
+                  <p className="text-xs text-warning">
                     Analyzed with Gemini. On Google&apos;s free tier, submitted materials may be used to improve
                     Google&apos;s products, so avoid uploading confidential decks.
                   </p>
@@ -343,25 +342,25 @@ export function ProjectIntelligence({
               </div>
             </div>
 
-            {report.summary && <p className="text-xs sm:text-sm text-[#334155] leading-relaxed">{report.summary}</p>}
+            {report.summary && <p className="text-sm text-ink-2 leading-relaxed">{report.summary}</p>}
 
             {/* Dimensions */}
             <div className="space-y-3">
               {report.dimensions.map((d) => (
                 <div key={d.key}>
-                  <div className="flex items-center justify-between text-xs">
-                    <span className="font-semibold text-[#0F172A]">{d.name}</span>
-                    <span className="font-mono font-semibold" style={{ color: scoreColor(d.score) }}>
+                  <div className="flex items-center justify-between text-sm">
+                    <span className="font-semibold text-ink">{d.name}</span>
+                    <span className="font-semibold" style={{ color: scoreColor(d.score) }}>
                       {d.score == null ? "—" : d.score.toFixed(0)}
                     </span>
                   </div>
-                  <div className="mt-1 h-1.5 rounded-full bg-[#E2E8F0] overflow-hidden" aria-hidden>
+                  <div className="mt-1 h-1.5 rounded-full bg-line overflow-hidden" aria-hidden>
                     <div
                       className="h-full rounded-full"
                       style={{ width: `${d.score ?? 0}%`, backgroundColor: scoreColor(d.score) }}
                     />
                   </div>
-                  <p className="text-[11px] text-[#64748B] mt-1 leading-relaxed">{d.desc}</p>
+                  <p className="text-xs text-muted mt-1 leading-relaxed">{d.desc}</p>
                 </div>
               ))}
             </div>
@@ -369,31 +368,31 @@ export function ProjectIntelligence({
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               {/* Strengths */}
               <div className="space-y-2">
-                <h4 className="text-xs font-bold text-[#0F172A] flex items-center gap-1.5">
-                  <CheckCircle2 className="w-3.5 h-3.5 text-[#2E7D52]" /> Strengths
+                <h4 className="text-sm font-semibold text-ink flex items-center gap-1.5">
+                  <CheckCircle2 className="w-3.5 h-3.5 text-positive" /> Strengths
                 </h4>
                 <ul className="space-y-1.5">
                   {report.strengths.map((s, i) => (
-                    <li key={i} className="text-xs text-[#334155] leading-relaxed pl-3 border-l-2 border-[#C8E6C9]">{s}</li>
+                    <li key={i} className="text-sm text-ink-2 leading-relaxed pl-3 border-l-2 border-positive-soft">{s}</li>
                   ))}
                 </ul>
               </div>
 
               {/* Gaps */}
               <div className="space-y-2">
-                <h4 className="text-xs font-bold text-[#0F172A] flex items-center gap-1.5">
-                  <AlertTriangle className="w-3.5 h-3.5 text-[#B45309]" /> Missing or weak areas
+                <h4 className="text-sm font-semibold text-ink flex items-center gap-1.5">
+                  <AlertTriangle className="w-3.5 h-3.5 text-warning" /> Missing or weak areas
                 </h4>
                 {report.gaps.length === 0 ? (
-                  <p className="text-xs text-[#64748B]">No major gaps found.</p>
+                  <p className="text-sm text-muted">No major gaps found.</p>
                 ) : (
                   <ul className="space-y-2">
                     {report.gaps.map((g, i) => (
-                      <li key={i} className="text-xs text-[#334155] leading-relaxed">
-                        <span className={`inline-block mr-1.5 px-1.5 py-px rounded border text-[10px] font-semibold uppercase ${SEVERITY_STYLE[g.severity]}`}>
+                      <li key={i} className="text-sm text-ink-2 leading-relaxed">
+                        <span className={`inline-block mr-1.5 px-1.5 py-0.5 rounded-md text-xs font-medium capitalize ${SEVERITY_STYLE[g.severity]}`}>
                           {g.severity}
                         </span>
-                        <span className="font-semibold text-[#0F172A]">{g.area}:</span> {g.issue}
+                        <span className="font-semibold text-ink">{g.area}:</span> {g.issue}
                       </li>
                     ))}
                   </ul>
@@ -404,21 +403,21 @@ export function ProjectIntelligence({
             {/* Suggestions */}
             {report.suggestions.length > 0 && (
               <div className="space-y-2">
-                <h4 className="text-xs font-bold text-[#0F172A] flex items-center gap-1.5">
-                  <Lightbulb className="w-3.5 h-3.5 text-[#1B3B6F]" /> What to improve before you publish
+                <h4 className="text-sm font-semibold text-ink flex items-center gap-1.5">
+                  <Lightbulb className="w-3.5 h-3.5 text-accent" /> What to improve before you publish
                 </h4>
                 <ol className="space-y-2">
                   {report.suggestions.map((s, i) => (
-                    <li key={i} className="flex gap-3 p-3 rounded-lg border border-[#E2E8F0] bg-[#FAFBFD]">
-                      <span className="text-xs font-mono font-bold text-[#94A3B8]">{i + 1}</span>
+                    <li key={i} className="flex gap-3 p-3 rounded-lg border border-line bg-canvas">
+                      <span className="text-sm font-semibold text-faint">{i + 1}</span>
                       <div className="flex-1">
                         <div className="flex flex-wrap items-center gap-2">
-                          <span className="text-xs font-semibold text-[#0F172A]">{s.title}</span>
-                          <span className={`px-1.5 py-px rounded border text-[10px] font-semibold uppercase ${SEVERITY_STYLE[s.priority]}`}>
+                          <span className="text-sm font-semibold text-ink">{s.title}</span>
+                          <span className={`px-1.5 py-0.5 rounded-md text-xs font-medium capitalize ${SEVERITY_STYLE[s.priority]}`}>
                             {s.priority}
                           </span>
                         </div>
-                        <p className="text-xs text-[#475569] mt-0.5 leading-relaxed">{s.detail}</p>
+                        <p className="text-sm text-ink-2 mt-0.5 leading-relaxed">{s.detail}</p>
                       </div>
                     </li>
                   ))}
@@ -428,11 +427,11 @@ export function ProjectIntelligence({
 
             {/* Industry insights */}
             {report.industry_insights.length > 0 && (
-              <div className="p-4 rounded-lg bg-[#EBF2FA] border border-[#BFD7EE] space-y-1.5">
-                <h4 className="text-xs font-bold text-[#1B3B6F]">Industry insights</h4>
+              <div className="p-4 rounded-lg bg-accent-soft border border-accent-soft space-y-1.5">
+                <h4 className="text-sm font-semibold text-accent">Industry insights</h4>
                 <ul className="list-disc pl-4 space-y-1">
                   {report.industry_insights.map((t, i) => (
-                    <li key={i} className="text-xs text-[#18345D] leading-relaxed">{t}</li>
+                    <li key={i} className="text-sm text-ink-2 leading-relaxed">{t}</li>
                   ))}
                 </ul>
               </div>
@@ -440,9 +439,9 @@ export function ProjectIntelligence({
 
             {/* What the analysis used */}
             {report.inputs && (
-              <div className="text-[11px] text-[#64748B] space-y-1 pt-3 border-t border-[#E2E8F0]">
+              <div className="text-xs text-muted space-y-1 pt-3 border-t border-line">
                 <p>
-                  <span className="font-semibold text-[#0F172A]">Analyzed:</span>{" "}
+                  <span className="font-semibold text-ink">Analyzed:</span>{" "}
                   {report.inputs.documents.length > 0
                     ? report.inputs.documents.map((d) => d.name).join(", ")
                     : "no uploaded materials"}
@@ -461,16 +460,16 @@ export function ProjectIntelligence({
 
         {/* History */}
         {history.length > 1 && (
-          <div className="pt-3 border-t border-[#E2E8F0] space-y-2">
-            <h4 className="text-xs font-bold text-[#0F172A] flex items-center gap-1.5">
-              <History className="w-3.5 h-3.5 text-[#64748B]" /> Progress
+          <div className="pt-3 border-t border-line space-y-2">
+            <h4 className="text-sm font-semibold text-ink flex items-center gap-1.5">
+              <History className="w-3.5 h-3.5 text-muted" /> Progress
             </h4>
             <ul className="space-y-1">
               {history.map((h) => (
-                <li key={h.id} className="flex items-center justify-between text-[11px] text-[#475569]">
+                <li key={h.id} className="flex items-center justify-between text-xs text-ink-2">
                   <span>{new Date(h.created_at).toLocaleString()}</span>
-                  <span className="text-[#94A3B8]">{h.engine === "rules" ? "Rule-based" : h.engine === "gemini" ? "Gemini" : "Claude"}</span>
-                  <span className="font-mono font-semibold" style={{ color: scoreColor(h.overall_score) }}>
+                  <span className="text-faint">{h.engine === "rules" ? "Rule-based" : h.engine === "gemini" ? "Gemini" : "Claude"}</span>
+                  <span className="font-semibold" style={{ color: scoreColor(h.overall_score) }}>
                     {h.overall_score.toFixed(0)}
                   </span>
                 </li>
