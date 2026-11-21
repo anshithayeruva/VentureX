@@ -24,8 +24,9 @@ import {
   Sliders,
 } from "lucide-react";
 import { Badge } from "@/components/Badge";
-import { api } from "@/lib/api";
-import { authClient } from "@/lib/auth/client";
+import { api, MeResponse } from "@/lib/api";
+import { authClient, clearApiToken } from "@/lib/auth/client";
+import { BrandMark } from "@/components/BrandMark";
 
 interface PortalLayoutProps {
   role: "FOUNDER" | "INVESTOR";
@@ -56,8 +57,18 @@ export function PortalLayout({
 }: PortalLayoutProps) {
   const pathname = usePathname();
   const router = useRouter();
-  const { data: session } = authClient.useSession();
-  const sessionUser = session?.user;
+  // Load the signed-in user from the API (reliable on a full page load, unlike the
+  // client session hook, which only fills after an in-page sign-in).
+  const [sessionUser, setSessionUser] = useState<MeResponse | null>(null);
+  useEffect(() => {
+    let active = true;
+    api.getMe().then((me) => {
+      if (active) setSessionUser(me);
+    }).catch(() => {});
+    return () => {
+      active = false;
+    };
+  }, []);
   const initials =
     (sessionUser?.name || sessionUser?.email || "?")
       .split(/[\s@.]+/)
@@ -68,6 +79,7 @@ export function PortalLayout({
 
   const handleSignOut = async () => {
     await authClient.signOut();
+    clearApiToken();
     router.replace("/login");
     router.refresh();
   };
@@ -136,9 +148,7 @@ export function PortalLayout({
       {/* Mobile Top Header */}
       <div className="md:hidden flex items-center justify-between px-4 py-3 bg-[#0F1E36] border-b border-[#1F3354] text-white sticky top-0 z-40 shadow-sm">
         <div className="flex items-center gap-2">
-          <div className="w-7 h-7 rounded-lg bg-[#0B1628] border border-[#1F3354] flex items-center justify-center font-bold text-xs text-white">
-            V<span className="text-[#38BDF8]">X</span>
-          </div>
+          <BrandMark size={30} className="border-transparent" />
           <span className="font-bold text-sm tracking-tight font-display">
             Venture<span className="text-[#38BDF8]">X</span>
           </span>
@@ -166,9 +176,7 @@ export function PortalLayout({
           {/* Sidebar Brand Header */}
           <div className="h-16 px-5 flex items-center justify-between border-b border-[#182C4C] bg-[#0B1628]">
             <Link href="/" className="flex items-center gap-2.5">
-              <div className="w-8 h-8 rounded-lg bg-[#182C4C] border border-[#223E68] flex items-center justify-center font-bold text-sm shadow-sm font-display text-white">
-                V<span className="text-[#38BDF8]">X</span>
-              </div>
+              <BrandMark size={34} className="border-transparent" />
               <div className="flex flex-col">
                 <span className="font-bold text-base tracking-tight font-display text-white">
                   Venture<span className="text-[#38BDF8]">X</span>

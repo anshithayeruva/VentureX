@@ -1,6 +1,7 @@
 import React from "react";
 import Link from "next/link";
 import { Sparkles, Cpu, Database } from "lucide-react";
+import { BrandMark } from "@/components/BrandMark";
 
 export function Footer() {
   return (
@@ -10,11 +11,7 @@ export function Footer() {
           {/* Brand Info */}
           <div className="md:col-span-2 space-y-4">
             <div className="flex items-center gap-2.5">
-              <div className="w-7 h-7 rounded-lg bg-[#0F1E36] border border-[#1F3354] flex items-center justify-center text-white shadow-sm">
-                <span className="font-display font-bold text-xs text-[#F8FAFC]">
-                  V<span className="text-[#38BDF8]">X</span>
-                </span>
-              </div>
+              <BrandMark size={30} />
               <span className="text-lg font-bold text-[#0F172A] tracking-tight font-display">
                 Venture<span className="text-[#1B3B6F]">X</span>
               </span>

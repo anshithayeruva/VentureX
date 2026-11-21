@@ -2,6 +2,7 @@ import logging
 import json
 from typing import List, Optional, Dict
 from fastapi import APIRouter, Depends, HTTPException, status, Query, WebSocket, WebSocketDisconnect
+from fastapi.encoders import jsonable_encoder
 from fastapi.responses import Response
 
 from app.schemas.dealroom import (
@@ -14,7 +15,7 @@ from app.schemas.dealroom import (
     DealRoomCreateInput,
     DealRoomAuditLog,
 )
-from app.core.auth import CurrentUser, require_user
+from app.core.auth import CurrentUser, require_user, user_from_token
 from app.services.deal_room_service import DealRoomService
 from app.utils.pdf_generator import PDFGenerator
 
@@ -47,8 +48,10 @@ class ConnectionManager:
     async def broadcast(self, room_id: str, message: dict, sender_socket: Optional[WebSocket] = None):
         if room_id not in self.active_connections:
             return
+        # Messages carry datetimes from Postgres; encode once so send_json can serialize them.
+        message = jsonable_encoder(message)
         dead_sockets = []
-        for connection in self.active_connections[room_id]:
+        for connection in list(self.active_connections[room_id]):
             if sender_socket and connection is sender_socket:
                 continue
             try:
@@ -81,13 +84,9 @@ def _as_sender(user: CurrentUser) -> dict:
 
 
 @router.get("", response_model=List[DealRoom])
-async def list_deal_rooms(
-    user_id: Optional[str] = Query(None, description="Filter by user participant ID"),
-    role: Optional[str] = Query(None, description="Role of user: FOUNDER or INVESTOR"),
-):
-    """List all active, confidential Deal Rooms for the participating founder or investor."""
-    rooms = await DealRoomService.list_rooms(user_id=user_id, role=role)
-    return rooms
+async def list_deal_rooms(user: CurrentUser = Depends(require_user)):
+    """List the deal rooms you are a party to."""
+    return await DealRoomService.list_rooms(user_id=user.id, role=user.role)
 
 
 @router.post("", response_model=DealRoom, status_code=status.HTTP_201_CREATED)
@@ -107,29 +106,20 @@ async def create_deal_room(room_in: DealRoomCreateInput, user: CurrentUser = Dep
 
 
 @router.get("/{room_id}", response_model=DealRoom)
-async def get_deal_room(
-    room_id: str,
-    user_id: Optional[str] = Query(None, description="ID of accessing user for authorization"),
-):
-    """Retrieve metadata, NDA state, and data room parameters for a specific Deal Room."""
-    room = await DealRoomService.get_room(room_id, user_id=user_id)
-    if not room:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail=f"Deal Room '{room_id}' not found or access denied",
-        )
-    return room
+async def get_deal_room(room_id: str, user: CurrentUser = Depends(require_user)):
+    """Retrieve metadata, NDA state, and data room parameters for one of your deal rooms."""
+    return await _require_participant(room_id, user)
 
 
 @router.get("/{room_id}/messages", response_model=List[DealMessage])
 async def get_messages(
     room_id: str,
-    user_id: Optional[str] = Query(None, description="User participant ID"),
     limit: int = Query(100, ge=1, le=500),
+    user: CurrentUser = Depends(require_user),
 ):
     """Retrieve full chronological conversation records with SHA-256 integrity signatures."""
-    messages = await DealRoomService.get_messages(room_id, user_id=user_id, limit=limit)
-    return messages
+    await _require_participant(room_id, user)
+    return await DealRoomService.get_messages(room_id, user_id=user.id, limit=limit)
 
 
 @router.post("/{room_id}/messages", response_model=DealMessage, status_code=status.HTTP_201_CREATED)
@@ -160,8 +150,25 @@ async def send_message(
 
 
 @router.websocket("/ws/{room_id}")
-async def dealroom_websocket(websocket: WebSocket, room_id: str):
-    """Live bidirectional WebSocket channel for real-time messaging, typing indicators, and presence."""
+async def dealroom_websocket(websocket: WebSocket, room_id: str, token: Optional[str] = Query(None)):
+    """Live channel for messages, typing indicators and presence.
+
+    Browsers cannot set an Authorization header on WebSockets, so the client passes its
+    short-lived Neon Auth JWT as ?token=. Only the room's founder and investor may connect,
+    and everything they send is attributed to the verified user.
+    """
+    try:
+        if not token:
+            raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Sign in required")
+        user = await user_from_token(token)
+        room = await DealRoomService.get_room(room_id, user_id=user.id)
+    except HTTPException:
+        await websocket.close(code=4401)
+        return
+    if not room:
+        await websocket.close(code=4403)
+        return
+
     await manager.connect(room_id, websocket)
     # Broadcast participant presence
     await manager.broadcast(
@@ -185,8 +192,8 @@ async def dealroom_websocket(websocket: WebSocket, room_id: str):
                     room_id,
                     {
                         "type": "typing",
-                        "user_id": data.get("user_id"),
-                        "user_name": data.get("user_name"),
+                        "user_id": user.id,
+                        "user_name": user.name or user.email,
                         "is_typing": data.get("is_typing", True),
                     },
                     sender_socket=websocket,
@@ -195,7 +202,7 @@ async def dealroom_websocket(websocket: WebSocket, room_id: str):
                 msg_payload = data.get("data")
                 if msg_payload:
                     try:
-                        input_obj = MessageCreateInput(**msg_payload)
+                        input_obj = MessageCreateInput(**{**msg_payload, **_as_sender(user)})
                         saved_msg = await DealRoomService.send_message(room_id, input_obj)
                         # Broadcast to all connections in room
                         await manager.broadcast(room_id, {"type": "message", "data": saved_msg})
@@ -261,13 +268,11 @@ async def share_document(room_id: str, doc_in: DocumentShareInput, user: Current
 
 
 @router.get("/{room_id}/transcript")
-async def export_transcript(
-    room_id: str,
-    user_id: Optional[str] = Query(None, description="User participant requesting transcript"),
-):
+async def export_transcript(room_id: str, user: CurrentUser = Depends(require_user)):
     """Export compliant, cryptographically-sealed transcript of the Deal Room dialogue."""
+    await _require_participant(room_id, user)
     try:
-        transcript = await DealRoomService.export_transcript(room_id, user_id=user_id)
+        transcript = await DealRoomService.export_transcript(room_id, user_id=user.id)
         return transcript
     except ValueError as e:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e))
@@ -276,17 +281,11 @@ async def export_transcript(
 
 
 @router.get("/{room_id}/export-pdf")
-async def export_dealroom_pdf(
-    room_id: str,
-    user_id: Optional[str] = Query(None, description="User participant requesting export"),
-):
+async def export_dealroom_pdf(room_id: str, user: CurrentUser = Depends(require_user)):
     """Export verified, tamper-evident cryptographic closing certificate and transcript as PDF."""
+    room = await _require_participant(room_id, user)
     try:
-        room = await DealRoomService.get_room(room_id, user_id=user_id)
-        if not room:
-            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"Deal room '{room_id}' not found")
-
-        messages = await DealRoomService.get_messages(room_id, user_id=user_id, limit=500)
+        messages = await DealRoomService.get_messages(room_id, user_id=user.id, limit=500)
         audit_logs = await DealRoomService.get_audit_logs(room_id)
 
         pdf_bytes = PDFGenerator.generate_dealroom_audit_pdf(room, messages, audit_logs)
@@ -310,7 +309,8 @@ async def export_dealroom_pdf(
 
 
 @router.get("/{room_id}/audit-logs", response_model=List[DealRoomAuditLog])
-async def get_audit_logs(room_id: str):
+async def get_audit_logs(room_id: str, user: CurrentUser = Depends(require_user)):
     """Retrieve immutable audit log of all events and access within the Deal Room."""
+    await _require_participant(room_id, user)
     logs = await DealRoomService.get_audit_logs(room_id)
     return logs

@@ -3,8 +3,9 @@
 import React, { useState, useSyncExternalStore } from "react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
-import { authClient, insecureOriginWarning, noSubscribe, sessionWasKept } from "@/lib/auth/client";
+import { authClient, clearApiToken, insecureOriginWarning, noSubscribe, sessionWasKept } from "@/lib/auth/client";
 import { api } from "@/lib/api";
+import { BrandMark } from "@/components/BrandMark";
 
 const HOME_FOR_ROLE = {
   FOUNDER: "/founder/dashboard",
@@ -41,6 +42,7 @@ function LoginForm() {
     setError(null);
     setPending(true);
     try {
+      clearApiToken(); // never reuse a previous account's token
       const { error: signInError } = await authClient.signIn.email({ email, password });
       if (signInError) {
         setError(
@@ -79,9 +81,7 @@ function LoginForm() {
     <div className="min-h-[82vh] flex items-center justify-center px-4 py-12 bg-[#F8FAFC]">
       <div className="w-full max-w-md rounded-2xl border border-[#E2E8F0] bg-white p-7 sm:p-9 shadow-elevated">
         <div className="text-center mb-7">
-          <div className="inline-flex w-10 h-10 rounded-xl bg-[#0F1E36] border border-[#1F3354] items-center justify-center text-white mb-3 shadow-sm font-display font-extrabold text-sm">
-            V<span className="text-[#38BDF8]">X</span>
-          </div>
+          <BrandMark size={48} className="mb-3 rounded-xl" />
           <h1 className="text-2xl font-bold text-[#0F172A] tracking-tight font-display">
             Sign in to Venture X
           </h1>

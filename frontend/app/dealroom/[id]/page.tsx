@@ -29,7 +29,8 @@ import {
   Sparkles,
 } from "lucide-react";
 import { Badge } from "@/components/Badge";
-import { api } from "@/lib/api";
+import { api, MeResponse } from "@/lib/api";
+import { getApiToken } from "@/lib/auth/client";
 import {
   DealRoom,
   DealMessage,
@@ -86,8 +87,22 @@ function DealRoomDetailContent({ params }: PageProps) {
 
   const chatBottomRef = useRef<HTMLDivElement>(null);
 
-  const currentUserId = role === "FOUNDER" ? "founder-001" : "investor-001";
-  const currentUserName = role === "FOUNDER" ? "Alex Rivers" : "Marcus Sterling";
+  // Identity comes from the signed-in account (/api/me); the backend also enforces it on every write.
+  const [me, setMe] = useState<MeResponse | null>(null);
+  const currentUserId = me?.id ?? "";
+  const currentUserName = me?.name || me?.email || "You";
+
+  useEffect(() => {
+    let active = true;
+    api.getMe().then((account) => {
+      if (!active || !account) return;
+      setMe(account);
+      if (account.role) setRole(account.role);
+    }).catch(() => {});
+    return () => {
+      active = false;
+    };
+  }, []);
 
   // Load Room & Messages
   const fetchRoomData = async () => {
@@ -109,11 +124,16 @@ function DealRoomDetailContent({ params }: PageProps) {
     const host = process.env.NEXT_PUBLIC_API_URL
       ? process.env.NEXT_PUBLIC_API_URL.replace(/^http(s?):\/\//, "")
       : "localhost:8000";
-    const wsUrl = `${protocol}//${host}/api/dealrooms/ws/${roomId}`;
+    const baseWsUrl = `${protocol}//${host}/api/dealrooms/ws/${roomId}`;
 
     let socket: WebSocket | null = null;
-    try {
-      socket = new WebSocket(wsUrl);
+    // Browsers can't send an Authorization header on WebSockets, so the short-lived
+    // Neon Auth token goes in the query string; the server verifies it and checks the
+    // user is a party to this room.
+    const connect = async () => {
+      const token = await getApiToken();
+      if (!mounted || !token) return;
+      socket = new WebSocket(`${baseWsUrl}?token=${encodeURIComponent(token)}`);
       wsRef.current = socket;
 
       socket.onopen = () => {
@@ -162,9 +182,10 @@ function DealRoomDetailContent({ params }: PageProps) {
       socket.onerror = () => {
         if (mounted) setWsConnected(false);
       };
-    } catch {
-      setWsConnected(false);
-    }
+    };
+    connect().catch(() => {
+      if (mounted) setWsConnected(false);
+    });
 
     // Fallback sync polling every 5 seconds in case WebSocket drops
     const pollInterval = setInterval(() => {
@@ -178,11 +199,12 @@ function DealRoomDetailContent({ params }: PageProps) {
     return () => {
       mounted = false;
       clearInterval(pollInterval);
-      if (socket && socket.readyState === WebSocket.OPEN) {
-        socket.close();
+      const open = wsRef.current;
+      if (open && open.readyState === WebSocket.OPEN) {
+        open.close();
       }
     };
-  }, [roomId, role]);
+  }, [roomId, currentUserId]);
 
   // Scroll to bottom on new messages
   useEffect(() => {

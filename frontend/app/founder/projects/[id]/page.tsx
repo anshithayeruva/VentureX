@@ -21,7 +21,7 @@ import {
 import { Badge } from "@/components/Badge";
 import { PortalLayout } from "@/components/PortalLayout";
 import { ProjectIntelligence } from "@/components/ProjectIntelligence";
-import { api, MOCK_PROJECTS } from "@/lib/api";
+import { api } from "@/lib/api";
 import { Project } from "@/types";
 
 export default function ProjectOverviewPage({ params }: { params: Promise<{ id: string }> }) {
@@ -32,15 +32,18 @@ export default function ProjectOverviewPage({ params }: { params: Promise<{ id: 
   const [project, setProject] = useState<Project | null>(null);
   const [isPublished, setIsPublished] = useState(false);
   const [publishing, setPublishing] = useState(false);
+  const [notFound, setNotFound] = useState(false);
 
   useEffect(() => {
     let mounted = true;
     api.getProject(projectId).then((item) => {
-      if (mounted) {
-        const found = item || MOCK_PROJECTS.find((p) => p.id === projectId) || MOCK_PROJECTS[0];
-        setProject(found);
-        setIsPublished(Boolean(found.is_published));
+      if (!mounted) return;
+      if (!item) {
+        setNotFound(true);
+        return;
       }
+      setProject(item);
+      setIsPublished(Boolean(item.is_published));
     });
     return () => {
       mounted = false;
@@ -57,6 +60,20 @@ export default function ProjectOverviewPage({ params }: { params: Promise<{ id: 
       setPublishing(false);
     }
   };
+
+  if (notFound) {
+    return (
+      <PortalLayout role="FOUNDER" activeItem="projects" title="Project Overview">
+        <div className="max-w-xl mx-auto mt-10 rounded-xl border border-[#E2E8F0] bg-white p-8 text-center space-y-3 shadow-subtle">
+          <p className="text-sm font-semibold text-[#0F172A]">Project not found</p>
+          <p className="text-xs text-[#64748B]">It may have been removed, or it isn&apos;t visible to your account.</p>
+          <Link href="/founder/projects" className="inline-block text-xs font-semibold text-[#1B3B6F] hover:underline">
+            Back to your projects
+          </Link>
+        </div>
+      </PortalLayout>
+    );
+  }
 
   if (!project) {
     return (

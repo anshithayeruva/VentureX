@@ -106,7 +106,13 @@ async def get_current_user(
     """The signed-in user, or None when no bearer token was sent. A bad token is a 401."""
     if not credentials:
         return None
-    claims = await verify_token(credentials.credentials)
+    return await user_from_token(credentials.credentials)
+
+
+async def user_from_token(token: str) -> CurrentUser:
+    """Verify a Neon Auth JWT and load the VentureX user (also used by the WebSocket, which
+    cannot send an Authorization header). Raises HTTPException 401 for a bad token."""
+    claims = await verify_token(token)
     user_id = str(claims["sub"])
     email = claims.get("email") or ""
     name = claims.get("name")

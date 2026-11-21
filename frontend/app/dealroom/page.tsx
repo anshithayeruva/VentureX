@@ -25,6 +25,7 @@ import {
 import { Badge } from "@/components/Badge";
 import { api } from "@/lib/api";
 import { DealRoom } from "@/types";
+import { BrandMark } from "@/components/BrandMark";
 
 function DealRoomsContent() {
   const searchParams = useSearchParams();
@@ -39,18 +40,17 @@ function DealRoomsContent() {
 
   useEffect(() => {
     let mounted = true;
-    setLoading(true);
-    const userId = role === "FOUNDER" ? "founder-001" : "investor-001";
-    api.getDealRooms({ user_id: userId, role }).then((data) => {
-      if (mounted) {
-        setDealRooms(data);
-        setLoading(false);
-      }
+    // The backend returns only the signed-in user's rooms; the account's role sets the view.
+    Promise.all([api.getMe().catch(() => null), api.getDealRooms()]).then(([me, data]) => {
+      if (!mounted) return;
+      if (me?.role) setRole(me.role);
+      setDealRooms(data);
+      setLoading(false);
     });
     return () => {
       mounted = false;
     };
-  }, [role]);
+  }, []);
 
   const filteredRooms = dealRooms.filter((room) => {
     const matchesSearch =
@@ -88,9 +88,10 @@ function DealRoomsContent() {
           <div className="flex items-center gap-3">
             <Link
               href={role === "FOUNDER" ? "/founder/dashboard" : "/investor/dashboard"}
-              className="w-9 h-9 rounded-xl bg-[#0F1E36] text-white flex items-center justify-center font-display font-extrabold text-xs shadow-sm"
+              className="shrink-0"
+              aria-label="VentureX home"
             >
-              V<span className="text-[#38BDF8]">X</span>
+              <BrandMark size={36} className="rounded-xl" />
             </Link>
             <div>
               <div className="flex items-center gap-2">

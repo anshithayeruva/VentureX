@@ -4,6 +4,7 @@ import React, { useEffect, useState } from "react";
 import Link from "next/link";
 import { Sparkles, Menu, X, Rocket, Briefcase, Activity } from "lucide-react";
 import { api } from "@/lib/api";
+import { BrandMark } from "@/components/BrandMark";
 
 export function Navbar() {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
@@ -35,11 +36,7 @@ export function Navbar() {
           {/* Logo & Brand */}
           <div className="flex items-center gap-8">
             <Link href="/" className="flex items-center gap-2.5 group">
-              <div className="w-8 h-8 rounded-lg bg-[#0F1E36] border border-[#1F3354] flex items-center justify-center text-white shadow-sm transition-transform group-hover:scale-105">
-                <span className="font-display font-extrabold text-sm text-[#F8FAFC]">
-                  V<span className="text-[#38BDF8]">X</span>
-                </span>
-              </div>
+              <BrandMark size={36} className="transition-transform group-hover:scale-105" />
               <div className="flex flex-col">
                 <span className="text-lg font-bold tracking-tight text-[#0F172A] font-display flex items-center">
                   Venture<span className="text-[#1B3B6F] font-black">X</span>

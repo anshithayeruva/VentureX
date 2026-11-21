@@ -41,11 +41,45 @@ export async function sessionWasKept(): Promise<boolean> {
  * (`Authorization: Bearer <jwt>`). Returns null when signed out.
  */
 export async function getApiToken(): Promise<string | null> {
+  // Tokens last ~15 minutes; reuse one until shortly before it expires, and share a single
+  // in-flight request so a page firing many API calls fetches only one token.
+  if (cachedToken && cachedToken.expiresAt - Date.now() > TOKEN_REFRESH_MARGIN_MS) return cachedToken.token;
+  pendingToken ??= fetchToken().finally(() => {
+    pendingToken = null;
+  });
+  return pendingToken;
+}
+
+/** Forget the cached token (call on sign-in, sign-out or a 401 from the API). */
+export function clearApiToken(): void {
+  cachedToken = null;
+}
+
+const TOKEN_REFRESH_MARGIN_MS = 60_000;
+let cachedToken: { token: string; expiresAt: number } | null = null;
+let pendingToken: Promise<string | null> | null = null;
+
+async function fetchToken(): Promise<string | null> {
   try {
     const { data, error } = await authClient.token();
-    if (error || !data?.token) return null;
+    if (error || !data?.token) {
+      cachedToken = null;
+      return null;
+    }
+    cachedToken = { token: data.token, expiresAt: tokenExpiry(data.token) };
     return data.token;
   } catch {
     return null;
   }
+}
+
+/** JWT `exp` in ms; if unreadable, treat the token as short-lived (2 minutes). */
+function tokenExpiry(token: string): number {
+  try {
+    const payload = JSON.parse(atob(token.split(".")[1].replace(/-/g, "+").replace(/_/g, "/")));
+    if (typeof payload.exp === "number") return payload.exp * 1000;
+  } catch {
+    // fall through
+  }
+  return Date.now() + 2 * 60_000;
 }

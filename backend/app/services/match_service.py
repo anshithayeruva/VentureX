@@ -414,6 +414,8 @@ class MatchService:
         search: Optional[str] = None,
         project_id: Optional[str] = None,
         limit: int = 50,
+        investor_id: Optional[str] = None,
+        founder_id: Optional[str] = None,
     ) -> List[Dict[str, Any]]:
         """Retrieve matches with explainable reasoning, ensuring calculations are up to date."""
         # If the table is empty, auto-compute
@@ -429,6 +431,13 @@ class MatchService:
             except ValueError:
                 return []
             where.append("project_id = %s")
+
+        if investor_id:
+            where.append("investor_id = %s")
+            params.append(investor_id)
+        if founder_id:
+            where.append("project_id IN (SELECT id FROM projects WHERE founder_id = %s)")
+            params.append(founder_id)
 
         if search and search.strip():
             pattern = f"%{pg.escape_like(search.strip())}%"
