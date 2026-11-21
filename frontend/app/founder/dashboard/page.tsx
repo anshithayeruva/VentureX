@@ -1,128 +1,121 @@
 "use client";
 
-import React, { useState, useEffect, Suspense } from "react";
+import React, { Suspense, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import {
-  Rocket,
-  Users,
-  Sparkles,
-  Layers,
-  PlusCircle,
-  FileText,
-  User,
-  ArrowUpRight,
-  CheckCircle2,
-  AlertCircle,
-  ShieldCheck,
-  TrendingUp,
-  Lock,
-  Eye,
-  EyeOff,
+  ArrowRight,
   Bell,
-  Settings,
-  Edit,
-  Download,
-  RefreshCw,
-  Search,
-  Filter,
   Briefcase,
-  Mail,
-  Phone,
-  ExternalLink,
-  Calendar,
-  MessageSquare,
   Check,
-  X,
-  Unlock,
-  Building2,
-  Clock,
-  CheckCheck,
+  CheckCircle2,
+  Download,
+  Eye,
+  Lock,
+  Mail,
+  MessagesSquare,
+  Plus,
+  Rocket,
+  Search,
+  Sparkles,
+  Users,
 } from "lucide-react";
-import { Badge } from "@/components/Badge";
-import { ProjectCard } from "@/components/ProjectCard";
-import { InvestorCard } from "@/components/InvestorCard";
-import { StatCard } from "@/components/StatCard";
 import { PortalLayout } from "@/components/PortalLayout";
+import { ProjectIntelligence } from "@/components/ProjectIntelligence";
+import {
+  Avatar,
+  Button,
+  ButtonLink,
+  Card,
+  EmptyState,
+  Field,
+  FormFooter,
+  LoadingRows,
+  Segmented,
+  Toggle,
+  PageHeader,
+  ScoreBar,
+  Section,
+  Stat,
+  Tag,
+  buttonClass,
+  cx,
+  inputClass,
+} from "@/components/ui";
 import { api } from "@/lib/api";
-import { Project, MatchItem, ProjectInterest, NotificationItem } from "@/types";
+import { formatMoney, timeAgo } from "@/lib/format";
+import { MatchItem, NotificationItem, Project, ProjectInterest } from "@/types";
+
+type Tab = "overview" | "projects" | "readiness" | "investors" | "intros" | "notifications" | "profile" | "settings";
+
+const TAB_COPY: Record<Tab, { title: string; description: string }> = {
+  overview: { title: "Overview", description: "Your projects, investor interest and what needs a reply." },
+  projects: { title: "Projects", description: "Projects stay private until you publish them to investors." },
+  readiness: {
+    title: "Readiness",
+    description: "AI feedback on how ready a project is to pitch. Only you can see this.",
+  },
+  investors: {
+    title: "Investors",
+    description: "Investors whose criteria fit your published projects, and why they match.",
+  },
+  intros: {
+    title: "Intro requests",
+    description: "Investors asking to connect. Accepting opens a private deal room with them.",
+  },
+  notifications: { title: "Notifications", description: "Recent activity on your projects." },
+  profile: { title: "Profile", description: "What investors see about you once you accept an intro." },
+  settings: { title: "Settings", description: "Privacy defaults and alerts." },
+};
+
+const TABS = Object.keys(TAB_COPY) as Tab[];
 
 function FounderDashboardContent() {
   const searchParams = useSearchParams();
-  const tabParam = searchParams.get("tab");
+  const tabParam = searchParams.get("tab") as Tab | null;
+  const activeTab: Tab = tabParam && TABS.includes(tabParam) ? tabParam : "overview";
 
-  const [activeTab, setActiveTab] = useState<string>("overview");
   const [projects, setProjects] = useState<Project[]>([]);
+  const [projectsLoaded, setProjectsLoaded] = useState(false);
   const [matches, setMatches] = useState<MatchItem[]>([]);
   const [interests, setInterests] = useState<ProjectInterest[]>([]);
-  const [statusProcessing, setStatusProcessing] = useState<string | null>(null);
-  const [introTabFilter, setIntroTabFilter] = useState<"all" | "pending" | "accepted" | "declined">("all");
-  const [responseNotes, setResponseNotes] = useState<Record<string, string>>({});
   const [notifications, setNotifications] = useState<NotificationItem[]>([]);
-  const [unreadNotifCount, setUnreadNotifCount] = useState<number>(0);
-  const [publishedProjects, setPublishedProjects] = useState<Record<number, boolean>>({
-    1: true,
-    2: false,
-    3: false,
-  });
 
-
-  const [founderProfile, setFounderProfile] = useState({
-    name: "",
-    company: "",
-    bio: "",
-    location: "",
-    linkedin: "",
-    website: "",
-  });
-  const [saveSuccess, setSaveSuccess] = useState(false);
-  const [settingsSuccess, setSettingsSuccess] = useState(false);
-  const [reanalyzing, setReanalyzing] = useState(false);
-  const [exportingReport, setExportingReport] = useState(false);
+  const [statusProcessing, setStatusProcessing] = useState<string | null>(null);
+  const [introFilter, setIntroFilter] = useState<"all" | "pending" | "accepted" | "declined">("all");
+  const [responseNotes, setResponseNotes] = useState<Record<string, string>>({});
   const [investorSearch, setInvestorSearch] = useState("");
+  const [readinessProjectId, setReadinessProjectId] = useState<number | null>(null);
+  const [exporting, setExporting] = useState(false);
 
+  const [profile, setProfile] = useState({ name: "", company: "", bio: "", location: "", linkedin: "", website: "" });
+  const [profileSaved, setProfileSaved] = useState(false);
   const [settings, setSettings] = useState({
     defaultPrivate: true,
     hideGapsFromInvestors: true,
     emailAlerts: true,
     weeklyDigest: false,
   });
-
-  useEffect(() => {
-    if (tabParam) {
-      setActiveTab(tabParam);
-    }
-  }, [tabParam]);
+  const [settingsSaved, setSettingsSaved] = useState(false);
 
   useEffect(() => {
     let mounted = true;
-    api.getProjects(true).then((data) => {
-      if (mounted && data.length > 0) {
-        setProjects(data);
-        const pubMap: Record<number, boolean> = {};
-        data.forEach((p: any) => {
-          pubMap[p.id] = !!p.is_published;
-        });
-        setPublishedProjects(pubMap);
-      }
-    });
-    api.getMatches().then((data) => {
-      if (mounted && data.length > 0) setMatches(data);
-    });
-    api.getInterests().then((data) => {
-      if (mounted && Array.isArray(data)) setInterests(data);
-    });
+    api
+      .getProjects(true)
+      .then((data) => mounted && setProjects(data))
+      .finally(() => mounted && setProjectsLoaded(true));
+    api.getMatches().then((data) => mounted && setMatches(data));
+    api.getInterests().then((data) => mounted && Array.isArray(data) && setInterests(data));
     api.getFounderProfile().then((data) => {
       if (mounted && data) {
-        setFounderProfile((prev) => ({
-          ...prev,
+        setProfile({
           name: data.name || "",
           company: data.company || "",
           bio: data.bio || "",
           location: data.location || "",
           linkedin: data.linkedin || "",
           website: data.website || "",
-        }));
+        });
       }
     });
     api.getFounderSettings().then((data) => {
@@ -135,37 +128,34 @@ function FounderDashboardContent() {
         });
       }
     });
-    api.getNotifications("FOUNDER").then((data) => {
-      if (mounted && Array.isArray(data)) {
-        setNotifications(data);
-        setUnreadNotifCount(data.filter((n) => !n.read).length);
-      }
-    });
+    api.getNotifications("FOUNDER").then((data) => mounted && Array.isArray(data) && setNotifications(data));
     return () => {
       mounted = false;
     };
   }, []);
 
-  const handleMarkAsRead = async (id: string | number) => {
-    await api.markNotificationRead(id);
-    setNotifications((prev) =>
-      prev.map((n) => (n.id === id ? { ...n, read: true } : n))
+  const pending = interests.filter((i) => i.status === "pending");
+  const unreadCount = notifications.filter((n) => !n.read).length;
+  const scored = projects.filter((p) => typeof p.readiness_score === "number");
+  const bestReadiness = scored.length ? Math.max(...scored.map((p) => p.readiness_score as number)) : null;
+  const readinessProject = projects.find((p) => p.id === readinessProjectId) ?? projects[0] ?? null;
+
+  const filteredMatches = useMemo(() => {
+    const q = investorSearch.trim().toLowerCase();
+    if (!q) return matches;
+    return matches.filter((m) =>
+      [m.investor_name, m.investor_firm, m.project_title].some((v) => v?.toLowerCase().includes(q))
     );
-    setUnreadNotifCount((prev) => Math.max(0, prev - 1));
-  };
+  }, [matches, investorSearch]);
 
-  const handleMarkAllAsRead = async () => {
-    await api.markAllNotificationsRead("FOUNDER");
-    setNotifications((prev) => prev.map((n) => ({ ...n, read: true })));
-    setUnreadNotifCount(0);
-  };
+  const visibleIntros = interests.filter((i) => introFilter === "all" || i.status === introFilter);
 
+  /* ---------- actions ---------- */
 
-  const handleUpdateStatus = async (interestId: string | number, status: "accepted" | "declined") => {
+  const updateIntro = async (interestId: string | number, status: "accepted" | "declined") => {
     setStatusProcessing(String(interestId));
     try {
-      const note = responseNotes[String(interestId)];
-      const res = await api.updateInterestStatus(interestId, status, note);
+      const res = await api.updateInterestStatus(interestId, status, responseNotes[String(interestId)]);
       if (res) {
         setInterests((prev) =>
           prev.map((item) => (String(item.id) === String(interestId) ? { ...item, ...res, status } : item))
@@ -176,14 +166,30 @@ function FounderDashboardContent() {
     }
   };
 
-  const handleProfileSave = async (e: React.FormEvent) => {
-    e.preventDefault();
-    await api.updateFounderProfile(founderProfile);
-    setSaveSuccess(true);
-    setTimeout(() => setSaveSuccess(false), 3000);
+  const togglePublish = async (project: Project) => {
+    const next = !project.is_published;
+    setProjects((prev) => prev.map((p) => (p.id === project.id ? { ...p, is_published: next } : p)));
+    await api.togglePublishProject(project.id, next);
   };
 
-  const handleSettingsSave = async (e: React.FormEvent) => {
+  const markRead = async (id: string | number) => {
+    await api.markNotificationRead(id);
+    setNotifications((prev) => prev.map((n) => (n.id === id ? { ...n, read: true } : n)));
+  };
+
+  const markAllRead = async () => {
+    await api.markAllNotificationsRead("FOUNDER");
+    setNotifications((prev) => prev.map((n) => ({ ...n, read: true })));
+  };
+
+  const saveProfile = async (e: React.FormEvent) => {
+    e.preventDefault();
+    await api.updateFounderProfile(profile);
+    setProfileSaved(true);
+    setTimeout(() => setProfileSaved(false), 3000);
+  };
+
+  const saveSettings = async (e: React.FormEvent) => {
     e.preventDefault();
     await api.updateFounderSettings({
       default_private: settings.defaultPrivate,
@@ -191,1121 +197,551 @@ function FounderDashboardContent() {
       email_alerts: settings.emailAlerts,
       weekly_digest: settings.weeklyDigest,
     });
-    setSettingsSuccess(true);
-    setTimeout(() => setSettingsSuccess(false), 3000);
+    setSettingsSaved(true);
+    setTimeout(() => setSettingsSaved(false), 3000);
   };
 
-  const togglePublish = async (projectId: number) => {
-    const next = !publishedProjects[projectId];
-    setPublishedProjects((prev) => ({
-      ...prev,
-      [projectId]: next,
-    }));
-    await api.togglePublishProject(projectId, next);
-  };
-
-  const handleReanalyze = async () => {
-    setReanalyzing(true);
+  const exportReport = async () => {
+    if (!readinessProject) return;
+    setExporting(true);
     try {
-      if (projects.length > 0) {
-        const activeProj = projects[0];
-        const res = await api.reEvaluateProject(activeProj.id);
-        if (res && res.readiness_score) {
-          setProjects((prev) =>
-            prev.map((p) =>
-              p.id === activeProj.id
-                ? {
-                    ...p,
-                    readiness_score: res.readiness_score,
-                    ai_readiness_breakdown: res.ai_readiness_breakdown,
-                    ai_feedback_summary: res.ai_feedback_summary,
-                  }
-                : p
-            )
-          );
-        }
-      }
+      await api.downloadProjectReadinessPDF(readinessProject.id, readinessProject.title);
     } finally {
-      setTimeout(() => {
-        setReanalyzing(false);
-      }, 800);
+      setExporting(false);
     }
   };
 
-  const handleExportReadinessReport = async () => {
-    const activeProject = projects[0];
-    if (!activeProject) return; // nothing to export until the founder has a project
-    setExportingReport(true);
-    await api.downloadProjectReadinessPDF(activeProject.id, activeProject.title);
-    setExportingReport(false);
-  };
+  /* ---------- shared pieces ---------- */
 
-  // Readiness of the founder's strongest project (null until they have one).
-  const scoredProjects = projects.filter((p) => typeof p.readiness_score === "number");
-  const bestReadiness = scoredProjects.length
-    ? Math.max(...scoredProjects.map((p) => p.readiness_score as number))
-    : null;
-  const readinessLabel =
-    bestReadiness == null ? "No projects yet"
-    : bestReadiness >= 85 ? "Ready for Review"
-    : bestReadiness >= 70 ? "Nearly Ready"
-    : "Needs Work";
-  const newThisQuarter = projects.filter(
-    (p) => p.created_at && Date.now() - new Date(p.created_at).getTime() < 90 * 24 * 3600 * 1000
-  ).length;
-
-  const filteredMatches = matches.filter(
-    (m) =>
-      m.investor_name.toLowerCase().includes(investorSearch.toLowerCase()) ||
-      (m.investor_firm && m.investor_firm.toLowerCase().includes(investorSearch.toLowerCase())) ||
-      m.project_title.toLowerCase().includes(investorSearch.toLowerCase())
+  const noProjects = (
+    <EmptyState
+      icon={Rocket}
+      title="No projects yet"
+      description="Add your startup to get AI feedback on your pitch and get matched with investors."
+      action={
+        <ButtonLink href="/founder/projects/new">
+          <Plus className="w-4 h-4" />
+          New project
+        </ButtonLink>
+      }
+    />
   );
 
-  return (
-    <PortalLayout
-      role="FOUNDER"
-      activeItem={activeTab}
-      onSelectItem={(tab) => setActiveTab(tab)}
-      title={
-        activeTab === "overview"
-          ? "Dashboard"
-          : activeTab === "projects"
-          ? "My Projects"
-          : activeTab === "intros"
-          ? "Intro Requests & Deal Rooms"
-          : activeTab === "readiness"
-          ? "AI Readiness Report"
-          : activeTab === "investors"
-          ? "Investor Discovery"
-          : activeTab === "notifications"
-          ? "Notifications"
-          : activeTab === "profile"
-          ? "Profile"
-          : "Settings"
-      }
-    >
-      {/* Top Header Bar inside Content */}
-      <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4 pb-6 mb-8 border-b border-[#E2E8F0]">
-        <div>
-          <div className="flex items-center gap-2 mb-1">
-            <Badge variant="primary">Founder Workspace</Badge>
-            <span className="text-xs text-[#64748B] font-mono flex items-center gap-1">
-              <Lock className="w-3 h-3 text-[#1B3B6F]" /> Private Mode Active
-            </span>
-          </div>
-          <h1 className="text-2xl sm:text-3xl font-bold text-[#0F172A] font-display">
-            {activeTab === "overview" && "Founder Dashboard"}
-            {activeTab === "projects" && "My Startup Projects"}
-            {activeTab === "intros" && "Introduction Requests & Deal Rooms"}
-            {activeTab === "readiness" && "AI Pitch Readiness Report"}
-            {activeTab === "investors" && "Semantic Investor Discovery"}
-            {activeTab === "notifications" && "Founder Notifications"}
-            {activeTab === "profile" && "Founder & Company Profile"}
-            {activeTab === "settings" && "Workspace & Privacy Settings"}
-          </h1>
-          <p className="text-xs sm:text-sm text-[#64748B] mt-0.5">
-            {activeTab === "overview" && "Track pitch deck readiness, manage confidential profiles, and review explainable matches."}
-            {activeTab === "projects" && "Manage your venture profiles. Control when materials become visible to syndicate investors."}
-            {activeTab === "intros" && "Review syndicate introduction requests, approve deal room access, and communicate directly with partners."}
-            {activeTab === "readiness" && "Confidential diagnostic evaluation of market sizing, defensibility, and presentation strength."}
-            {activeTab === "investors" && "Discover investors whose mandates and past deals align with your sector and check size."}
-            {activeTab === "notifications" && "Recent deal room activity, investor interest requests, and analysis updates."}
-            {activeTab === "profile" && "Public founder identity and venture metadata presented to matched investors."}
-            {activeTab === "settings" && "Control project privacy defaults, confidential report access, and alerts."}
-          </p>
-        </div>
-
-        <div className="flex items-center gap-2.5">
-          <Link
-            href="/founder/projects/new"
-            className="px-4 py-2 text-xs sm:text-sm font-medium text-white bg-[#1B3B6F] hover:bg-[#142C54] rounded-lg transition-all shadow-sm flex items-center gap-1.5"
-          >
-            <PlusCircle className="w-4 h-4" />
-            Submit New Project
-          </Link>
-        </div>
-      </div>
-
-      {/* 1. Overview Tab */}
-      {activeTab === "overview" && (
-        <div className="space-y-8">
-          {/* Top Stat Summary Cards */}
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-            <StatCard
-              label="Active Projects"
-              value={projects.length}
-              change={newThisQuarter ? `+${newThisQuarter} this quarter` : undefined}
-              icon={Rocket}
-              subtext="Confidential workspace"
-            />
-            <StatCard
-              label="AI Readiness Score"
-              value={bestReadiness != null ? bestReadiness.toFixed(1) : "—"}
-              change={readinessLabel}
-              icon={Sparkles}
-              subtext="Gap Analysis Engine v2"
-            />
-            <StatCard
-              label="Matched Theses"
-              value={matches.length}
-              change={`${matches.filter(m => m.match_score >= 85).length} High Conviction`}
-              icon={Users}
-              subtext="Exceeds 85% threshold"
-            />
-            <StatCard
-              label="Intro Requests"
-              value={interests.filter((i) => i.status === "pending").length}
-              change={
-                interests.filter((i) => i.status === "pending").length > 0
-                  ? `${interests.filter((i) => i.status === "pending").length} Action Required`
-                  : "All Processed"
-              }
-              icon={TrendingUp}
-              subtext="Syndicate partners"
-            />
-          </div>
-
-          {/* Quick Inbound Intro Requests Review Banner */}
-          {interests.filter((i) => i.status === "pending").length > 0 && (
-            <div className="rounded-xl border border-[#BFD7EE] bg-[#EBF2FA] p-5 shadow-subtle space-y-3">
-              <div className="flex items-center justify-between">
-                <div className="flex items-center gap-2.5">
-                  <div className="w-8 h-8 rounded-lg bg-[#1B3B6F] flex items-center justify-center text-white shrink-0 shadow-sm">
-                    <Briefcase className="w-4 h-4" />
-                  </div>
-                  <div>
-                    <h3 className="text-sm font-bold text-[#0F172A] font-display flex items-center gap-2">
-                      Inbound Introduction Requests
-                      <span className="px-2 py-0.5 rounded-full text-[10px] font-semibold bg-[#1B3B6F] text-white">
-                        {interests.filter((i) => i.status === "pending").length} Pending Review
-                      </span>
-                    </h3>
-                    <p className="text-xs text-[#64748B]">Accredited partners requesting confidential data room review.</p>
-                  </div>
-                </div>
-                <button
-                  onClick={() => setActiveTab("intros")}
-                  className="text-xs font-semibold text-[#1B3B6F] hover:text-[#142C54]"
-                >
-                  Manage all ({interests.length}) →
-                </button>
+  const introRow = (item: ProjectInterest, compact = false) => {
+    const busy = statusProcessing === String(item.id);
+    return (
+      <Card key={item.id} className={compact ? "" : "space-y-4"}>
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+          <div className="flex items-start gap-3 min-w-0">
+            <Avatar name={item.investor_name} />
+            <div className="min-w-0">
+              <div className="text-sm font-medium text-ink">
+                {item.investor_name || "Investor"}
+                {item.investor_firm && <span className="font-normal text-muted"> · {item.investor_firm}</span>}
               </div>
-
-              <div className="space-y-3 pt-1">
-                {interests
-                  .filter((i) => i.status === "pending")
-                  .slice(0, 2)
-                  .map((item) => (
-                    <div
-                      key={item.id}
-                      className="p-4 rounded-xl bg-white border border-[#E2E8F0] flex flex-col md:flex-row md:items-center justify-between gap-4 shadow-subtle"
-                    >
-                      <div className="space-y-1.5">
-                        <div className="flex items-center gap-2 flex-wrap">
-                          <span className="text-xs font-bold text-[#0F172A] font-display">{item.investor_name}</span>
-                          {item.investor_firm && (
-                            <span className="text-xs text-[#64748B] flex items-center gap-1">
-                              <Building2 className="w-3 h-3 text-[#94A3B8]" />
-                              {item.investor_firm}
-                            </span>
-                          )}
-                          <Badge variant="primary">{item.project_title || "Startup Project"}</Badge>
-                        </div>
-                        <p className="text-xs text-[#475569] italic bg-[#F8FAFC] p-2.5 rounded-lg border border-[#F1F5F9]">
-                          &quot;{item.message}&quot;
-                        </p>
-                      </div>
-
-                      <div className="flex items-center gap-2 shrink-0">
-                        <button
-                          disabled={statusProcessing === String(item.id)}
-                          onClick={() => handleUpdateStatus(item.id, "accepted")}
-                          className="px-3.5 py-1.5 text-xs font-medium text-white bg-[#2E7D52] hover:bg-[#256843] rounded-lg transition-colors flex items-center gap-1.5 shadow-sm"
-                        >
-                          <Unlock className="w-3.5 h-3.5" />
-                          Accept & Unlock Deal Room
-                        </button>
-                        <button
-                          disabled={statusProcessing === String(item.id)}
-                          onClick={() => handleUpdateStatus(item.id, "declined")}
-                          className="px-3 py-1.5 text-xs font-medium text-[#64748B] hover:text-[#0F172A] bg-white border border-[#E2E8F0] hover:bg-[#F8FAFC] rounded-lg transition-colors flex items-center gap-1"
-                        >
-                          <X className="w-3.5 h-3.5" />
-                          Decline
-                        </button>
-                      </div>
-                    </div>
-                  ))}
+              <div className="text-sm text-muted">
+                Wants to connect about <span className="text-ink-2">{item.project_title || "your project"}</span>
+                {item.created_at && <> · {timeAgo(item.created_at)}</>}
               </div>
             </div>
+          </div>
+          {compact && item.status === "pending" ? (
+            <div className="flex gap-2 shrink-0">
+              <Button disabled={busy} onClick={() => updateIntro(item.id, "accepted")}>
+                <Check className="w-4 h-4" />
+                {busy ? "Saving…" : "Accept"}
+              </Button>
+              <Button variant="secondary" disabled={busy} onClick={() => updateIntro(item.id, "declined")}>
+                Decline
+              </Button>
+            </div>
+          ) : (
+            <IntroStatus status={item.status} />
+          )}
+        </div>
+
+        {item.message && !compact && (
+          <p className="rounded-lg bg-canvas px-3.5 py-2.5 text-sm text-ink-2">{item.message}</p>
+        )}
+
+        {item.status === "pending" && !compact && (
+          <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
+            <input
+              type="text"
+              placeholder="Add a note for the investor (optional)"
+              value={responseNotes[String(item.id)] || ""}
+              onChange={(e) => setResponseNotes({ ...responseNotes, [String(item.id)]: e.target.value })}
+              className={cx(inputClass, "sm:flex-1")}
+            />
+            <div className="flex gap-2">
+              <Button disabled={busy} onClick={() => updateIntro(item.id, "accepted")}>
+                <Check className="w-4 h-4" />
+                {busy ? "Saving…" : "Accept"}
+              </Button>
+              <Button variant="secondary" disabled={busy} onClick={() => updateIntro(item.id, "declined")}>
+                Decline
+              </Button>
+            </div>
+          </div>
+        )}
+
+        {item.status === "accepted" && !compact && (
+          <div className="flex flex-wrap items-center gap-2">
+            <ButtonLink href={item.deal_room?.room_id ? `/dealroom/${item.deal_room.room_id}` : "/dealroom?role=FOUNDER"}>
+              <MessagesSquare className="w-4 h-4" />
+              Open deal room
+            </ButtonLink>
+            {item.investor_email && (
+              <a href={`mailto:${item.investor_email}`} className={buttonClass("secondary")}>
+                <Mail className="w-4 h-4" />
+                {item.investor_email}
+              </a>
+            )}
+            {item.response_note && <span className="text-sm text-muted">Your note: “{item.response_note}”</span>}
+          </div>
+        )}
+
+        {item.status === "declined" && !compact && (
+          <div className="flex items-center justify-between text-sm text-muted">
+            You declined this request.
+            <Button variant="ghost" disabled={busy} onClick={() => updateIntro(item.id, "accepted")}>
+              Accept instead
+            </Button>
+          </div>
+        )}
+      </Card>
+    );
+  };
+
+  const matchRow = (m: MatchItem) => (
+    <Card key={m.id}>
+      <div className="flex items-start justify-between gap-4">
+        <div className="flex items-start gap-3 min-w-0">
+          <Avatar name={m.investor_name} />
+          <div className="min-w-0">
+            <div className="text-sm font-medium text-ink truncate">{m.investor_name}</div>
+            <div className="text-sm text-muted truncate">
+              {m.investor_firm || "Independent investor"} · for {m.project_title}
+            </div>
+          </div>
+        </div>
+        <Tag tone={m.match_score >= 85 ? "positive" : "accent"}>{Math.round(m.match_score)}% match</Tag>
+      </div>
+      {m.reasons?.length > 0 && (
+        <ul className="mt-4 space-y-1.5">
+          {m.reasons.slice(0, 4).map((r) => (
+            <li key={r.category} className="flex gap-2 text-sm">
+              <CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0 text-positive" />
+              <span className="text-ink-2">
+                <span className="font-medium">{r.category}:</span> {r.explanation}
+              </span>
+            </li>
+          ))}
+        </ul>
+      )}
+    </Card>
+  );
+
+  const copy = TAB_COPY[activeTab];
+
+  return (
+    <PortalLayout role="FOUNDER" activeItem={activeTab} title={copy.title}>
+      <PageHeader
+        title={activeTab === "overview" && profile.name ? `Welcome back, ${profile.name.split(" ")[0]}` : copy.title}
+        description={copy.description}
+        actions={
+          activeTab === "readiness" && readinessProject ? (
+            <Button variant="secondary" onClick={exportReport} disabled={exporting}>
+              <Download className="w-4 h-4" />
+              {exporting ? "Preparing PDF…" : "Export PDF"}
+            </Button>
+          ) : activeTab === "notifications" && unreadCount > 0 ? (
+            <Button variant="secondary" onClick={markAllRead}>
+              <Check className="w-4 h-4" />
+              Mark all as read
+            </Button>
+          ) : null
+        }
+      />
+
+      {/* ---------------- Overview ---------------- */}
+      {activeTab === "overview" && (
+        <div className="space-y-10">
+          <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
+            <Stat label="Projects" value={projects.length} hint={`${projects.filter((p) => p.is_published).length} published`} icon={Rocket} />
+            <Stat
+              label="Best readiness"
+              value={bestReadiness != null ? Math.round(bestReadiness) : "—"}
+              hint={bestReadiness == null ? "Run an analysis" : readinessWord(bestReadiness)}
+              icon={Sparkles}
+            />
+            <Stat label="Investor matches" value={matches.length} hint={`${matches.filter((m) => m.match_score >= 85).length} strong`} icon={Users} />
+            <Stat label="Pending intros" value={pending.length} hint={pending.length ? "Waiting for your reply" : "All answered"} icon={Briefcase} />
+          </div>
+
+          {pending.length > 0 && (
+            <Section
+              title="Needs your reply"
+              action={<TabLink tab="intros">All requests</TabLink>}
+            >
+              <div className="space-y-3">{pending.slice(0, 3).map((item) => introRow(item, true))}</div>
+            </Section>
           )}
 
-          {/* Privacy Model Notice Panel */}
-          <div className="rounded-xl border border-[#E2E8F0] bg-[#F1F5F9] p-4 sm:p-5 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
-            <div className="flex items-start gap-3">
-              <div className="w-9 h-9 rounded-lg bg-white border border-[#E2E8F0] flex items-center justify-center text-[#1B3B6F] shrink-0 shadow-subtle">
-                <Lock className="w-4 h-4" />
-              </div>
-              <div>
-                <h4 className="text-sm font-bold text-[#0F172A] font-display">Founder Confidentiality Guaranteed</h4>
-                <p className="text-xs text-[#64748B] mt-0.5 max-w-2xl leading-relaxed">
-                  Projects are <strong>private by default</strong>. Your AI readiness score, weakness diagnostics,
-                  and improvement notes are visible only to you. Investors only see information after you explicitly publish.
-                </p>
-              </div>
-            </div>
-            <button
-              onClick={() => setActiveTab("settings")}
-              className="px-3.5 py-1.5 text-xs font-medium text-[#0F172A] bg-white border border-[#E2E8F0] hover:bg-[#FAFBFD] rounded-lg transition-colors whitespace-nowrap shadow-subtle"
-            >
-              Privacy Settings
-            </button>
-          </div>
-
-          {/* Projects Section */}
-          <div className="space-y-4">
-            <div className="flex items-center justify-between">
-              <div>
-                <h2 className="text-lg font-bold text-[#0F172A] font-display">Your Startup Projects</h2>
-                <p className="text-xs text-[#64748B]">Profiles currently managed in your founder workspace.</p>
-              </div>
-              <button
-                onClick={() => setActiveTab("projects")}
-                className="text-xs font-semibold text-[#1B3B6F] hover:text-[#142C54] flex items-center gap-1"
-              >
-                View all ({projects.length}) →
-              </button>
-            </div>
-
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-              {projects.slice(0, 3).map((p) => (
-                <ProjectCard key={p.id} project={p} />
-              ))}
-            </div>
-          </div>
-
-          {/* Recommended Investors Section */}
-          <div className="space-y-4 pt-4 border-t border-[#E2E8F0]">
-            <div className="flex items-center justify-between">
-              <div>
-                <h2 className="text-lg font-bold text-[#0F172A] font-display">Top Recommended Investors</h2>
-                <p className="text-xs text-[#64748B]">Matches synthesized from sector mandates and past round targets.</p>
-              </div>
-              <button
-                onClick={() => setActiveTab("investors")}
-                className="text-xs font-semibold text-[#1B3B6F] hover:text-[#142C54] flex items-center gap-1"
-              >
-                View all matches ({matches.length}) →
-              </button>
-            </div>
-
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-              {matches.slice(0, 3).map((m) => (
-                <InvestorCard
-                  key={m.id}
-                  match={m}
-                  onExpressInterest={(item) =>
-                    alert(`Introduction request sent to ${item.investor_name} at ${item.investor_firm}!`)
-                  }
-                />
-              ))}
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* 2. My Projects Tab */}
-      {activeTab === "projects" && (
-        <div className="space-y-6">
-          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-            <div>
-              <h2 className="text-lg font-bold text-[#0F172A] font-display">Project Inventory</h2>
-              <p className="text-xs text-[#64748B]">Toggle visibility to control investor discovery access.</p>
-            </div>
-
-            <Link
-              href="/founder/projects/new"
-              className="px-3.5 py-1.5 text-xs font-medium text-white bg-[#1B3B6F] hover:bg-[#142C54] rounded-lg flex items-center gap-1.5 w-fit shadow-sm"
-            >
-              <PlusCircle className="w-3.5 h-3.5" />
-              Add Another Project
-            </Link>
-          </div>
-
-          {/* Compact Management Table */}
-          <div className="rounded-xl border border-[#E2E8F0] bg-white overflow-hidden shadow-subtle">
-            <div className="overflow-x-auto">
-              <table className="w-full text-left text-xs">
-                <thead className="bg-[#F1F5F9] text-[#64748B] uppercase font-semibold border-b border-[#E2E8F0]">
-                  <tr>
-                    <th className="px-4 py-3">Startup Name</th>
-                    <th className="px-4 py-3">Industry / Stage</th>
-                    <th className="px-4 py-3">Target Raise</th>
-                    <th className="px-4 py-3">Readiness Score</th>
-                    <th className="px-4 py-3">Investor Visibility</th>
-                    <th className="px-4 py-3 text-right">Actions</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-[#E2E8F0] text-[#0F172A]">
-                  {projects.map((proj) => {
-                    const isPublished = publishedProjects[proj.id] ?? false;
-                    return (
-                      <tr key={proj.id} className="hover:bg-[#FAFBFD] transition-colors">
-                        <td className="px-4 py-3.5">
-                          <div className="font-bold font-display text-sm text-[#0F172A]">{proj.title}</div>
-                          <div className="text-[11px] text-[#64748B] line-clamp-1">{proj.tagline || proj.description}</div>
-                        </td>
-                        <td className="px-4 py-3.5">
-                          <div className="flex gap-1.5">
-                            <Badge variant="secondary">{proj.industry}</Badge>
-                            <Badge variant="outline">{proj.stage}</Badge>
-                          </div>
-                        </td>
-                        <td className="px-4 py-3.5 font-semibold text-[#0F172A]">
-                          ${(proj.funding_required / 1000).toFixed(0)}k
-                        </td>
-                        <td className="px-4 py-3.5">
-                          <div className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-[#EBF2FA] text-[#1B3B6F] font-semibold text-xs border border-[#BFD7EE]">
-                            <Sparkles className="w-3 h-3" />
-                            {proj.readiness_score != null ? proj.readiness_score.toFixed(1) : "—"}
-                          </div>
-                        </td>
-                        <td className="px-4 py-3.5">
-                          <button
-                            onClick={() => togglePublish(proj.id)}
-                            className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium transition-colors ${
-                              isPublished
-                                ? "bg-[#E8F5E9] border border-[#C8E6C9] text-[#2E7D52]"
-                                : "bg-[#F1F5F9] border border-[#E2E8F0] text-[#64748B]"
-                            }`}
-                          >
-                            {isPublished ? (
-                              <>
-                                <Eye className="w-3 h-3 text-[#2E7D52]" />
-                                Published
-                              </>
-                            ) : (
-                              <>
-                                <Lock className="w-3 h-3 text-[#1B3B6F]" />
-                                Private (Draft)
-                              </>
-                            )}
-                          </button>
-                        </td>
-                        <td className="px-4 py-3.5 text-right space-x-2">
-                          <button
-                            onClick={() => setActiveTab("readiness")}
-                            className="px-2.5 py-1 rounded text-xs font-medium bg-[#F1F5F9] hover:bg-[#E2E8F0] text-[#0F172A] transition-colors"
-                          >
-                            Report
-                          </button>
-                          <Link
-                            href={`/founder/projects/${proj.id}`}
-                            className="px-2.5 py-1 rounded text-xs font-medium bg-[#0F1E36] hover:bg-[#0B1628] text-white transition-colors"
-                          >
-                            Overview
-                          </Link>
-                        </td>
-                      </tr>
-                    );
-                  })}
-                </tbody>
-              </table>
-            </div>
-          </div>
-
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 pt-4">
-            {projects.map((project) => (
-              <ProjectCard key={project.id} project={project} />
-            ))}
-          </div>
-        </div>
-      )}
-
-      {/* 3. AI Readiness Report Tab — Elegant Deep Navy & Pure White Visual Hierarchy */}
-      {activeTab === "readiness" && (
-        <div className="space-y-6">
-          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-            <div>
-              <div className="flex items-center gap-2">
-                <Badge variant="primary">Confidential Founder Assessment</Badge>
-                <span className="text-xs text-[#64748B] font-mono">Model: Readiness Engine v2.4</span>
-              </div>
-              <h2 className="text-xl sm:text-2xl font-bold text-[#0F172A] font-display mt-1">
-                NeuroPulse AI — Comprehensive Diagnostic Report
-              </h2>
-              <p className="text-xs text-[#64748B]">
-                Automated multi-dimensional evaluation of pitch completeness, clinical traction, and defensibility.
-              </p>
-            </div>
-
-            <div className="flex items-center gap-2">
-              <button
-                onClick={handleReanalyze}
-                disabled={reanalyzing}
-                className="px-3 py-1.5 text-xs font-medium bg-white hover:bg-[#FAFBFD] border border-[#E2E8F0] text-[#0F172A] rounded-lg transition-colors flex items-center gap-1.5 shadow-subtle"
-              >
-                <RefreshCw className={`w-3.5 h-3.5 ${reanalyzing ? "animate-spin text-[#1B3B6F]" : ""}`} />
-                {reanalyzing ? "Recalculating..." : "Re-evaluate"}
-              </button>
-              <button
-                onClick={handleExportReadinessReport}
-                disabled={exportingReport}
-                className="px-3.5 py-1.5 text-xs font-medium bg-[#0F1E36] hover:bg-[#0B1628] text-white rounded-lg transition-colors flex items-center gap-1.5 shadow-subtle disabled:opacity-70"
-                title="Download verified investor-ready AI readiness diagnostic PDF"
-              >
-                <Download className={`w-3.5 h-3.5 ${exportingReport ? "animate-bounce" : ""}`} />
-                {exportingReport ? "Generating PDF..." : "Export Report"}
-              </button>
-            </div>
-          </div>
-
-          {/* Privacy Callout */}
-          <div className="p-3.5 rounded-xl bg-[#EBF2FA] border border-[#BFD7EE] text-xs text-[#1B3B6F] flex items-center gap-2.5">
-            <Lock className="w-4 h-4 shrink-0 text-[#1B3B6F]" />
-            <span>
-              <strong>Private & Confidential:</strong> This readiness score and improvement recommendations are strictly
-              private to you. Investors never see weaknesses, missing regulatory milestones, or internal scores.
-            </span>
-          </div>
-
-          {/* Main Assessment Grid */}
-          <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-            {/* Deep Navy Circular Readiness Score Dial */}
-            <div className="rounded-xl border border-[#E2E8F0] bg-white p-6 flex flex-col justify-between shadow-subtle">
-              <div>
-                <span className="text-[10px] font-semibold uppercase tracking-wider text-[#64748B] block">
-                  Composite Readiness Index
-                </span>
-                <h3 className="text-xl font-bold text-[#0F172A] font-display mt-1">Overall Score</h3>
-                <p className="text-xs text-[#64748B] mt-0.5">
-                  Weighted across 4 core venture pillars.
-                </p>
-
-                <div className="mt-8 text-center">
-                  <div className="inline-flex items-center justify-center w-40 h-40 rounded-full border-8 border-[#1B3B6F] bg-[#EBF2FA] relative shadow-inner">
-                    <div className="text-center">
-                      <span className="text-5xl font-extrabold text-[#1B3B6F] font-display">{bestReadiness != null ? bestReadiness.toFixed(1) : "—"}</span>
-                      <span className="block text-[10px] text-[#64748B] uppercase font-mono mt-0.5 tracking-wider">
-                        out of 100
+          <Section title="Your projects" action={projects.length > 0 && <TabLink tab="projects">Manage</TabLink>}>
+            {!projectsLoaded ? (
+              <LoadingRows />
+            ) : projects.length === 0 ? (
+              noProjects
+            ) : (
+              <Card padded={false} className="divide-y divide-line">
+                {projects.slice(0, 5).map((p) => (
+                  <Link
+                    key={p.id}
+                    href={`/founder/projects/${p.id}`}
+                    className="flex items-center justify-between gap-4 px-5 py-4 hover:bg-canvas"
+                  >
+                    <div className="min-w-0">
+                      <div className="text-sm font-medium text-ink truncate">{p.title}</div>
+                      <div className="text-sm text-muted truncate">
+                        {p.stage} · {p.industry} · raising {formatMoney(p.funding_required)}
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-4 shrink-0">
+                      <span className="hidden text-sm text-muted sm:inline tabular-nums">
+                        {p.readiness_score != null ? `Readiness ${Math.round(p.readiness_score)}` : "Not analysed"}
                       </span>
+                      <VisibilityTag published={!!p.is_published} />
                     </div>
-                  </div>
-                </div>
-              </div>
+                  </Link>
+                ))}
+              </Card>
+            )}
+          </Section>
 
-              <div className="mt-8 pt-4 border-t border-[#E2E8F0] text-xs text-[#2E7D52] flex items-center gap-1.5 justify-center bg-[#E8F5E9] py-2 rounded-lg">
-                <CheckCircle2 className="w-4 h-4 text-[#2E7D52]" />
-                <span className="font-medium">Ready for Investor Presentation</span>
-              </div>
-            </div>
+          {matches.length > 0 && (
+            <Section title="Top investor matches" action={<TabLink tab="investors">See all</TabLink>}>
+              <div className="grid gap-4 lg:grid-cols-2">{matches.slice(0, 4).map(matchRow)}</div>
+            </Section>
+          )}
+        </div>
+      )}
 
-            {/* Assessment Dimensions Breakdown */}
-            <div className="lg:col-span-2 rounded-xl border border-[#E2E8F0] bg-white p-6 space-y-6 shadow-subtle">
-              <div className="flex items-center justify-between">
-                <h3 className="text-base font-bold text-[#0F172A] font-display">Assessment Dimensions</h3>
-                <span className="text-xs text-[#64748B]">Benchmark: Top 5% Seed Cohort</span>
-              </div>
+      {/* ---------------- Projects ---------------- */}
+      {activeTab === "projects" &&
+        (!projectsLoaded ? (
+          <LoadingRows />
+        ) : projects.length === 0 ? (
+          noProjects
+        ) : (
+          <Card padded={false} className="overflow-x-auto">
+            <table className="w-full text-left text-sm">
+              <thead className="border-b border-line text-muted">
+                <tr>
+                  <th className="px-5 py-3 font-medium">Project</th>
+                  <th className="px-5 py-3 font-medium">Raising</th>
+                  <th className="px-5 py-3 font-medium">Readiness</th>
+                  <th className="px-5 py-3 font-medium">Visibility</th>
+                  <th className="px-5 py-3" />
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-line">
+                {projects.map((p) => (
+                  <tr key={p.id} className="hover:bg-canvas">
+                    <td className="px-5 py-4">
+                      <div className="font-medium text-ink">{p.title}</div>
+                      <div className="text-muted">
+                        {p.stage} · {p.industry}
+                      </div>
+                    </td>
+                    <td className="px-5 py-4 text-ink-2 tabular-nums">{formatMoney(p.funding_required)}</td>
+                    <td className="px-5 py-4 w-40">
+                      {p.readiness_score != null ? (
+                        <ScoreBar value={p.readiness_score} />
+                      ) : (
+                        <span className="text-muted">Not analysed</span>
+                      )}
+                    </td>
+                    <td className="px-5 py-4">
+                      <button
+                        type="button"
+                        onClick={() => togglePublish(p)}
+                        title={p.is_published ? "Make private" : "Publish to investors"}
+                        className="rounded-md hover:opacity-80"
+                      >
+                        <VisibilityTag published={!!p.is_published} />
+                      </button>
+                    </td>
+                    <td className="px-5 py-4 text-right whitespace-nowrap">
+                      <Link href={`/founder/projects/${p.id}/edit`} className={buttonClass("ghost")}>
+                        Edit
+                      </Link>
+                      <Link href={`/founder/projects/${p.id}`} className={buttonClass("secondary", "ml-1")}>
+                        Open
+                      </Link>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </Card>
+        ))}
 
-              <div className="space-y-4">
-                {[
-                  { name: "Problem / Solution Fit", score: 94, desc: "Clarity of clinical pain point and on-device machine learning defensibility" },
-                  { name: "Traction & Feasibility", score: 95, desc: "Completed 2 hospital telemetry pilot trials with 99.2% arrhythmia alert accuracy" },
-                  { name: "Business Model Clarity", score: 92, desc: "Hybrid sensor lease + recurring SaaS telemetry interpretation subscriptions" },
-                  { name: "Market Sizing & ICP (TAM)", score: 88, desc: "$4.2B target market quantified across US telemetry cardiology units" },
-                ].map((item, idx) => (
-                  <div key={idx} className="space-y-1.5">
-                    <div className="flex justify-between text-xs">
-                      <span className="font-semibold text-[#0F172A]">{item.name}</span>
-                      <span className="font-mono text-[#1B3B6F] font-bold">{item.score}%</span>
-                    </div>
-                    <div className="w-full bg-[#F1F5F9] h-2 rounded-full overflow-hidden">
-                      <div
-                        className="bg-[#1B3B6F] h-full rounded-full transition-all duration-500"
-                        style={{ width: `${item.score}%` }}
-                      />
-                    </div>
-                    <p className="text-[11px] text-[#64748B]">{item.desc}</p>
-                  </div>
+      {/* ---------------- Readiness ---------------- */}
+      {activeTab === "readiness" &&
+        (!projectsLoaded ? (
+          <LoadingRows />
+        ) : !readinessProject ? (
+          noProjects
+        ) : (
+          <div className="space-y-6">
+            {projects.length > 1 && (
+              <div className="flex flex-wrap gap-2">
+                {projects.map((p) => (
+                  <button
+                    key={p.id}
+                    type="button"
+                    onClick={() => setReadinessProjectId(p.id)}
+                    className={cx(
+                      "rounded-lg border px-3 py-1.5 text-sm",
+                      p.id === readinessProject.id
+                        ? "border-accent bg-accent-soft text-accent font-medium"
+                        : "border-line text-muted hover:text-ink hover:bg-canvas"
+                    )}
+                  >
+                    {p.title}
+                  </button>
                 ))}
               </div>
-
-              {/* Strengths & Improvement Highlights */}
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 pt-4 border-t border-[#E2E8F0]">
-                <div className="p-3.5 rounded-lg bg-[#E8F5E9] border border-[#C8E6C9] space-y-2">
-                  <div className="text-xs font-bold text-[#2E7D52] flex items-center gap-1.5">
-                    <CheckCircle2 className="w-3.5 h-3.5 text-[#2E7D52]" />
-                    Key Pitch Strengths
-                  </div>
-                  <ul className="text-[11px] text-[#1E5236] space-y-1 list-disc list-inside">
-                    <li>Proprietary on-chip quantized neural network IP</li>
-                    <li>Clinical verification by Board-certified cardiologists</li>
-                    <li>Clear 10x speed improvement over hospital lab loops</li>
-                  </ul>
-                </div>
-
-                <div className="p-3.5 rounded-lg bg-[#EBF2FA] border border-[#BFD7EE] space-y-2">
-                  <div className="text-xs font-bold text-[#1B3B6F] flex items-center gap-1.5">
-                    <Sparkles className="w-3.5 h-3.5 text-[#1B3B6F]" />
-                    AI Action Recommendations
-                  </div>
-                  <ul className="text-[11px] text-[#18345D] space-y-1 list-disc list-inside">
-                    <li>Specify FDA 510(k) pathway milestones in regulatory deck</li>
-                    <li>Clarify sensor hardware bill of materials vs software margins</li>
-                  </ul>
-                </div>
-              </div>
+            )}
+            <div className="flex items-center gap-2 text-sm text-muted">
+              <Lock className="w-4 h-4" />
+              Investors never see readiness scores or feedback.
             </div>
+            <ProjectIntelligence
+              key={readinessProject.id}
+              projectId={readinessProject.id}
+              onScoreChange={(score) =>
+                setProjects((prev) => prev.map((p) => (p.id === readinessProject.id ? { ...p, readiness_score: score } : p)))
+              }
+            />
           </div>
-        </div>
-      )}
+        ))}
 
-      {/* 4. Investor Discovery Tab */}
+      {/* ---------------- Investors ---------------- */}
       {activeTab === "investors" && (
-        <div className="space-y-6">
-          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-            <div>
-              <h2 className="text-lg font-bold text-[#0F172A] font-display">Investor Discovery Directory</h2>
-              <p className="text-xs text-[#64748B]">
-                Target funds and partners matched against your startup&apos;s semantic vector representation.
-              </p>
-            </div>
-
-            <div className="relative w-full sm:w-64">
-              <Search className="w-3.5 h-3.5 text-[#94A3B8] absolute left-3 top-2.5" />
+        <div className="space-y-5">
+          {matches.length > 0 && (
+            <div className="relative max-w-sm">
+              <Search className="pointer-events-none absolute left-3 top-2.5 h-4 w-4 text-faint" />
               <input
-                type="text"
-                placeholder="Search investor, fund or thesis..."
+                type="search"
+                placeholder="Search investors, firms or projects"
                 value={investorSearch}
                 onChange={(e) => setInvestorSearch(e.target.value)}
-                className="w-full pl-8 pr-3 py-1.5 text-xs bg-white border border-[#E2E8F0] rounded-lg focus:outline-none focus:border-[#1B3B6F]"
+                className={cx(inputClass, "pl-9")}
               />
             </div>
-          </div>
-
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-            {filteredMatches.map((match) => (
-              <InvestorCard
-                key={match.id}
-                match={match}
-                onExpressInterest={(item) =>
-                  alert(`Introduction request submitted to ${item.investor_name} at ${item.investor_firm}!`)
-                }
-              />
-            ))}
-          </div>
-        </div>
-      )}
-
-      {/* 4.5 Introduction Requests & Deal Rooms Tab */}
-      {activeTab === "intros" && (
-        <div className="space-y-6">
-          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-            <div>
-              <h2 className="text-lg font-bold text-[#0F172A] font-display flex items-center gap-2">
-                <Briefcase className="w-5 h-5 text-[#1B3B6F]" />
-                Introduction Requests & Deal Rooms
-              </h2>
-              <p className="text-xs text-[#64748B]">
-                Manage inbound interest from syndicate partners. Approving an introduction unlocks your verified data room and direct messaging.
-              </p>
-            </div>
-
-            {/* Status Filter Tabs */}
-            <div className="flex items-center gap-1.5 p-1 bg-[#F1F5F9] border border-[#E2E8F0] rounded-lg">
-              {(["all", "pending", "accepted", "declined"] as const).map((filter) => (
-                <button
-                  key={filter}
-                  onClick={() => setIntroTabFilter(filter)}
-                  className={`px-3 py-1 text-xs font-semibold rounded-md transition-all capitalize ${
-                    introTabFilter === filter
-                      ? "bg-white text-[#0F172A] shadow-subtle border border-[#E2E8F0]"
-                      : "text-[#64748B] hover:text-[#0F172A]"
-                  }`}
-                >
-                  {filter === "all"
-                    ? `All (${interests.length})`
-                    : filter === "pending"
-                    ? `Pending (${interests.filter((i) => i.status === "pending").length})`
-                    : filter === "accepted"
-                    ? `Active Rooms (${interests.filter((i) => i.status === "accepted").length})`
-                    : `Declined (${interests.filter((i) => i.status === "declined").length})`}
-                </button>
-              ))}
-            </div>
-          </div>
-
-          {interests.filter((i) => (introTabFilter === "all" ? true : i.status === introTabFilter)).length === 0 ? (
-            <div className="text-center py-16 border border-dashed border-[#E2E8F0] rounded-xl bg-white shadow-subtle space-y-2">
-              <Briefcase className="w-8 h-8 text-[#94A3B8] mx-auto mb-1" />
-              <h4 className="text-sm font-bold text-[#0F172A] font-display">No Introduction Requests in this Filter</h4>
-              <p className="text-xs text-[#64748B] max-w-sm mx-auto">
-                Inbound requests from accredited investors will appear here when partners request introduction.
-              </p>
-            </div>
+          )}
+          {matches.length === 0 ? (
+            <EmptyState
+              icon={Users}
+              title="No investor matches yet"
+              description={
+                projects.some((p) => p.is_published)
+                  ? "Matches appear as investors with fitting criteria join. Check back soon."
+                  : "Publish a project to start getting matched with investors."
+              }
+              action={
+                !projects.some((p) => p.is_published) && projects.length > 0 ? (
+                  <TabLink tab="projects" asButton>
+                    Go to projects
+                  </TabLink>
+                ) : undefined
+              }
+            />
+          ) : filteredMatches.length === 0 ? (
+            <EmptyState compact title="No investors match that search" />
           ) : (
-            <div className="space-y-4">
-              {interests
-                .filter((i) => (introTabFilter === "all" ? true : i.status === introTabFilter))
-                .map((item) => (
-                  <div
-                    key={item.id}
-                    className="rounded-xl border border-[#E2E8F0] bg-white p-6 shadow-subtle hover:border-[#CBD5E1] transition-all space-y-4"
-                  >
-                    {/* Header */}
-                    <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-3 pb-3 border-b border-[#F1F5F9]">
-                      <div className="flex items-center gap-3">
-                        <div className="w-10 h-10 rounded-xl bg-[#0F1E36] border border-[#1F3354] flex items-center justify-center font-bold text-white text-sm shadow-sm font-display shrink-0">
-                          {item.investor_name ? item.investor_name.slice(0, 2).toUpperCase() : "IN"}
-                        </div>
-                        <div>
-                          <div className="flex items-center gap-2">
-                            <h3 className="text-base font-bold text-[#0F172A] font-display">{item.investor_name}</h3>
-                            <span className="text-xs text-[#64748B]">({item.investor_firm || "Partner Syndicate"})</span>
-                          </div>
-                          <p className="text-xs text-[#64748B] flex items-center gap-1.5 mt-0.5">
-                            <Mail className="w-3.5 h-3.5 text-[#94A3B8]" />
-                            {item.investor_email || "verified.partner@syndicate.vc"}
-                          </p>
-                        </div>
-                      </div>
-
-                      <div className="flex items-center gap-2">
-                        <Badge variant="primary">{item.project_title || "Project"}</Badge>
-                        {item.status === "pending" && (
-                          <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-semibold bg-[#FEF3C7] border border-[#FDE68A] text-[#92400E]">
-                            <Clock className="w-3 h-3" />
-                            Pending Review
-                          </span>
-                        )}
-                        {item.status === "accepted" && (
-                          <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-semibold bg-[#E8F5E9] border border-[#C8E6C9] text-[#2E7D52]">
-                            <Unlock className="w-3 h-3" />
-                            Deal Room Active
-                          </span>
-                        )}
-                        {item.status === "declined" && (
-                          <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-semibold bg-[#F1F5F9] border border-[#E2E8F0] text-[#64748B]">
-                            <X className="w-3 h-3" />
-                            Declined
-                          </span>
-                        )}
-                      </div>
-                    </div>
-
-                    {/* Inbound Investor Note */}
-                    <div className="space-y-1">
-                      <span className="text-[10px] font-semibold uppercase tracking-wider text-[#64748B] block">
-                        Investor Message & Thesis Note:
-                      </span>
-                      <p className="text-xs text-[#334155] leading-relaxed bg-[#F8FAFC] p-3.5 rounded-lg border border-[#F1F5F9]">
-                        &quot;{item.message}&quot;
-                      </p>
-                    </div>
-
-                    {/* Action Area: Pending */}
-                    {item.status === "pending" && (
-                      <div className="pt-2 space-y-3">
-                        <div>
-                          <label className="block text-[11px] font-semibold text-[#0F172A] mb-1">
-                            Response Note for Partner (Optional):
-                          </label>
-                          <input
-                            type="text"
-                            placeholder="e.g. Welcome Dr. Lin. Thrilled to share our ICU pilot metrics and cap table."
-                            value={responseNotes[String(item.id)] || ""}
-                            onChange={(e) =>
-                              setResponseNotes({ ...responseNotes, [String(item.id)]: e.target.value })
-                            }
-                            className="w-full px-3 py-2 bg-[#FAFBFD] border border-[#E2E8F0] rounded-lg text-xs text-[#0F172A] focus:outline-none focus:border-[#1B3B6F]"
-                          />
-                        </div>
-
-                        <div className="flex items-center gap-2 pt-1">
-                          <button
-                            disabled={statusProcessing === String(item.id)}
-                            onClick={() => handleUpdateStatus(item.id, "accepted")}
-                            className="px-4 py-2 text-xs font-semibold text-white bg-[#2E7D52] hover:bg-[#256843] rounded-lg transition-colors flex items-center gap-1.5 shadow-sm"
-                          >
-                            <Unlock className="w-4 h-4" />
-                            {statusProcessing === String(item.id) ? "Unlocking..." : "Accept & Unlock Deal Room"}
-                          </button>
-                          <button
-                            disabled={statusProcessing === String(item.id)}
-                            onClick={() => handleUpdateStatus(item.id, "declined")}
-                            className="px-4 py-2 text-xs font-medium text-[#64748B] hover:text-[#0F172A] bg-white border border-[#E2E8F0] hover:bg-[#F8FAFC] rounded-lg transition-colors flex items-center gap-1.5"
-                          >
-                            <X className="w-4 h-4" />
-                            Decline Request
-                          </button>
-                        </div>
-                      </div>
-                    )}
-
-                    {/* Unlocked Deal Room Access */}
-                    {item.status === "accepted" && (
-                      <div className="rounded-xl border border-[#C8E6C9] bg-[#F4FBF6] p-4.5 space-y-3">
-                        <div className="flex items-center justify-between flex-wrap gap-2">
-                          <div className="flex items-center gap-2">
-                            <CheckCheck className="w-4 h-4 text-[#2E7D52]" />
-                            <h4 className="text-xs sm:text-sm font-bold text-[#1E5236] font-display">
-                              Confidential Deal Room Active
-                            </h4>
-                          </div>
-                          <span className="text-[11px] text-[#2E7D52] font-mono">Status: Connected</span>
-                        </div>
-
-                        {item.response_note && (
-                          <p className="text-xs text-[#1E5236] bg-white p-2.5 rounded-lg border border-[#C8E6C9]">
-                            <strong>Your Welcome Note:</strong> &quot;{item.response_note}&quot;
-                          </p>
-                        )}
-
-                        <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5 pt-1">
-                          {item.investor_email && (
-                            <a
-                              href={`mailto:${item.investor_email}`}
-                              className="p-3 bg-white border border-[#C8E6C9] hover:border-[#2E7D52] rounded-lg text-xs font-medium text-[#0F172A] transition-all flex items-center justify-between shadow-subtle group"
-                            >
-                              <span className="flex items-center gap-2 min-w-0">
-                                <Mail className="w-4 h-4 text-[#2E7D52] shrink-0" />
-                                <span className="truncate">Email {item.investor_name || "the investor"}</span>
-                              </span>
-                              <ExternalLink className="w-3.5 h-3.5 text-[#94A3B8] group-hover:text-[#2E7D52] shrink-0" />
-                            </a>
-                          )}
-
-                          <Link
-                            href={item.deal_room?.room_id ? `/dealroom/${item.deal_room.room_id}` : "/dealroom"}
-                            className="p-3 bg-white border border-[#C8E6C9] hover:border-[#2E7D52] rounded-lg text-xs font-medium text-[#0F172A] transition-all flex items-center justify-between shadow-subtle group"
-                          >
-                            <span className="flex items-center gap-2">
-                              <MessageSquare className="w-4 h-4 text-[#2E7D52]" />
-                              Enter Secure Deal Room
-                            </span>
-                            <span className="text-[10px] font-bold text-[#2E7D52] bg-[#E8F5E9] px-2 py-0.5 rounded-full flex items-center gap-1">
-                              <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
-                              Encrypted
-                            </span>
-                          </Link>
-                        </div>
-                      </div>
-                    )}
-
-                    {/* Declined State */}
-                    {item.status === "declined" && (
-                      <div className="flex items-center justify-between pt-1">
-                        <span className="text-xs text-[#64748B]">This introduction request was declined.</span>
-                        <button
-                          disabled={statusProcessing === String(item.id)}
-                          onClick={() => handleUpdateStatus(item.id, "accepted")}
-                          className="text-xs font-semibold text-[#1B3B6F] hover:text-[#142C54]"
-                        >
-                          Reopen & Unlock Deal Room
-                        </button>
-                      </div>
-                    )}
-                  </div>
-                ))}
-            </div>
+            <div className="grid gap-4 lg:grid-cols-2">{filteredMatches.map(matchRow)}</div>
           )}
         </div>
       )}
 
-      {/* 5. Notifications Tab */}
-      {activeTab === "notifications" && (
-        <div className="max-w-3xl mx-auto space-y-4">
-          <div className="flex items-center justify-between pb-3 border-b border-[#E2E8F0]">
-            <div className="flex items-center gap-2">
-              <h2 className="text-base font-bold text-[#0F172A] font-display">Recent Activity & Notifications</h2>
-              {unreadNotifCount > 0 ? (
-                <span className="px-2 py-0.5 rounded-full text-[11px] font-bold bg-[#EBF2FA] text-[#1B3B6F] border border-[#BFD7EE]">
-                  {unreadNotifCount} unread
-                </span>
-              ) : (
-                <span className="text-xs text-[#64748B]">All caught up</span>
-              )}
-            </div>
-            {unreadNotifCount > 0 && (
-              <button
-                onClick={handleMarkAllAsRead}
-                className="inline-flex items-center gap-1.5 text-xs font-semibold text-[#1B3B6F] hover:text-[#0F172A] transition-colors"
-              >
-                <CheckCheck className="w-4 h-4 text-[#1B3B6F]" />
-                Mark all as read
-              </button>
-            )}
-          </div>
-
-          {notifications.length === 0 ? (
-            <div className="p-8 text-center rounded-xl border border-dashed border-[#CBD5E1] bg-white">
-              <Bell className="w-8 h-8 text-[#94A3B8] mx-auto mb-2 opacity-50" />
-              <h3 className="text-sm font-bold text-[#0F172A]">No notifications yet</h3>
-              <p className="text-xs text-[#64748B] mt-1">
-                You will be notified when institutional investors request introductions or unlock deal rooms.
-              </p>
-            </div>
+      {/* ---------------- Intro requests ---------------- */}
+      {activeTab === "intros" && (
+        <div className="space-y-5">
+          <Segmented
+            value={introFilter}
+            onChange={setIntroFilter}
+            options={[
+              { value: "all", label: `All ${interests.length}` },
+              { value: "pending", label: `Pending ${pending.length}` },
+              { value: "accepted", label: `Accepted ${interests.filter((i) => i.status === "accepted").length}` },
+              { value: "declined", label: `Declined ${interests.filter((i) => i.status === "declined").length}` },
+            ]}
+          />
+          {visibleIntros.length === 0 ? (
+            <EmptyState
+              icon={Briefcase}
+              title={interests.length === 0 ? "No intro requests yet" : "Nothing here"}
+              description={
+                interests.length === 0
+                  ? "When an investor asks to connect about one of your published projects, it shows up here."
+                  : undefined
+              }
+            />
           ) : (
-            notifications.map((notif) => {
-              const isUnread = !notif.read;
-              return (
-                <div
-                  key={notif.id}
-                  className={`p-4 rounded-xl border transition-all ${
-                    isUnread
-                      ? "border-[#BFD7EE] bg-[#F8FAFC] shadow-sm"
-                      : "border-[#E2E8F0] bg-white shadow-subtle opacity-85"
-                  } space-y-2`}
-                >
-                  <div className="flex items-center justify-between gap-3">
-                    <div className="flex items-center gap-2 flex-wrap">
-                      {isUnread && (
-                        <span className="w-2 h-2 rounded-full bg-[#1B3B6F] animate-pulse" />
-                      )}
-                      <Badge variant={(notif.badge_variant as any) || "primary"}>
-                        {notif.badge}
-                      </Badge>
-                      <h4 className="text-xs sm:text-sm font-bold text-[#0F172A] font-display">
-                        {notif.title}
-                      </h4>
-                    </div>
-                    <span className="text-[11px] font-mono text-[#94A3B8] shrink-0">
-                      {notif.time || "Recently"}
-                    </span>
+            <div className="space-y-3">{visibleIntros.map((item) => introRow(item))}</div>
+          )}
+        </div>
+      )}
+
+      {/* ---------------- Notifications ---------------- */}
+      {activeTab === "notifications" &&
+        (notifications.length === 0 ? (
+          <EmptyState icon={Bell} title="You're all caught up" description="Intro requests and deal room updates will show up here." />
+        ) : (
+          <Card padded={false} className="divide-y divide-line max-w-3xl">
+            {notifications.map((n) => (
+              <div key={n.id} className="flex gap-3 px-5 py-4">
+                <span className={cx("mt-1.5 h-2 w-2 shrink-0 rounded-full", n.read ? "bg-transparent" : "bg-accent")} />
+                <div className="min-w-0 flex-1">
+                  <div className="flex items-baseline justify-between gap-3">
+                    <span className={cx("text-sm", n.read ? "text-ink-2" : "font-medium text-ink")}>{n.title}</span>
+                    <span className="shrink-0 text-xs text-faint">{n.time || (n.created_at ? timeAgo(n.created_at) : "")}</span>
                   </div>
-
-                  <p className="text-xs text-[#475569] leading-relaxed pl-0.5">
-                    {notif.desc}
-                  </p>
-
-                  <div className="flex items-center justify-between pt-1 border-t border-[#F1F5F9] text-xs">
-                    {notif.link ? (
-                      <Link
-                        href={notif.link}
-                        className="font-semibold text-[#1B3B6F] hover:text-[#0F172A] inline-flex items-center gap-1"
-                      >
-                        View Activity →
+                  <p className="mt-0.5 text-sm text-muted">{n.desc}</p>
+                  <div className="mt-2 flex gap-3 text-sm">
+                    {n.link && (
+                      <Link href={n.link} className="font-medium text-accent hover:underline">
+                        View
                       </Link>
-                    ) : (
-                      <span />
                     )}
-
-                    {isUnread && (
-                      <button
-                        onClick={() => handleMarkAsRead(notif.id)}
-                        className="text-[11px] text-[#64748B] hover:text-[#0F172A] font-medium"
-                      >
+                    {!n.read && (
+                      <button type="button" onClick={() => markRead(n.id)} className="text-muted hover:text-ink">
                         Mark as read
                       </button>
                     )}
                   </div>
                 </div>
-              );
-            })
-          )}
-        </div>
-      )}
+              </div>
+            ))}
+          </Card>
+        ))}
 
-      {/* 6. Profile Tab */}
+      {/* ---------------- Profile ---------------- */}
       {activeTab === "profile" && (
-        <div className="max-w-2xl mx-auto rounded-xl border border-[#E2E8F0] bg-white p-6 sm:p-8 shadow-subtle">
-          <div className="flex items-center justify-between mb-6 pb-4 border-b border-[#E2E8F0]">
-            <div>
-              <h2 className="text-lg font-bold text-[#0F172A] font-display">Founder Profile</h2>
-              <p className="text-xs text-[#64748B]">Founder credentials presented to interested investors.</p>
+        <Card className="max-w-2xl">
+          <form onSubmit={saveProfile} className="space-y-5">
+            <div className="grid gap-5 sm:grid-cols-2">
+              <Field label="Full name" htmlFor="pf-name">
+                <input id="pf-name" className={inputClass} value={profile.name} onChange={(e) => setProfile({ ...profile, name: e.target.value })} />
+              </Field>
+              <Field label="Company" htmlFor="pf-company">
+                <input id="pf-company" className={inputClass} value={profile.company} onChange={(e) => setProfile({ ...profile, company: e.target.value })} />
+              </Field>
             </div>
-            <Badge variant="success">Verified Founder</Badge>
-          </div>
-
-          {saveSuccess && (
-            <div className="mb-6 p-3 rounded-lg bg-[#E8F5E9] border border-[#C8E6C9] text-[#2E7D52] text-xs flex items-center gap-2">
-              <CheckCircle2 className="w-4 h-4 text-[#2E7D52]" />
-              Profile updated successfully.
+            <Field label="About you" htmlFor="pf-bio" hint="A few lines on your background.">
+              <textarea id="pf-bio" rows={3} className={inputClass} value={profile.bio} onChange={(e) => setProfile({ ...profile, bio: e.target.value })} />
+            </Field>
+            <div className="grid gap-5 sm:grid-cols-2">
+              <Field label="Location" htmlFor="pf-location">
+                <input id="pf-location" className={inputClass} value={profile.location} onChange={(e) => setProfile({ ...profile, location: e.target.value })} />
+              </Field>
+              <Field label="LinkedIn" htmlFor="pf-linkedin">
+                <input id="pf-linkedin" type="url" placeholder="https://linkedin.com/in/…" className={inputClass} value={profile.linkedin} onChange={(e) => setProfile({ ...profile, linkedin: e.target.value })} />
+              </Field>
             </div>
-          )}
-
-          <form onSubmit={handleProfileSave} className="space-y-4 text-xs sm:text-sm">
-            <div>
-              <label className="block text-xs font-semibold text-[#0F172A] mb-1">Full Name</label>
-              <input
-                type="text"
-                value={founderProfile.name}
-                onChange={(e) => setFounderProfile({ ...founderProfile, name: e.target.value })}
-                className="w-full px-3 py-2 bg-[#FAFBFD] border border-[#E2E8F0] rounded-lg text-[#0F172A] focus:outline-none focus:border-[#1B3B6F]"
-              />
-            </div>
-
-            <div>
-              <label className="block text-xs font-semibold text-[#0F172A] mb-1">Primary Company Name</label>
-              <input
-                type="text"
-                value={founderProfile.company}
-                onChange={(e) => setFounderProfile({ ...founderProfile, company: e.target.value })}
-                className="w-full px-3 py-2 bg-[#FAFBFD] border border-[#E2E8F0] rounded-lg text-[#0F172A] focus:outline-none focus:border-[#1B3B6F]"
-              />
-            </div>
-
-            <div>
-              <label className="block text-xs font-semibold text-[#0F172A] mb-1">Founder Bio / Background</label>
-              <textarea
-                rows={3}
-                value={founderProfile.bio}
-                onChange={(e) => setFounderProfile({ ...founderProfile, bio: e.target.value })}
-                className="w-full px-3 py-2 bg-[#FAFBFD] border border-[#E2E8F0] rounded-lg text-[#0F172A] focus:outline-none focus:border-[#1B3B6F]"
-              />
-            </div>
-
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-              <div>
-                <label className="block text-xs font-semibold text-[#0F172A] mb-1">Location</label>
-                <input
-                  type="text"
-                  value={founderProfile.location}
-                  onChange={(e) => setFounderProfile({ ...founderProfile, location: e.target.value })}
-                  className="w-full px-3 py-2 bg-[#FAFBFD] border border-[#E2E8F0] rounded-lg text-[#0F172A] focus:outline-none focus:border-[#1B3B6F]"
-                />
-              </div>
-
-              <div>
-                <label className="block text-xs font-semibold text-[#0F172A] mb-1">LinkedIn Profile</label>
-                <input
-                  type="url"
-                  value={founderProfile.linkedin}
-                  onChange={(e) => setFounderProfile({ ...founderProfile, linkedin: e.target.value })}
-                  className="w-full px-3 py-2 bg-[#FAFBFD] border border-[#E2E8F0] rounded-lg text-[#0F172A] focus:outline-none focus:border-[#1B3B6F]"
-                />
-              </div>
-            </div>
-
-            <div>
-              <label className="block text-xs font-semibold text-[#0F172A] mb-1">Company Website</label>
-              <input
-                type="url"
-                value={founderProfile.website}
-                onChange={(e) => setFounderProfile({ ...founderProfile, website: e.target.value })}
-                className="w-full px-3 py-2 bg-[#FAFBFD] border border-[#E2E8F0] rounded-lg text-[#0F172A] focus:outline-none focus:border-[#1B3B6F]"
-              />
-            </div>
-
-            <div className="pt-4 border-t border-[#E2E8F0] flex justify-end">
-              <button
-                type="submit"
-                className="px-5 py-2 rounded-lg text-xs font-medium text-white bg-[#1B3B6F] hover:bg-[#142C54] transition-colors shadow-sm"
-              >
-                Save Profile
-              </button>
-            </div>
+            <Field label="Company website" htmlFor="pf-website">
+              <input id="pf-website" type="url" placeholder="https://" className={inputClass} value={profile.website} onChange={(e) => setProfile({ ...profile, website: e.target.value })} />
+            </Field>
+            <FormFooter saved={profileSaved} label="Save profile" />
           </form>
-        </div>
+        </Card>
       )}
 
-      {/* 7. Settings Tab */}
+      {/* ---------------- Settings ---------------- */}
       {activeTab === "settings" && (
-        <div className="max-w-2xl mx-auto rounded-xl border border-[#E2E8F0] bg-white p-6 sm:p-8 shadow-subtle">
-          <div className="flex items-center justify-between mb-6 pb-4 border-b border-[#E2E8F0]">
-            <div>
-              <h2 className="text-lg font-bold text-[#0F172A] font-display">Workspace & Privacy Settings</h2>
-              <p className="text-xs text-[#64748B]">Configure confidentiality defaults and alert preferences.</p>
+        <Card className="max-w-2xl">
+          <form onSubmit={saveSettings} className="space-y-6">
+            <div className="divide-y divide-line">
+              <Toggle
+                label="Keep new projects private"
+                description="New projects stay hidden from investors until you publish them."
+                checked={settings.defaultPrivate}
+                onChange={(v) => setSettings({ ...settings, defaultPrivate: v })}
+              />
+              <Toggle
+                label="Hide readiness feedback from investors"
+                description="Always on. Scores and improvement notes are only ever shown to you."
+                checked
+                disabled
+              />
+              <Toggle
+                label="Email me about strong matches"
+                description="When an investor's criteria closely fit one of your projects."
+                checked={settings.emailAlerts}
+                onChange={(v) => setSettings({ ...settings, emailAlerts: v })}
+              />
+              <Toggle
+                label="Weekly summary"
+                description="A short weekly email about investor activity."
+                checked={settings.weeklyDigest}
+                onChange={(v) => setSettings({ ...settings, weeklyDigest: v })}
+              />
             </div>
-            <Lock className="w-5 h-5 text-[#1B3B6F]" />
-          </div>
-
-          {settingsSuccess && (
-            <div className="mb-6 p-3 rounded-lg bg-[#E8F5E9] border border-[#C8E6C9] text-[#2E7D52] text-xs flex items-center gap-2">
-              <CheckCircle2 className="w-4 h-4 text-[#2E7D52]" />
-              Settings updated successfully.
-            </div>
-          )}
-
-          <form onSubmit={handleSettingsSave} className="space-y-6 text-xs sm:text-sm">
-            <div className="space-y-4">
-              <h3 className="text-xs font-bold text-[#0F172A] uppercase tracking-wider font-display">
-                Critical Privacy Controls
-              </h3>
-
-              <div className="flex items-start justify-between gap-4 p-3.5 rounded-lg bg-[#FAFBFD] border border-[#E2E8F0]">
-                <div>
-                  <div className="font-semibold text-[#0F172A]">Private by Default</div>
-                  <div className="text-xs text-[#64748B] mt-0.5">
-                    New projects created remain hidden from investors until explicitly marked Published.
-                  </div>
-                </div>
-                <input
-                  type="checkbox"
-                  checked={settings.defaultPrivate}
-                  onChange={(e) => setSettings({ ...settings, defaultPrivate: e.target.checked })}
-                  className="mt-1 accent-[#1B3B6F] w-4 h-4"
-                />
-              </div>
-
-              <div className="flex items-start justify-between gap-4 p-3.5 rounded-lg bg-[#EBF2FA] border border-[#BFD7EE]">
-                <div>
-                  <div className="font-semibold text-[#1B3B6F] flex items-center gap-1.5">
-                    <Lock className="w-3.5 h-3.5" /> Confidential AI Readiness Rule
-                  </div>
-                  <div className="text-xs text-[#64748B] mt-0.5">
-                    Never expose private readiness scores, missing information, or weakness diagnostics to investors.
-                  </div>
-                </div>
-                <input
-                  type="checkbox"
-                  disabled
-                  checked={settings.hideGapsFromInvestors}
-                  className="mt-1 accent-[#1B3B6F] w-4 h-4 cursor-not-allowed opacity-80"
-                />
-              </div>
-            </div>
-
-            <div className="space-y-4 pt-4 border-t border-[#E2E8F0]">
-              <h3 className="text-xs font-bold text-[#0F172A] uppercase tracking-wider font-display">
-                Alert Preferences
-              </h3>
-
-              <div className="flex items-center justify-between gap-4">
-                <div>
-                  <div className="font-medium text-[#0F172A]">Email Notifications for High-Score Matches (&gt;90%)</div>
-                  <div className="text-xs text-[#64748B]">Get notified when an investor mandate matches your startup.</div>
-                </div>
-                <input
-                  type="checkbox"
-                  checked={settings.emailAlerts}
-                  onChange={(e) => setSettings({ ...settings, emailAlerts: e.target.checked })}
-                  className="accent-[#1B3B6F] w-4 h-4"
-                />
-              </div>
-
-              <div className="flex items-center justify-between gap-4">
-                <div>
-                  <div className="font-medium text-[#0F172A]">Weekly Dealflow Digest</div>
-                  <div className="text-xs text-[#64748B]">Summary of interested investor funds.</div>
-                </div>
-                <input
-                  type="checkbox"
-                  checked={settings.weeklyDigest}
-                  onChange={(e) => setSettings({ ...settings, weeklyDigest: e.target.checked })}
-                  className="accent-[#1B3B6F] w-4 h-4"
-                />
-              </div>
-            </div>
-
-            <div className="pt-4 border-t border-[#E2E8F0] flex justify-end">
-              <button
-                type="submit"
-                className="px-5 py-2 rounded-lg text-xs font-medium text-white bg-[#1B3B6F] hover:bg-[#142C54] transition-colors shadow-sm"
-              >
-                Save Preferences
-              </button>
-            </div>
+            <FormFooter saved={settingsSaved} label="Save settings" />
           </form>
-        </div>
+        </Card>
       )}
     </PortalLayout>
   );
 }
 
+/* ---------- small local pieces ---------- */
+
+function readinessWord(score: number): string {
+  if (score >= 85) return "Ready to pitch";
+  if (score >= 70) return "Nearly ready";
+  return "Needs work";
+}
+
+function TabLink({ tab, children, asButton = false }: { tab: Tab; children: React.ReactNode; asButton?: boolean }) {
+  return (
+    <Link
+      href={`/founder/dashboard?tab=${tab}`}
+      className={asButton ? buttonClass("secondary") : "inline-flex items-center gap-1 font-medium text-accent hover:underline"}
+    >
+      {children}
+      {!asButton && <ArrowRight className="w-3.5 h-3.5" />}
+    </Link>
+  );
+}
+
+function IntroStatus({ status }: { status: ProjectInterest["status"] }) {
+  if (status === "accepted") return <Tag tone="positive">Accepted</Tag>;
+  if (status === "declined") return <Tag>Declined</Tag>;
+  return <Tag tone="warning">Waiting for you</Tag>;
+}
+
+function VisibilityTag({ published }: { published: boolean }) {
+  return published ? (
+    <Tag tone="positive">
+      <Eye className="w-3.5 h-3.5" />
+      Published
+    </Tag>
+  ) : (
+    <Tag>
+      <Lock className="w-3.5 h-3.5" />
+      Private
+    </Tag>
+  );
+}
+
 export default function FounderDashboardPage() {
   return (
-    <Suspense fallback={<div className="p-8 text-center text-xs text-[#64748B]">Loading Founder Workspace...</div>}>
+    <Suspense fallback={<div className="p-8 text-sm text-muted">Loading…</div>}>
       <FounderDashboardContent />
     </Suspense>
   );

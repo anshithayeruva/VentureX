@@ -1,90 +1,32 @@
 import React from "react";
 import Link from "next/link";
-import { Sparkles, Cpu, Database } from "lucide-react";
 import { BrandMark } from "@/components/BrandMark";
 
 export function Footer() {
   return (
-    <footer className="w-full border-t border-[#E2E8F0] bg-white text-[#64748B] py-12 transition-all">
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-        <div className="grid grid-cols-1 md:grid-cols-4 gap-8">
-          {/* Brand Info */}
-          <div className="md:col-span-2 space-y-4">
-            <div className="flex items-center gap-2.5">
-              <BrandMark size={30} />
-              <span className="text-lg font-bold text-[#0F172A] tracking-tight font-display">
-                Venture<span className="text-[#1B3B6F]">X</span>
-              </span>
-            </div>
-            <p className="text-xs sm:text-sm text-[#64748B] max-w-sm leading-relaxed">
-              Elegant AI platform bridging high-potential startup founders with thesis-aligned
-              venture capital, syndicates, and angel investors through multi-dimensional semantic matching.
-            </p>
-            <div className="flex flex-wrap items-center gap-3 text-xs text-[#64748B] pt-1">
-              <span className="flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-[#F1F5F9] border border-[#E2E8F0]">
-                <Cpu className="w-3.5 h-3.5 text-[#1B3B6F]" /> FastAPI & PyTorch
-              </span>
-              <span className="flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-[#E8F5E9] border border-[#C8E6C9] text-[#2E7D52]">
-                <Database className="w-3.5 h-3.5 text-[#2E7D52]" /> PostgreSQL & pgvector
-              </span>
-            </div>
-          </div>
-
-          {/* Platform Links */}
-          <div className="space-y-3">
-            <h4 className="text-xs font-semibold text-[#0F172A] uppercase tracking-wider font-display">
-              Workspaces
-            </h4>
-            <ul className="space-y-2 text-xs sm:text-sm">
-              <li>
-                <Link href="/founder/dashboard" className="text-[#64748B] hover:text-[#1B3B6F] transition-colors">
-                  Founder Dashboard
-                </Link>
-              </li>
-              <li>
-                <Link href="/investor/dashboard" className="text-[#64748B] hover:text-[#1B3B6F] transition-colors">
-                  Investor Portal
-                </Link>
-              </li>
-              <li>
-                <Link href="/founder/projects/new" className="text-[#64748B] hover:text-[#1B3B6F] transition-colors">
-                  Submit Pitch & Materials
-                </Link>
-              </li>
-              <li>
-                <Link href="/investor/preferences" className="text-[#64748B] hover:text-[#1B3B6F] transition-colors">
-                  Match Criteria Setup
-                </Link>
-              </li>
-            </ul>
-          </div>
-
-          {/* Architecture & Stack */}
-          <div className="space-y-3">
-            <h4 className="text-xs font-semibold text-[#0F172A] uppercase tracking-wider font-display">
-              Design System
-            </h4>
-            <ul className="space-y-1.5 text-xs text-[#64748B]">
-              <li>• Plus Jakarta Sans & Inter Typography</li>
-              <li>• Midnight Navy & Pure White Palette</li>
-              <li>• Deep Blue Accent System</li>
-              <li>• Confidential Founder Readiness Model</li>
-              <li>• Explainable Mandate Semantic Synthesis</li>
-            </ul>
-          </div>
+    <footer className="w-full border-t border-line bg-surface">
+      <div className="mx-auto flex max-w-6xl flex-col gap-6 px-4 py-10 sm:flex-row sm:items-center sm:justify-between sm:px-6">
+        <div className="space-y-2">
+          <Link href="/" className="flex items-center gap-2">
+            <BrandMark size={24} />
+            <span className="text-sm font-semibold text-ink">VentureX</span>
+          </Link>
+          <p className="text-sm text-muted">Helping founders get ready to raise, and meet the right investors.</p>
         </div>
-
-        <div className="mt-8 pt-8 border-t border-[#E2E8F0] flex flex-col sm:flex-row justify-between items-center gap-4 text-xs text-[#64748B]">
-          <p>© {new Date().getFullYear()} Venture X. Intelligent Founder & Investor Ecosystem.</p>
-          <div className="flex gap-4">
-            <span className="px-2 py-0.5 rounded bg-[#F1F5F9] border border-[#E2E8F0] font-mono text-[11px] text-[#0F172A]">
-              /api/health
-            </span>
-            <span className="px-2 py-0.5 rounded bg-[#F1F5F9] border border-[#E2E8F0] font-mono text-[11px] text-[#0F172A]">
-              /docs
-            </span>
-          </div>
-        </div>
+        <nav className="flex flex-wrap gap-x-6 gap-y-2 text-sm text-muted">
+          <Link href="/#how-it-works" className="hover:text-ink">
+            How it works
+          </Link>
+          <Link href="/register" className="hover:text-ink">
+            Create an account
+          </Link>
+          <Link href="/login" className="hover:text-ink">
+            Sign in
+          </Link>
+        </nav>
+      </div>
+      <div className="border-t border-line">
+        <p className="mx-auto max-w-6xl px-4 py-5 text-xs text-faint sm:px-6">© {new Date().getFullYear()} VentureX</p>
       </div>
     </footer>
   );

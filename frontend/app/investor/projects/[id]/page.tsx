@@ -1,297 +1,204 @@
 "use client";
 
-import React, { useEffect, useState, use } from "react";
+import React, { use, useEffect, useState } from "react";
 import Link from "next/link";
-import {
-  Briefcase,
-  ArrowLeft,
-  Sparkles,
-  ShieldCheck,
-  CheckCircle2,
-  DollarSign,
-  Globe,
-  UserCheck,
-  Building2,
-  Layers,
-} from "lucide-react";
-import { Badge } from "@/components/Badge";
+import { ArrowLeft, CheckCircle2, ExternalLink, FileQuestion, MessagesSquare } from "lucide-react";
 import { PortalLayout } from "@/components/PortalLayout";
+import { Button, ButtonLink, Card, EmptyState, LoadingRows, Stat, Tag, inputClass } from "@/components/ui";
 import { api } from "@/lib/api";
-import { Project, MatchItem } from "@/types";
+import { formatMoney } from "@/lib/format";
+import { MatchItem, Project, ProjectInterest } from "@/types";
 
-export default function InvestorProjectDetailsPage({ params }: { params: Promise<{ id: string }> }) {
-  const resolvedParams = use(params);
-  const projectId = resolvedParams.id;
+export default function InvestorProjectPage({ params }: { params: Promise<{ id: string }> }) {
+  const { id: projectId } = use(params);
 
   const [project, setProject] = useState<Project | null>(null);
-  const [matchItem, setMatchItem] = useState<MatchItem | null>(null);
-  const [requested, setRequested] = useState(false);
-  const [submitting, setSubmitting] = useState(false);
   const [notFound, setNotFound] = useState(false);
+  const [match, setMatch] = useState<MatchItem | null>(null);
+  const [interest, setInterest] = useState<ProjectInterest | null>(null);
+  const [note, setNote] = useState("");
+  const [sending, setSending] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     let mounted = true;
-    api.getProject(projectId).then((fetched) => {
+    api.getProject(projectId).then((found) => {
       if (!mounted) return;
-      if (!fetched) {
+      if (!found) {
         setNotFound(true);
         return;
       }
-      const found = fetched;
       setProject(found);
-
-      api.getMatches().then((allMatches) => {
-        if (!mounted) return;
-        const matchFound =
-          allMatches.find((m) => String(m.project_id) === String(found.id)) || null;
-        setMatchItem(matchFound);
-      });
-
-      api.getInterests().then((interests) => {
-        if (!mounted) return;
-        const exists = interests.some(
-          (i: any) =>
-            String(i.project_id) === String(found.id) &&
-            (i.status === "pending" || i.status === "accepted")
-        );
-        if (exists) setRequested(true);
-      });
     });
-
+    api.getMatches().then((all) => mounted && setMatch(all.find((m) => String(m.project_id) === String(projectId)) || null));
+    api.getInterests().then((all) => {
+      if (!mounted || !Array.isArray(all)) return;
+      setInterest(all.find((i: ProjectInterest) => String(i.project_id) === String(projectId)) || null);
+    });
     return () => {
       mounted = false;
     };
   }, [projectId]);
 
-  if (notFound) {
+  if (notFound || !project) {
     return (
-      <PortalLayout role="INVESTOR" activeItem="browse" title="Project Details">
-        <div className="max-w-xl mx-auto mt-10 rounded-xl border border-[#E2E8F0] bg-white p-8 text-center space-y-3 shadow-subtle">
-          <p className="text-sm font-semibold text-[#0F172A]">Project not found</p>
-          <p className="text-xs text-[#64748B]">It may have been unpublished, or it isn&apos;t visible to your account.</p>
-          <Link href="/investor/dashboard" className="inline-block text-xs font-semibold text-[#1B3B6F] hover:underline">
-            Back to dealflow
-          </Link>
-        </div>
+      <PortalLayout role="INVESTOR" activeItem="browse" title="Startup">
+        {notFound ? (
+          <EmptyState
+            icon={FileQuestion}
+            title="Startup not found"
+            description="The founder may have made it private."
+            action={<ButtonLink href="/investor/dashboard?tab=browse">Browse startups</ButtonLink>}
+          />
+        ) : (
+          <LoadingRows />
+        )}
       </PortalLayout>
     );
   }
 
-  if (!project) {
-    return (
-      <PortalLayout role="INVESTOR" activeItem="browse" title="Project Details">
-        <div className="p-8 text-center text-xs text-[#64748B]">Loading project details...</div>
-      </PortalLayout>
-    );
-  }
-
-  const formattedFunding = new Intl.NumberFormat("en-US", {
-    style: "currency",
-    currency: "USD",
-    maximumFractionDigits: 0,
-  }).format(project.funding_required);
-
-  const handleRequestIntro = async () => {
-    if (requested || submitting) return;
-    setSubmitting(true);
+  const requestIntro = async () => {
+    setSending(true);
+    setError(null);
     try {
-      await api.expressInterest({
+      const created = await api.expressInterest({
         project_id: project.id,
         project_title: project.title,
         project_industry: project.industry,
-        message: `Interested in reviewing ${project.title}'s confidential materials and discussing potential ${project.stage} investment fit.`,
+        message: note.trim() || `I'd like to learn more about ${project.title} and your ${project.stage} round.`,
       });
-      setRequested(true);
+      setInterest(created);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Couldn't send the request.");
     } finally {
-      setSubmitting(false);
+      setSending(false);
     }
   };
 
+  const links = [
+    { label: "Website", href: project.website },
+    { label: "Demo", href: project.demo_url },
+    { label: "GitHub", href: project.github_url },
+  ].filter((l): l is { label: string; href: string } => Boolean(l.href));
+
   return (
     <PortalLayout role="INVESTOR" activeItem="browse" title={project.title}>
-      <div className="max-w-4xl mx-auto space-y-6">
-        {/* Back Link */}
-        <Link
-          href="/investor/dashboard?tab=browse"
-          className="inline-flex items-center gap-1.5 text-xs font-semibold text-[#64748B] hover:text-[#0F172A] transition-colors"
-        >
-          <ArrowLeft className="w-3.5 h-3.5" />
-          Back to Dealflow Pipeline
-        </Link>
-
-        {/* Top Header Panel */}
-        <div className="rounded-xl border border-[#E2E8F0] bg-white p-6 sm:p-8 shadow-subtle flex flex-col md:flex-row md:items-start justify-between gap-6">
-          <div className="space-y-2">
-            <div className="flex flex-wrap items-center gap-2">
-              <Badge variant="secondary">{project.industry}</Badge>
-              <Badge variant="outline">{project.stage}</Badge>
-              <Badge variant="outline">{project.business_model}</Badge>
-              <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full bg-[#E8F5E9] border border-[#A3E635] text-[#2E7D52] text-xs font-medium">
-                <ShieldCheck className="w-3.5 h-3.5 text-[#2E7D52]" /> Founder-Approved Mandate
-              </span>
-            </div>
-
-            <h1 className="text-2xl sm:text-3xl font-bold text-[#0F172A] font-display">
-              {project.title}
-            </h1>
-            {project.tagline && (
-              <p className="text-xs sm:text-sm font-medium text-[#64748B]">{project.tagline}</p>
-            )}
+      <div className="space-y-8">
+        <div>
+          <Link href="/investor/dashboard?tab=browse" className="inline-flex items-center gap-1.5 text-sm text-muted hover:text-ink">
+            <ArrowLeft className="h-4 w-4" />
+            Browse
+          </Link>
+          <div className="mt-4 flex flex-wrap items-center gap-2">
+            <h1 className="text-2xl font-semibold text-ink">{project.title}</h1>
+            {match && <Tag tone={match.match_score >= 85 ? "positive" : "accent"}>{Math.round(match.match_score)}% fit</Tag>}
           </div>
-
-          <div className="flex items-center gap-2.5">
-            <button
-              onClick={handleRequestIntro}
-              disabled={requested || submitting}
-              className={`px-4 py-2 rounded-lg text-xs font-medium transition-colors flex items-center gap-1.5 shadow-sm ${
-                requested
-                  ? "bg-[#E8F5E9] text-[#2E7D52] border border-[#A3E635]"
-                  : "bg-[#1B3B6F] hover:bg-[#142C54] text-white"
-              } disabled:opacity-70`}
-            >
-              <UserCheck className="w-4 h-4" />
-              {submitting ? "Requesting..." : requested ? "Intro Requested ✓" : "Request Introduction"}
-            </button>
-          </div>
+          {project.tagline && <p className="mt-1 text-muted">{project.tagline}</p>}
+          <p className="mt-1 text-sm text-muted">
+            {[project.stage, project.industry, project.business_model].filter(Boolean).join(" · ")}
+          </p>
         </div>
 
-        {/* Semantic Mandate Fit Card */}
-        {matchItem && (
-          <div className="rounded-xl border border-[#E2E8F0] bg-[#F1F5F9] p-5 shadow-subtle space-y-3">
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-2">
-                <Sparkles className="w-4 h-4 text-[#1B3B6F]" />
-                <span className="text-xs font-bold text-[#0F172A] font-display uppercase tracking-wider">
-                  Semantic Thesis Alignment: {matchItem.match_score.toFixed(1)}% Match
-                </span>
-              </div>
-              <Badge variant="success">High Conviction</Badge>
-            </div>
-
-            <div className="space-y-1.5 text-xs text-[#64748B]">
-              {matchItem.reasons.map((r, idx) => (
-                <div key={idx} className="flex items-start gap-2">
-                  <CheckCircle2 className="w-3.5 h-3.5 text-[#2E7D52] shrink-0 mt-0.5" />
-                  <span>
-                    <strong className="text-[#0F172A] font-semibold">{r.category}: </strong>
-                    {r.explanation}
-                  </span>
-                </div>
-              ))}
-            </div>
-          </div>
-        )}
-
-        {/* Deal Metrics */}
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-          <div className="rounded-xl border border-[#E2E8F0] bg-white p-5 shadow-subtle flex items-center justify-between">
-            <div>
-              <span className="text-[10px] font-semibold uppercase tracking-wider text-[#64748B] block">
-                Target Raise Ask
-              </span>
-              <span className="text-xl font-bold text-[#0F172A] font-display mt-0.5 block">
-                {formattedFunding}
-              </span>
-            </div>
-            <div className="w-9 h-9 rounded-lg bg-[#E8F5E9] border border-[#A3E635] flex items-center justify-center text-[#2E7D52]">
-              <DollarSign className="w-4 h-4" />
-            </div>
-          </div>
-
-          <div className="rounded-xl border border-[#E2E8F0] bg-white p-5 shadow-subtle flex items-center justify-between">
-            <div>
-              <span className="text-[10px] font-semibold uppercase tracking-wider text-[#64748B] block">
-                Round Structure
-              </span>
-              <span className="text-xl font-bold text-[#0F172A] font-display mt-0.5 block">
-                {project.stage} / Equity
-              </span>
-            </div>
-            <div className="w-9 h-9 rounded-lg bg-[#F1F5F9] border border-[#E2E8F0] flex items-center justify-center text-[#0F172A]">
-              <Layers className="w-4 h-4" />
-            </div>
-          </div>
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
+          <Stat label="Raising" value={formatMoney(project.funding_required)} />
+          <Stat label="Stage" value={project.stage} />
+          <Stat label="Target customer" value={<span className="text-base font-medium">{project.target_market || "—"}</span>} />
         </div>
 
-        {/* Narrative Details */}
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-          <div className="md:col-span-2 space-y-6">
-            <div className="rounded-xl border border-[#E2E8F0] bg-white p-6 shadow-subtle space-y-4">
-              <div>
-                <h3 className="text-sm font-bold text-[#0F172A] uppercase tracking-wider font-display">
-                  Executive Project Summary
-                </h3>
-                <p className="mt-2 text-xs sm:text-sm text-[#64748B] leading-relaxed">
-                  {project.description}
-                </p>
-              </div>
-
-              <div className="pt-4 border-t border-[#E2E8F0]">
-                <h3 className="text-sm font-bold text-[#0F172A] uppercase tracking-wider font-display">
-                  Market Pain Point & Friction
-                </h3>
-                <p className="mt-2 text-xs sm:text-sm text-[#64748B] leading-relaxed">
-                  {project.problem}
-                </p>
-              </div>
-
-              <div className="pt-4 border-t border-[#E2E8F0]">
-                <h3 className="text-sm font-bold text-[#0F172A] uppercase tracking-wider font-display">
-                  Proprietary Solution & Moat
-                </h3>
-                <p className="mt-2 text-xs sm:text-sm text-[#64748B] leading-relaxed">
-                  {project.solution}
-                </p>
-              </div>
-            </div>
+        <div className="grid gap-6 lg:grid-cols-3">
+          <div className="space-y-6 lg:col-span-2">
+            {match?.reasons?.length ? (
+              <Card>
+                <h2 className="text-base font-semibold text-ink">Why it fits your criteria</h2>
+                <ul className="mt-3 space-y-2">
+                  {match.reasons.map((r) => (
+                    <li key={r.category} className="flex gap-2 text-sm text-ink-2">
+                      <CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0 text-positive" />
+                      <span>
+                        <span className="font-medium">{r.category}:</span> {r.explanation}
+                      </span>
+                    </li>
+                  ))}
+                </ul>
+              </Card>
+            ) : null}
+            <Card className="space-y-6">
+              <TextBlock title="Summary" body={project.description} />
+              <TextBlock title="Problem" body={project.problem} />
+              <TextBlock title="Solution" body={project.solution} />
+            </Card>
           </div>
 
-          {/* Dealroom Info */}
           <div className="space-y-6">
-            <div className="rounded-xl border border-[#E2E8F0] bg-white p-5 shadow-subtle space-y-4 text-xs">
-              <h3 className="font-bold text-[#0F172A] uppercase tracking-wider font-display">
-                Founder-Approved Data
-              </h3>
+            <Card className="space-y-4">
+              <h2 className="text-base font-semibold text-ink">Connect with the founder</h2>
+              {!interest ? (
+                <>
+                  <p className="text-sm text-muted">
+                    The founder sees your note and profile, and decides whether to open a deal room with you.
+                  </p>
+                  <textarea
+                    rows={4}
+                    className={inputClass}
+                    placeholder="Add a short note (optional): why you're interested, what you'd like to see."
+                    value={note}
+                    onChange={(e) => setNote(e.target.value)}
+                  />
+                  {error && <p className="text-sm text-danger">{error}</p>}
+                  <Button className="w-full" onClick={requestIntro} disabled={sending}>
+                    {sending ? "Sending…" : "Request intro"}
+                  </Button>
+                </>
+              ) : interest.status === "accepted" ? (
+                <>
+                  <Tag tone="positive">Founder accepted</Tag>
+                  <ButtonLink
+                    className="w-full"
+                    href={interest.deal_room?.room_id ? `/dealroom/${interest.deal_room.room_id}` : "/dealroom?role=INVESTOR"}
+                  >
+                    <MessagesSquare className="h-4 w-4" />
+                    Open deal room
+                  </ButtonLink>
+                </>
+              ) : interest.status === "declined" ? (
+                <>
+                  <Tag>Declined</Tag>
+                  <p className="text-sm text-muted">The founder decided not to connect this time.</p>
+                </>
+              ) : (
+                <>
+                  <Tag tone="warning">Intro requested</Tag>
+                  <p className="text-sm text-muted">You&apos;ll be notified when the founder replies.</p>
+                </>
+              )}
+            </Card>
 
-              <div className="space-y-2">
-                <div>
-                  <span className="text-[#64748B] block">Target ICP:</span>
-                  <span className="text-[#0F172A] font-medium">{project.target_market}</span>
-                </div>
-
-                {project.website && (
-                  <div className="pt-2 border-t border-[#E2E8F0]">
-                    <span className="text-[#64748B] block">Product URL:</span>
-                    <a
-                      href={project.website}
-                      target="_blank"
-                      rel="noreferrer"
-                      className="text-[#1B3B6F] font-medium hover:underline flex items-center gap-1"
-                    >
-                      <Globe className="w-3.5 h-3.5" />
-                      {project.website.replace("https://", "")}
+            {links.length > 0 && (
+              <Card className="space-y-3 text-sm">
+                {links.map((l) => (
+                  <div key={l.label} className="min-w-0">
+                    <div className="text-muted">{l.label}</div>
+                    <a href={l.href} target="_blank" rel="noopener noreferrer" className="inline-flex max-w-full items-center gap-1 text-accent hover:underline">
+                      <span className="truncate">{l.href.replace(/^https?:\/\/(www\.)?/, "")}</span>
+                      <ExternalLink className="h-3.5 w-3.5 shrink-0" />
                     </a>
                   </div>
-                )}
-              </div>
-            </div>
-
-            <div className="rounded-xl border border-[#E2E8F0] bg-[#F8FAFC] p-5 shadow-subtle space-y-3 text-xs">
-              <div className="font-bold text-[#0F172A]">Deal Room Access</div>
-              <p className="text-[#64748B] leading-relaxed">
-                Connect directly with the founder to review pitch decks, financials, and clinical trial results.
-              </p>
-              <button
-                onClick={handleRequestIntro}
-                disabled={requested}
-                className="w-full py-2 text-center text-xs font-medium text-white bg-[#1B3B6F] hover:bg-[#142C54] rounded-lg transition-colors shadow-sm"
-              >
-                {requested ? "Intro Pending" : "Request Introduction"}
-              </button>
-            </div>
+                ))}
+              </Card>
+            )}
           </div>
         </div>
       </div>
     </PortalLayout>
+  );
+}
+
+function TextBlock({ title, body }: { title: string; body?: string }) {
+  if (!body) return null;
+  return (
+    <div>
+      <h2 className="text-sm font-medium text-muted">{title}</h2>
+      <p className="mt-1.5 whitespace-pre-line leading-relaxed text-ink-2">{body}</p>
+    </div>
   );
 }

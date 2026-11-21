@@ -1,141 +1,84 @@
 @import "tailwindcss";
 
-@layer base {
-  :root {
-    --font-inter: 'Inter', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
-    --font-plus-jakarta: 'Plus Jakarta Sans', var(--font-inter), system-ui, sans-serif;
-    --font-sans: var(--font-inter);
-    --font-heading: var(--font-plus-jakarta);
-    
-    /* Elegant Deep Blue / Navy & White Palette */
-    --canvas: #F8FAFC;
-    --surface: #FFFFFF;
-    --surface-secondary: #F1F5F9;
-    --surface-warm: #FAFBFD;
-    --border-subtle: #E2E8F0;
-    --border-muted: #CBD5E1;
-    
-    /* Rich Midnight Navy Sidebar (Not black!) */
-    --navy-sidebar: #0F1E36;
-    --navy-dark: #0B1628;
-    --navy-surface: #182C4C;
-    --navy-active: #1C355E;
-    --navy-border: #1F3354;
-    
-    /* Typography colors */
-    --text-primary: #0F172A;
-    --text-secondary: #64748B;
-    --text-muted: #94A3B8;
-    
-    /* Deep Blue / Sapphire Accent */
-    --navy-accent: #1B3B6F;
-    --navy-accent-hover: #142C54;
-    --navy-accent-soft: #EBF2FA;
-    --navy-accent-tint: #F3F7FC;
-    
-    /* Semantic Status */
-    --status-positive: #2E7D52;
-    --status-positive-soft: #E8F5E9;
-    --status-positive-border: #C8E6C9;
-    
-    --status-warning: #C2410C;
-    --status-warning-soft: #FFF7ED;
-    --status-warning-border: #FFEDD5;
-  }
+/*
+ * VentureX design tokens — calm & minimal.
+ * One typeface (Inter), neutral surfaces, thin borders, one navy accent.
+ * Tailwind v4 turns each --color-* into utilities: bg-canvas, text-ink, border-line, ...
+ */
+@theme {
+  --font-sans: "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
 
+  --color-canvas: #f7f8fa;        /* page / sidebar background */
+  --color-surface: #ffffff;       /* cards */
+  --color-subtle: #f2f4f7;        /* hover rows, inset areas */
+  --color-line: #e4e7ec;          /* borders and dividers */
+  --color-line-strong: #d0d5dd;
+
+  --color-ink: #101828;           /* primary text */
+  --color-ink-2: #344054;         /* secondary headings, body */
+  --color-muted: #667085;         /* supporting text */
+  --color-faint: #98a2b3;         /* placeholders, meta */
+
+  --color-accent: #1d4e96;        /* brand blue: primary actions, active nav */
+  --color-accent-hover: #173f7a;
+  --color-accent-soft: #eef3fb;
+
+  --color-positive: #1f7a4d;
+  --color-positive-soft: #ecf7f1;
+  --color-warning: #a15c07;
+  --color-warning-soft: #fdf6e7;
+  --color-danger: #b42318;
+  --color-danger-soft: #fef3f2;
+}
+
+@layer base {
   * {
-    border-color: #E2E8F0;
+    border-color: var(--color-line);
   }
 
   body {
-    background-color: #F8FAFC;
-    color: #0F172A;
-    font-family: var(--font-inter), -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    background-color: var(--color-canvas);
+    color: var(--color-ink);
+    font-family: var(--font-sans);
+    font-feature-settings: "cv11", "ss01";
     -webkit-font-smoothing: antialiased;
     -moz-osx-font-smoothing: grayscale;
   }
 
-  h1, h2, h3, h4, .font-display {
-    font-family: var(--font-plus-jakarta), var(--font-inter), system-ui, sans-serif;
+  h1, h2, h3, h4 {
+    letter-spacing: -0.015em;
   }
 }
 
-/* Custom utility classes for the Deep Navy & White Palette */
-.bg-canvas {
-  background-color: #F8FAFC;
+/* Older pages still use these helpers; they map onto the same palette. */
+.font-display {
+  font-family: var(--font-sans);
+  letter-spacing: -0.015em;
 }
+.bg-canvas { background-color: var(--color-canvas); }
+.bg-surface { background-color: var(--color-surface); }
+.bg-surface-secondary { background-color: var(--color-subtle); }
+.bg-surface-warm { background-color: var(--color-canvas); }
+.border-subtle { border-color: var(--color-line); }
+.text-primary-dark { color: var(--color-ink); }
+.text-secondary-muted { color: var(--color-muted); }
+.text-navy { color: var(--color-accent); }
+.bg-navy { background-color: var(--color-accent); }
+.bg-navy:hover { background-color: var(--color-accent-hover); }
+.bg-navy-soft { background-color: var(--color-accent-soft); }
+.bg-navy-sidebar { background-color: #0f1e36; }
+.bg-navy-dark { background-color: #0b1628; }
+.bg-navy-surface { background-color: #182c4c; }
+.bg-navy-active { background-color: #1c355e; }
+.border-navy { border-color: #1f3354; }
 
-.bg-surface {
-  background-color: #FFFFFF;
-}
-
-.bg-surface-secondary {
-  background-color: #F1F5F9;
-}
-
-.bg-surface-warm {
-  background-color: #FAFBFD;
-}
-
-.border-subtle {
-  border-color: #E2E8F0;
-}
-
-.text-primary-dark {
-  color: #0F172A;
-}
-
-.text-secondary-muted {
-  color: #64748B;
-}
-
-/* Deep Navy Accents */
-.text-navy {
-  color: #1B3B6F;
-}
-
-.bg-navy {
-  background-color: #1B3B6F;
-}
-
-.bg-navy:hover {
-  background-color: #142C54;
-}
-
-.bg-navy-soft {
-  background-color: #EBF2FA;
-}
-
-/* Midnight Navy Sidebar Styles */
-.bg-navy-sidebar {
-  background-color: #0F1E36;
-}
-
-.bg-navy-dark {
-  background-color: #0B1628;
-}
-
-.bg-navy-surface {
-  background-color: #182C4C;
-}
-
-.bg-navy-active {
-  background-color: #1C355E;
-}
-
-.border-navy {
-  border-color: #1F3354;
-}
-
-/* Restrained elegant shadows */
+/* Quiet shadows: borders do most of the work. */
 .shadow-subtle {
-  box-shadow: 0 1px 3px rgba(15, 23, 42, 0.04), 0 1px 2px rgba(15, 23, 42, 0.02);
+  box-shadow: 0 1px 2px rgba(16, 24, 40, 0.04);
 }
-
 .shadow-card {
-  box-shadow: 0 4px 6px -1px rgba(15, 23, 42, 0.05), 0 2px 4px -2px rgba(15, 23, 42, 0.03);
+  box-shadow: 0 1px 3px rgba(16, 24, 40, 0.06), 0 1px 2px rgba(16, 24, 40, 0.03);
 }
-
 .shadow-elevated {
-  box-shadow: 0 12px 28px -6px rgba(15, 23, 42, 0.09), 0 8px 12px -6px rgba(15, 23, 42, 0.04);
+  box-shadow: 0 12px 24px -8px rgba(16, 24, 40, 0.1), 0 4px 8px -4px rgba(16, 24, 40, 0.05);
 }

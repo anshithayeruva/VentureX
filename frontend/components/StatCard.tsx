@@ -10,32 +10,19 @@ interface StatCardProps {
   trend?: "up" | "down" | "neutral";
 }
 
-export function StatCard({ label, value, change, icon: Icon, subtext, trend = "up" }: StatCardProps) {
+/** A single number with its label. `change` reads as a quiet note next to the value. */
+export function StatCard({ label, value, change, icon: Icon, subtext }: StatCardProps) {
   return (
-    <div className="relative overflow-hidden rounded-xl border border-[#E2E8F0] bg-white p-5 shadow-subtle hover:border-[#CBD5E1] transition-all">
+    <div className="rounded-xl border border-line bg-surface p-5">
       <div className="flex items-center justify-between">
-        <span className="text-[11px] font-semibold uppercase tracking-wider text-[#64748B]">{label}</span>
-        <div className="w-8 h-8 rounded-lg bg-[#EBF2FA] border border-[#BFD7EE] flex items-center justify-center text-[#1B3B6F]">
-          <Icon className="w-4 h-4" />
-        </div>
+        <span className="text-sm text-muted">{label}</span>
+        <Icon className="w-4 h-4 text-faint" />
       </div>
-      <div className="mt-3 flex items-baseline gap-2">
-        <span className="text-2xl sm:text-3xl font-bold tracking-tight text-[#0F172A] font-display">{value}</span>
-        {change && (
-          <span
-            className={`text-xs font-medium px-2 py-0.5 rounded-full ${
-              trend === "up"
-                ? "bg-[#E8F5E9] text-[#2E7D52]"
-                : trend === "down"
-                ? "bg-[#FFF7ED] text-[#C2410C]"
-                : "bg-[#F1F5F9] text-[#64748B]"
-            }`}
-          >
-            {change}
-          </span>
-        )}
+      <div className="mt-2 flex items-baseline gap-2">
+        <span className="text-2xl font-semibold text-ink tabular-nums">{value}</span>
+        {change && <span className="text-xs text-muted">{change}</span>}
       </div>
-      {subtext && <p className="mt-1.5 text-xs text-[#64748B]">{subtext}</p>}
+      {subtext && <p className="mt-1 text-xs text-muted">{subtext}</p>}
     </div>
   );
 }

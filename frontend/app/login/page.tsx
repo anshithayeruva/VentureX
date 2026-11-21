@@ -83,10 +83,10 @@ function LoginForm() {
         <div className="text-center mb-7">
           <BrandMark size={48} className="mb-3 rounded-xl" />
           <h1 className="text-2xl font-bold text-[#0F172A] tracking-tight font-display">
-            Sign in to Venture X
+            Sign in to VentureX
           </h1>
           <p className="text-xs text-[#64748B] mt-1">
-            Access your confidential founder workspace or investor dealflow.
+            Welcome back.
           </p>
         </div>
 
@@ -116,7 +116,7 @@ function LoginForm() {
                     : "bg-[#F8FAFC] text-[#64748B] border-[#E2E8F0] hover:text-[#0F172A]"
                 }`}
               >
-                Founder Workspace
+                Founder
               </button>
               <button
                 type="button"
@@ -127,7 +127,7 @@ function LoginForm() {
                     : "bg-[#F8FAFC] text-[#64748B] border-[#E2E8F0] hover:text-[#0F172A]"
                 }`}
               >
-                Investor Portal
+                Investor
               </button>
             </div>
           </div>
@@ -175,7 +175,7 @@ function LoginForm() {
             disabled={pending}
             className="w-full mt-2 py-2.5 rounded-lg text-xs sm:text-sm font-medium text-white bg-[#1B3B6F] hover:bg-[#142C54] transition-all shadow-sm disabled:opacity-60 disabled:cursor-wait"
           >
-            {pending ? "Signing in…" : `Sign In to ${role === "FOUNDER" ? "Founder Workspace" : "Investor Portal"}`}
+            {pending ? "Signing in…" : "Sign in"}
           </button>
         </form>
 

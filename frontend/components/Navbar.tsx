@@ -1,184 +1,75 @@
 "use client";
 
-import React, { useEffect, useState } from "react";
+import React, { useState } from "react";
 import Link from "next/link";
-import { Sparkles, Menu, X, Rocket, Briefcase, Activity } from "lucide-react";
-import { api } from "@/lib/api";
+import { Menu, X } from "lucide-react";
 import { BrandMark } from "@/components/BrandMark";
+import { buttonClass } from "@/components/ui";
+
+const LINKS = [
+  { href: "/#how-it-works", label: "How it works" },
+  { href: "/#founders", label: "For founders" },
+  { href: "/#investors", label: "For investors" },
+];
 
 export function Navbar() {
-  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
-  const [apiStatus, setApiStatus] = useState<"checking" | "online" | "mock">("checking");
-
-  useEffect(() => {
-    let mounted = true;
-    api.checkHealth()
-      .then((res) => {
-        if (!mounted) return;
-        if (res.status === "healthy") {
-          setApiStatus("online");
-        } else {
-          setApiStatus("mock");
-        }
-      })
-      .catch(() => {
-        if (mounted) setApiStatus("mock");
-      });
-    return () => {
-      mounted = false;
-    };
-  }, []);
+  const [open, setOpen] = useState(false);
 
   return (
-    <header className="sticky top-0 z-50 w-full border-b border-[#E2E8F0] bg-white/95 backdrop-blur-md transition-all">
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-        <div className="flex items-center justify-between h-16">
-          {/* Logo & Brand */}
-          <div className="flex items-center gap-8">
-            <Link href="/" className="flex items-center gap-2.5 group">
-              <BrandMark size={36} className="transition-transform group-hover:scale-105" />
-              <div className="flex flex-col">
-                <span className="text-lg font-bold tracking-tight text-[#0F172A] font-display flex items-center">
-                  Venture<span className="text-[#1B3B6F] font-black">X</span>
-                </span>
-                <span className="text-[10px] text-[#64748B] font-medium tracking-wider uppercase -mt-1">
-                  AI Match & Readiness
-                </span>
-              </div>
-            </Link>
-
-            {/* Desktop Navigation Links */}
-            <nav className="hidden md:flex items-center gap-1 pl-6 border-l border-[#E2E8F0]">
-              <Link
-                href="/founder/dashboard"
-                className="flex items-center gap-1.5 px-3 py-1.5 text-xs sm:text-sm font-medium text-[#0F172A] hover:text-[#1B3B6F] hover:bg-[#F1F5F9] rounded-lg transition-colors"
-              >
-                <Rocket className="w-3.5 h-3.5 text-[#1B3B6F]" />
-                Founder Workspace
+    <header className="sticky top-0 z-50 w-full border-b border-line bg-surface/95 backdrop-blur">
+      <div className="mx-auto flex h-16 max-w-6xl items-center justify-between px-4 sm:px-6">
+        <div className="flex items-center gap-10">
+          <Link href="/" className="flex items-center gap-2">
+            <BrandMark size={30} />
+            <span className="text-base font-semibold text-ink">VentureX</span>
+          </Link>
+          <nav className="hidden items-center gap-6 md:flex">
+            {LINKS.map((l) => (
+              <Link key={l.href} href={l.href} className="text-sm text-muted transition-colors hover:text-ink">
+                {l.label}
               </Link>
-              <Link
-                href="/investor/dashboard"
-                className="flex items-center gap-1.5 px-3 py-1.5 text-xs sm:text-sm font-medium text-[#0F172A] hover:text-[#1B3B6F] hover:bg-[#F1F5F9] rounded-lg transition-colors"
-              >
-                <Briefcase className="w-3.5 h-3.5 text-[#2E7D52]" />
-                Investor Portal
-              </Link>
-              <Link
-                href="/founder/projects/new"
-                className="px-3 py-1.5 text-xs sm:text-sm font-medium text-[#64748B] hover:text-[#0F172A] hover:bg-[#F1F5F9] rounded-lg transition-colors"
-              >
-                Submit Pitch
-              </Link>
-              <Link
-                href="/investor/preferences"
-                className="px-3 py-1.5 text-xs sm:text-sm font-medium text-[#64748B] hover:text-[#0F172A] hover:bg-[#F1F5F9] rounded-lg transition-colors"
-              >
-                Match Criteria
-              </Link>
-            </nav>
-          </div>
-
-          {/* Right Action Bar: Status Pill & Auth */}
-          <div className="hidden md:flex items-center gap-3">
-            {/* Backend API live indicator */}
-            <div
-              className={`flex items-center gap-1.5 px-2.5 py-1 text-xs rounded-full border transition-all ${
-                apiStatus === "online"
-                  ? "bg-[#E8F5E9] border-[#C8E6C9] text-[#2E7D52]"
-                  : apiStatus === "checking"
-                  ? "bg-[#EBF2FA] border-[#BFD7EE] text-[#1B3B6F]"
-                  : "bg-[#F1F5F9] border-[#E2E8F0] text-[#64748B]"
-              }`}
-              title={apiStatus === "online" ? "FastAPI Backend is Online" : "Connecting to Backend / Offline Fallback Active"}
-            >
-              <span
-                className={`w-1.5 h-1.5 rounded-full ${
-                  apiStatus === "online"
-                    ? "bg-[#2E7D52]"
-                    : apiStatus === "checking"
-                    ? "bg-[#1B3B6F] animate-pulse"
-                    : "bg-[#94A3B8]"
-                }`}
-              />
-              <span className="font-mono text-[11px] font-medium">
-                {apiStatus === "online" ? "API Live" : apiStatus === "checking" ? "Connecting" : "Mock Ready"}
-              </span>
-            </div>
-
-            <Link
-              href="/login"
-              className="px-3.5 py-1.5 text-xs sm:text-sm font-medium text-[#0F172A] hover:text-[#1B3B6F] transition-colors"
-            >
-              Sign In
-            </Link>
-            <Link
-              href="/register"
-              className="px-4 py-2 text-xs sm:text-sm font-medium text-white bg-[#1B3B6F] hover:bg-[#142C54] rounded-lg shadow-sm transition-all flex items-center gap-1.5"
-            >
-              Get Started
-            </Link>
-          </div>
-
-          {/* Mobile hamburger button */}
-          <div className="flex md:hidden items-center gap-2">
-            <button
-              onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
-              className="p-2 text-[#64748B] hover:text-[#0F172A] rounded-lg hover:bg-[#F1F5F9] focus:outline-none"
-              aria-label="Toggle menu"
-            >
-              {mobileMenuOpen ? <X className="w-5 h-5" /> : <Menu className="w-5 h-5" />}
-            </button>
-          </div>
+            ))}
+          </nav>
         </div>
+
+        <div className="hidden items-center gap-2 md:flex">
+          <Link href="/login" className={buttonClass("ghost")}>
+            Sign in
+          </Link>
+          <Link href="/register" className={buttonClass("primary")}>
+            Get started
+          </Link>
+        </div>
+
+        <button
+          type="button"
+          onClick={() => setOpen(!open)}
+          className="rounded-md p-2 text-muted hover:bg-subtle hover:text-ink md:hidden"
+          aria-label={open ? "Close menu" : "Open menu"}
+          aria-expanded={open}
+        >
+          {open ? <X className="h-5 w-5" /> : <Menu className="h-5 w-5" />}
+        </button>
       </div>
 
-      {/* Mobile Menu Dropdown */}
-      {mobileMenuOpen && (
-        <div className="md:hidden border-b border-[#E2E8F0] bg-white px-4 pt-3 pb-6 space-y-2 shadow-card">
-          <Link
-            href="/founder/dashboard"
-            onClick={() => setMobileMenuOpen(false)}
-            className="flex items-center gap-2 px-3 py-2 text-sm font-medium text-[#0F172A] hover:bg-[#F1F5F9] rounded-lg"
-          >
-            <Rocket className="w-4 h-4 text-[#1B3B6F]" />
-            Founder Workspace
-          </Link>
-          <Link
-            href="/investor/dashboard"
-            onClick={() => setMobileMenuOpen(false)}
-            className="flex items-center gap-2 px-3 py-2 text-sm font-medium text-[#0F172A] hover:bg-[#F1F5F9] rounded-lg"
-          >
-            <Briefcase className="w-4 h-4 text-[#2E7D52]" />
-            Investor Portal
-          </Link>
-          <Link
-            href="/founder/projects/new"
-            onClick={() => setMobileMenuOpen(false)}
-            className="block px-3 py-2 text-sm font-medium text-[#64748B] hover:text-[#0F172A] hover:bg-[#F1F5F9] rounded-lg"
-          >
-            Submit Pitch & Project
-          </Link>
-          <Link
-            href="/investor/preferences"
-            onClick={() => setMobileMenuOpen(false)}
-            className="block px-3 py-2 text-sm font-medium text-[#64748B] hover:text-[#0F172A] hover:bg-[#F1F5F9] rounded-lg"
-          >
-            Investment Preferences
-          </Link>
-          <div className="pt-3 border-t border-[#E2E8F0] flex flex-col gap-2">
+      {open && (
+        <div className="space-y-1 border-t border-line bg-surface px-4 pb-5 pt-3 md:hidden">
+          {LINKS.map((l) => (
             <Link
-              href="/login"
-              onClick={() => setMobileMenuOpen(false)}
-              className="w-full text-center py-2 text-sm font-medium text-[#0F172A] bg-[#F1F5F9] rounded-lg"
+              key={l.href}
+              href={l.href}
+              onClick={() => setOpen(false)}
+              className="block rounded-lg px-3 py-2 text-sm text-ink-2 hover:bg-subtle"
             >
-              Sign In
+              {l.label}
             </Link>
-            <Link
-              href="/register"
-              onClick={() => setMobileMenuOpen(false)}
-              className="w-full text-center py-2 text-sm font-medium text-white bg-[#1B3B6F] hover:bg-[#142C54] rounded-lg"
-            >
-              Get Started
+          ))}
+          <div className="flex gap-2 pt-3">
+            <Link href="/login" onClick={() => setOpen(false)} className={buttonClass("secondary", "flex-1")}>
+              Sign in
+            </Link>
+            <Link href="/register" onClick={() => setOpen(false)} className={buttonClass("primary", "flex-1")}>
+              Get started
             </Link>
           </div>
         </div>

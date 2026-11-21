@@ -1,91 +1,33 @@
 "use client";
 
-import React, { useEffect, useState, use } from "react";
-import Link from "next/link";
+import React, { use, useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
-import {
-  Rocket,
-  ArrowLeft,
-  CheckCircle2,
-  DollarSign,
-  AlertCircle,
-  Cpu,
-  Layers,
-  Lock,
-} from "lucide-react";
-import { Badge } from "@/components/Badge";
+import { FileQuestion } from "lucide-react";
 import { PortalLayout } from "@/components/PortalLayout";
+import { ProjectForm } from "@/components/ProjectForm";
+import { ButtonLink, EmptyState, LoadingRows, PageHeader } from "@/components/ui";
 import { api } from "@/lib/api";
-import { Project, ProjectCreateInput } from "@/types";
+import { ProjectCreateInput } from "@/types";
 
 export default function EditProjectPage({ params }: { params: Promise<{ id: string }> }) {
-  const resolvedParams = use(params);
+  const { id } = use(params);
+  const projectId = parseInt(id, 10);
   const router = useRouter();
-  const projectId = parseInt(resolvedParams.id, 10);
 
+  const [initial, setInitial] = useState<ProjectCreateInput | null>(null);
+  const [notFound, setNotFound] = useState(false);
   const [saving, setSaving] = useState(false);
-  const [saveSuccess, setSaveSuccess] = useState(false);
-  const [saveError, setSaveError] = useState<string | null>(null);
-  const [loadState, setLoadState] = useState<"loading" | "ready" | "not_found">("loading");
-  const [formData, setFormData] = useState<ProjectCreateInput>({
-    title: "",
-    tagline: "",
-    description: "",
-    problem: "",
-    solution: "",
-    industry: "AI/ML",
-    stage: "Seed",
-    funding_required: 500000,
-    business_model: "B2B SaaS",
-    target_market: "",
-    website: "",
-    pitch_deck_url: "",
-    github_url: "",
-    demo_url: "",
-  });
-
-  const industries = [
-    "AI/ML",
-    "Healthcare & AI",
-    "ClimateTech",
-    "Cybersecurity",
-    "Fintech",
-    "Developer Tools",
-    "BioTech",
-    "Robotics",
-    "B2B SaaS",
-    "Web3 & Infrastructure",
-  ];
-
-  const stages = [
-    "Idea Phase",
-    "Prototype",
-    "MVP / Private Beta",
-    "Early Traction",
-    "Pre-seed",
-    "Seed",
-    "Series A",
-  ];
-
-  const businessModels = [
-    "B2B SaaS",
-    "Enterprise Licensing",
-    "Marketplace / Commission",
-    "Usage-Based API",
-    "Hardware + Recurring Software",
-    "D2C Subscription",
-  ];
+  const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     let active = true;
     api.getProject(projectId).then((found) => {
       if (!active) return;
       if (!found) {
-        setLoadState("not_found");
+        setNotFound(true);
         return;
       }
-      setLoadState("ready");
-      setFormData({
+      setInitial({
         title: found.title,
         tagline: found.tagline || "",
         description: found.description,
@@ -107,211 +49,44 @@ export default function EditProjectPage({ params }: { params: Promise<{ id: stri
     };
   }, [projectId]);
 
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
+  const handleSubmit = async (data: ProjectCreateInput) => {
     setSaving(true);
-    setSaveError(null);
+    setError(null);
     try {
-      await api.updateProject(projectId, formData);
-      setSaveSuccess(true);
-      setTimeout(() => router.push(`/founder/projects/${projectId}`), 1200);
+      await api.updateProject(projectId, data);
+      router.push(`/founder/projects/${projectId}`);
     } catch (err) {
-      setSaveError(err instanceof Error ? err.message : "Could not save the project.");
-    } finally {
+      setError(err instanceof Error ? err.message : "Couldn't save the project.");
       setSaving(false);
     }
   };
 
-  if (loadState !== "ready") {
-    return (
-      <PortalLayout role="FOUNDER" activeItem="projects" title="Edit Project">
-        {loadState === "loading" ? (
-          <div className="p-8 text-center text-xs text-[#64748B]">Loading project…</div>
-        ) : (
-          <div className="max-w-xl mx-auto mt-10 rounded-xl border border-[#E2E8F0] bg-white p-8 text-center space-y-3 shadow-subtle">
-          <p className="text-sm font-semibold text-[#0F172A]">Project not found</p>
-          <p className="text-xs text-[#64748B]">It may have been removed, or it isn&apos;t visible to your account.</p>
-          <Link href="/founder/projects" className="inline-block text-xs font-semibold text-[#1B3B6F] hover:underline">
-            Back to your projects
-          </Link>
-        </div>
-        )}
-      </PortalLayout>
-    );
-  }
-
   return (
-    <PortalLayout role="FOUNDER" activeItem="projects" title={`Edit ${formData.title || "Project"}`}>
-      <div className="max-w-4xl mx-auto space-y-6">
-        <Link
-          href={`/founder/projects/${projectId}`}
-          className="inline-flex items-center gap-1.5 text-xs font-semibold text-[#64748B] hover:text-[#0F172A] transition-colors"
-        >
-          <ArrowLeft className="w-3.5 h-3.5" />
-          Back to Project Overview
-        </Link>
-
-        <div className="border-b border-[#E2E8F0] pb-6">
-          <div className="flex items-center gap-2 mb-1">
-            <Badge variant="secondary">Editing Venture</Badge>
-            <span className="text-xs text-[#64748B] font-mono flex items-center gap-1">
-              <Lock className="w-3 h-3 text-[#1B3B6F]" /> ID: #{projectId}
-            </span>
-          </div>
-          <h1 className="text-2xl sm:text-3xl font-bold text-[#0F172A] font-display">
-            Edit Project Profile
-          </h1>
-          <p className="text-xs sm:text-sm text-[#64748B] mt-0.5">
-            Update your startup narrative and dealflow parameters.
-          </p>
-        </div>
-
-        {saveSuccess && (
-          <div className="p-4 rounded-xl bg-[#E8F5E9] border border-[#C8E6C9] text-[#2E7D52] text-xs flex items-center gap-2">
-            <CheckCircle2 className="w-4 h-4 text-[#2E7D52]" />
-            Changes saved successfully! Returning to project overview...
-          </div>
+    <PortalLayout role="FOUNDER" activeItem="projects" title="Edit project">
+      <div className="mx-auto max-w-3xl">
+        {notFound ? (
+          <EmptyState
+            icon={FileQuestion}
+            title="Project not found"
+            description="It may have been removed, or it isn't part of your account."
+            action={<ButtonLink href="/founder/dashboard?tab=projects">Back to projects</ButtonLink>}
+          />
+        ) : !initial ? (
+          <LoadingRows />
+        ) : (
+          <>
+            <PageHeader title={`Edit ${initial.title}`} />
+            <ProjectForm
+              mode="edit"
+              initial={initial}
+              submitting={saving}
+              error={error}
+              submitLabel="Save changes"
+              cancelHref={`/founder/projects/${projectId}`}
+              onSubmit={handleSubmit}
+            />
+          </>
         )}
-
-        <form onSubmit={handleSubmit} className="space-y-6">
-          <div className="rounded-xl border border-[#E2E8F0] bg-white p-6 space-y-4 shadow-subtle">
-            <h2 className="text-base font-bold text-[#0F172A] font-display flex items-center gap-2">
-              <Rocket className="w-4 h-4 text-[#1B3B6F]" /> Startup Identity
-            </h2>
-
-            <div>
-              <label className="block text-xs font-semibold text-[#0F172A] mb-1">
-                Startup Name <span className="text-[#1B3B6F]">*</span>
-              </label>
-              <input
-                type="text"
-                required
-                value={formData.title}
-                onChange={(e) => setFormData({ ...formData, title: e.target.value })}
-                className="w-full px-3.5 py-2.5 bg-[#FAFBFD] border border-[#E2E8F0] rounded-lg text-[#0F172A] focus:outline-none focus:border-[#1B3B6F] text-xs sm:text-sm"
-              />
-            </div>
-
-            <div>
-              <label className="block text-xs font-semibold text-[#0F172A] mb-1">Tagline</label>
-              <input
-                type="text"
-                value={formData.tagline}
-                onChange={(e) => setFormData({ ...formData, tagline: e.target.value })}
-                className="w-full px-3.5 py-2.5 bg-[#FAFBFD] border border-[#E2E8F0] rounded-lg text-[#0F172A] focus:outline-none focus:border-[#1B3B6F] text-xs sm:text-sm"
-              />
-            </div>
-
-            <div>
-              <label className="block text-xs font-semibold text-[#0F172A] mb-1">Description</label>
-              <textarea
-                rows={3}
-                value={formData.description}
-                onChange={(e) => setFormData({ ...formData, description: e.target.value })}
-                className="w-full px-3.5 py-2.5 bg-[#FAFBFD] border border-[#E2E8F0] rounded-lg text-[#0F172A] focus:outline-none focus:border-[#1B3B6F] text-xs sm:text-sm"
-              />
-            </div>
-          </div>
-
-          <div className="rounded-xl border border-[#E2E8F0] bg-white p-6 space-y-4 shadow-subtle">
-            <h2 className="text-base font-bold text-[#0F172A] font-display flex items-center gap-2">
-              <DollarSign className="w-4 h-4 text-[#2E7D52]" /> Sector & Raise
-            </h2>
-
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-              <div>
-                <label className="block text-xs font-semibold text-[#0F172A] mb-1">Industry</label>
-                <select
-                  value={formData.industry}
-                  onChange={(e) => setFormData({ ...formData, industry: e.target.value })}
-                  className="w-full px-3 py-2 bg-[#FAFBFD] border border-[#E2E8F0] rounded-lg text-[#0F172A] text-xs sm:text-sm"
-                >
-                  {industries.map((ind) => (
-                    <option key={ind} value={ind}>{ind}</option>
-                  ))}
-                </select>
-              </div>
-
-              <div>
-                <label className="block text-xs font-semibold text-[#0F172A] mb-1">Stage</label>
-                <select
-                  value={formData.stage}
-                  onChange={(e) => setFormData({ ...formData, stage: e.target.value })}
-                  className="w-full px-3 py-2 bg-[#FAFBFD] border border-[#E2E8F0] rounded-lg text-[#0F172A] text-xs sm:text-sm"
-                >
-                  {stages.map((stg) => (
-                    <option key={stg} value={stg}>{stg}</option>
-                  ))}
-                </select>
-              </div>
-
-              <div>
-                <label className="block text-xs font-semibold text-[#0F172A] mb-1">Target Raise (USD)</label>
-                <input
-                  type="number"
-                  value={formData.funding_required}
-                  onChange={(e) => setFormData({ ...formData, funding_required: parseFloat(e.target.value) || 0 })}
-                  className="w-full px-3.5 py-2 bg-[#FAFBFD] border border-[#E2E8F0] rounded-lg text-[#0F172A] text-xs sm:text-sm"
-                />
-              </div>
-            </div>
-
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 pt-2">
-              <div>
-                <label className="block text-xs font-semibold text-[#0F172A] mb-1">Website</label>
-                <input
-                  type="url"
-                  placeholder="https://example.com"
-                  value={formData.website}
-                  onChange={(e) => setFormData({ ...formData, website: e.target.value })}
-                  className="w-full px-3.5 py-2 bg-[#FAFBFD] border border-[#E2E8F0] rounded-lg text-[#0F172A] text-xs sm:text-sm"
-                />
-              </div>
-              <div>
-                <label className="block text-xs font-semibold text-[#0F172A] mb-1">GitHub Repository</label>
-                <input
-                  type="url"
-                  placeholder="https://github.com/org/repo"
-                  value={formData.github_url}
-                  onChange={(e) => setFormData({ ...formData, github_url: e.target.value })}
-                  className="w-full px-3.5 py-2 bg-[#FAFBFD] border border-[#E2E8F0] rounded-lg text-[#0F172A] text-xs sm:text-sm"
-                />
-              </div>
-              <div>
-                <label className="block text-xs font-semibold text-[#0F172A] mb-1">Demo / Product Link</label>
-                <input
-                  type="url"
-                  placeholder="https://app.example.com"
-                  value={formData.demo_url}
-                  onChange={(e) => setFormData({ ...formData, demo_url: e.target.value })}
-                  className="w-full px-3.5 py-2 bg-[#FAFBFD] border border-[#E2E8F0] rounded-lg text-[#0F172A] text-xs sm:text-sm"
-                />
-              </div>
-            </div>
-          </div>
-
-          {saveError && (
-            <p role="alert" className="text-xs text-[#B91C1C] bg-[#FEF2F2] border border-[#FECACA] rounded-lg px-3 py-2">
-              {saveError}
-            </p>
-          )}
-
-          <div className="flex items-center justify-end gap-3 pt-4 border-t border-[#E2E8F0]">
-            <Link
-              href={`/founder/projects/${projectId}`}
-              className="px-4 py-2 text-xs sm:text-sm font-medium text-[#64748B] hover:text-[#0F172A]"
-            >
-              Cancel
-            </Link>
-            <button
-              type="submit"
-              disabled={saving}
-              className="px-6 py-2.5 rounded-lg text-xs sm:text-sm font-medium text-white bg-[#1B3B6F] hover:bg-[#142C54] shadow-sm transition-all"
-            >
-              {saving ? "Saving Changes..." : "Save Changes"}
-            </button>
-          </div>
-        </form>
       </div>
     </PortalLayout>
   );

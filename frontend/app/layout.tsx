@@ -3,9 +3,9 @@ import "./globals.css";
 import { AppShell } from "@/components/AppShell";
 
 export const metadata: Metadata = {
-  title: "VentureX — AI-Powered Founder & Investor Matching Platform",
+  title: "VentureX — Get ready to raise",
   description:
-    "Intelligently connect early-stage startup founders with relevant investors, syndicates, and capital opportunities via explainable AI readiness analysis and vector embeddings.",
+    "Private AI feedback on your pitch, and introductions to investors who fit.",
 };
 
 export default function RootLayout({
@@ -27,11 +27,11 @@ export default function RootLayout({
           crossOrigin="anonymous"
         />
         <link
-          href="https://fonts.googleapis.com/css2?family=Inter:wght@100..900&family=Plus+Jakarta+Sans:wght@200..800&display=swap"
+          href="https://fonts.googleapis.com/css2?family=Inter:wght@400..700&display=swap"
           rel="stylesheet"
         />
       </head>
-      <body className="min-h-screen bg-[#F8FAFC] text-[#0F172A] flex flex-col antialiased selection:bg-[#EBF2FA] selection:text-[#1B3B6F]">
+      <body className="min-h-screen bg-canvas text-ink flex flex-col antialiased selection:bg-accent-soft selection:text-accent">
         <AppShell>{children}</AppShell>
       </body>
     </html>
