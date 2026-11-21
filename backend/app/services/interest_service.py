@@ -39,8 +39,14 @@ class InterestService:
         investor_firm = investor.get("firm") or investor.get("account_org") or "Independent investor"
 
         # Lookup founder details
-        founder = await pg.fetch_one("SELECT name FROM founder_profiles WHERE user_id = %s", [founder_id])
-        founder_name = (founder or {}).get("name") or "Founding Team"
+        founder = await pg.fetch_one(
+            "SELECT p.name, u.name AS account_name FROM app_users u "
+            "FULL OUTER JOIN founder_profiles p ON p.user_id = u.id "
+            "WHERE u.id = %s OR p.user_id = %s LIMIT 1",
+            [founder_id, founder_id],
+        ) or {}
+        founder_name = founder.get("name") or founder.get("account_name") or "Founding Team"
+        emails = await cls._account_emails([investor_id, founder_id])
 
         int_id = f"intro-{canonical_project_id}-{investor_id}"
 
@@ -60,10 +66,10 @@ class InterestService:
             "investor_id": investor_id,
             "investor_name": investor_name,
             "investor_firm": investor_firm,
-            "investor_email": f"{investor_id}@investors.venturex.io",
+            "investor_email": emails.get(investor_id),
             "founder_id": founder_id,
             "founder_name": founder_name,
-            "founder_email": f"{founder_id}@startups.venturex.io",
+            "founder_email": emails.get(founder_id),
             "status": "pending",
             "message": message or "Introduction requested for confidential data room review.",
             "created_at": existing.get("created_at", now) if existing else now,
@@ -93,8 +99,10 @@ class InterestService:
         except Exception as e:
             logger.warning("Failed to dispatch founder intro notification: %s", e)
 
-        # Dispatch transactional email alert to founder
+        # Dispatch transactional email alert to founder (only to a real address)
         try:
+            if not doc["founder_email"]:
+                raise ValueError("founder has no email on file")
             from app.services.email_service import EmailService
             EmailService.send_intro_request_email(
                 founder_email=doc["founder_email"],
@@ -138,24 +146,34 @@ class InterestService:
         founder_name = current.get("founder_name", "Founder")
 
         if clean_status == "accepted":
-            # Lookup latest project deck URL if available
-            p_doc = await pg.fetch_one("SELECT pitch_deck_url FROM projects WHERE id = %s", [project_id])
-            deck_url = (p_doc.get("pitch_deck_url") if p_doc else None) or "https://neuropulse.demo/deck.pdf"
+            # Only details that really exist: the founder's account email, their profile
+            # links and the project's own deck. Nothing is invented.
+            founder_id = current.get("founder_id")
+            p_doc = await pg.fetch_one(
+                "SELECT pitch_deck_url FROM projects WHERE id = %s", [project_id]
+            ) or {}
+            profile = await pg.fetch_one(
+                "SELECT linkedin, website FROM founder_profiles WHERE user_id = %s", [founder_id]
+            ) or {}
+            emails = await cls._account_emails([founder_id, investor_id])
+            founder_email = emails.get(founder_id) or current.get("founder_email")
+            if founder_email:
+                update_fields["founder_email"] = founder_email
+            if emails.get(investor_id):
+                update_fields["investor_email"] = emails[investor_id]
 
             deal_room = {
                 "unlocked": True,
                 "unlocked_at": now.isoformat(),
                 "founder_name": founder_name,
-                "founder_email": current.get("founder_email") or "founder@venturex.demo",
-                "founder_phone": "+1 (415) 890-2341",
-                "founder_linkedin": "https://linkedin.com/in/founder",
-                "direct_messaging_channel": f"channel-dealroom-{current.get('id', interest_id)}",
-                "meeting_scheduler_url": "https://cal.com/founder/intro-30min",
-                "data_room_url": f"https://dataroom.venturex.io/room/{project_id}?access=granted",
-                "pitch_deck_url": deck_url,
-                "financial_model_url": f"https://dataroom.venturex.io/models/financial_model_{project_id}.xlsx",
-                "cap_table_verified": True,
+                "founder_email": founder_email,
+                "founder_linkedin": profile.get("linkedin") or None,
+                "founder_website": profile.get("website") or None,
+                "pitch_deck_url": p_doc.get("pitch_deck_url") or None,
             }
+            # Keep the room id if a room was already linked to this intro.
+            if (current.get("deal_room") or {}).get("room_id"):
+                deal_room["room_id"] = current["deal_room"]["room_id"]
             update_fields["deal_room"] = deal_room
 
             # Add notification for investor
@@ -165,7 +183,7 @@ class InterestService:
                     target_role="INVESTOR",
                     user_id=investor_id,
                     title=f"🎉 Deal Room Unlocked: {project_title}",
-                    desc=f"{founder_name} accepted your intro request! Verified cap table, data room, and direct contact details are now unlocked.",
+                    desc=f"{founder_name} accepted your intro request. Your private deal room and the founder's contact details are now open.",
                     badge="Deal Room",
                     badge_variant="success",
                     link="/investor/dashboard?tab=interests",
@@ -175,9 +193,12 @@ class InterestService:
 
             # Dispatch transactional email alert to investor
             try:
+                investor_email = update_fields.get("investor_email") or current.get("investor_email")
+                if not investor_email:
+                    raise ValueError("investor has no email on file")
                 from app.services.email_service import EmailService
                 EmailService.send_dealroom_unlocked_email(
-                    investor_email=current.get("investor_email") or f"{investor_id}@investors.venturex.io",
+                    investor_email=investor_email,
                     investor_name=investor_name,
                     founder_name=founder_name,
                     project_title=project_title,
@@ -249,6 +270,16 @@ class InterestService:
                 doc["investor_firm"] = inv.get("firm") or doc.get("investor_firm")
 
         return docs
+
+    @staticmethod
+    async def _account_emails(user_ids: List[Optional[str]]) -> Dict[str, str]:
+        """Sign-in emails for the given users (from app_users); unknown users are left out."""
+        ids = [u for u in user_ids if u]
+        if not ids:
+            return {}
+        placeholders = ", ".join(["%s"] * len(ids))
+        rows = await pg.fetch_all(f"SELECT id, email FROM app_users WHERE id IN ({placeholders})", ids)
+        return {r["id"]: r["email"] for r in rows if r.get("email")}
 
     @classmethod
     async def get_by_id(cls, interest_id: Union[int, str]) -> Optional[Dict[str, Any]]:

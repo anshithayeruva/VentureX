@@ -123,7 +123,7 @@ export default function HomePage() {
               <span className="w-3 h-3 rounded-full bg-[#182C4C]" />
               <span className="w-3 h-3 rounded-full bg-[#182C4C]" />
               <span className="w-3 h-3 rounded-full bg-[#182C4C]" />
-              <span className="ml-3 text-xs font-mono text-[#8DA0B5]">venturex.platform/founder/dashboard</span>
+              <span className="ml-3 text-xs font-mono text-[#8DA0B5]">Example founder dashboard (sample data)</span>
             </div>
             <div className="flex items-center gap-2">
               <span className="text-[11px] px-2 py-0.5 rounded bg-[#182C4C] text-[#38BDF8] border border-[#223E68] font-mono">
@@ -224,32 +224,36 @@ export default function HomePage() {
       <section className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
           <StatCard
-            label="Projects Evaluated"
-            value="340+"
-            change="+18% this month"
-            icon={Rocket}
-            subtext="Pre-seed to Series A startups"
-          />
-          <StatCard
-            label="Verified Investors"
-            value="185"
-            change="Active Mandates"
-            icon={Briefcase}
-            subtext="Angels, VCs & Syndicates"
-          />
-          <StatCard
-            label="Average Match Accuracy"
-            value="94.2%"
-            change="Explainable AI"
+            label="Readiness Analysis"
+            value="AI"
+            change="Gemini or Claude"
+            trend="neutral"
             icon={Sparkles}
-            subtext="Based on thesis & stage alignment"
+            subtext="Reads your deck, documents and public GitHub repo"
           />
           <StatCard
-            label="Target Raise Facilitated"
-            value="$48M"
-            change="Combined Pipeline"
+            label="Investor Matching"
+            value="Explained"
+            change="Every match"
+            trend="neutral"
+            icon={Briefcase}
+            subtext="Each match shows why: industry, stage and check size"
+          />
+          <StatCard
+            label="Founder Control"
+            value="Private"
+            change="Until you publish"
+            trend="neutral"
+            icon={Rocket}
+            subtext="Readiness gaps stay visible only to you"
+          />
+          <StatCard
+            label="Deal Rooms"
+            value="1:1"
+            change="Participants only"
+            trend="neutral"
             icon={TrendingUp}
-            subtext="Across DeepTech, SaaS & Bio"
+            subtext="Opened when a founder accepts an intro"
           />
         </div>
       </section>

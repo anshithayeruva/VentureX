@@ -10,7 +10,7 @@ import {
   Send,
   Paperclip,
   Download,
-  Calendar,
+  Mail,
   CheckCircle2,
   Clock,
   Building2,
@@ -404,6 +404,7 @@ function DealRoomDetailContent({ params }: PageProps) {
 
   const counterpartyName = role === "FOUNDER" ? room.investor_name : room.founder_name;
   const counterpartyRole = role === "FOUNDER" ? "Investor" : "Founder";
+  const counterpartyEmail = role === "FOUNDER" ? room.investor_email : room.founder_email;
   const counterpartyFirm =
     role === "FOUNDER" ? room.investor_firm || "Venture Capital" : room.founder_company || "Startup Founder";
 
@@ -499,7 +500,7 @@ function DealRoomDetailContent({ params }: PageProps) {
               onClick={handleExportPdf}
               disabled={exportingPdf}
               className="py-1.5 px-3 rounded-lg bg-[#1B3B6F] text-white text-xs font-semibold hover:bg-[#142C54] transition-colors flex items-center gap-1.5 shadow-subtle"
-              title="Download tamper-evident legal audit closing certificate PDF"
+              title="Download the tamper-evident audit transcript (PDF)"
             >
               <Download className="w-3.5 h-3.5 text-sky-300" />
               {exportingPdf ? "Generating PDF..." : "Export Legal PDF"}
@@ -572,7 +573,7 @@ function DealRoomDetailContent({ params }: PageProps) {
             <div className="flex items-center justify-between mb-3">
               <span className="text-[10px] font-bold uppercase tracking-wider text-[#64748B] flex items-center gap-1.5">
                 <Lock className="w-3.5 h-3.5 text-[#1B3B6F]" />
-                Confidentiality Escrow
+                Confidentiality
               </span>
               {room.nda_signed ? (
                 <Badge variant="success">NDA Executed</Badge>
@@ -642,7 +643,7 @@ function DealRoomDetailContent({ params }: PageProps) {
                       <div className="truncate">
                         <div className="font-semibold text-[#0F172A] truncate">{doc.name}</div>
                         <div className="text-[10px] text-[#64748B] uppercase tracking-wider">
-                          {doc.type.replace("_", " ")} • {doc.size_kb ? `${doc.size_kb} KB` : "1.2 MB"}
+                          {doc.type.replace("_", " ")} • {doc.size_kb ? `${doc.size_kb} KB` : "Link"}
                         </div>
                       </div>
                     </div>
@@ -662,24 +663,24 @@ function DealRoomDetailContent({ params }: PageProps) {
             </div>
           </div>
 
-          {/* Quick Schedule Intro Call */}
-          <div className="rounded-xl border border-[#E2E8F0] bg-white p-4 shadow-subtle space-y-2 text-xs">
-            <span className="text-[10px] font-bold uppercase tracking-wider text-[#64748B] block">
-              Meeting Scheduler
-            </span>
-            <p className="text-[#64748B]">
-              Ready for a formal pitch or technical deep-dive?
-            </p>
-            <a
-              href="https://cal.com/alexrivers/seed-intro-30min"
-              target="_blank"
-              rel="noopener noreferrer"
-              className="py-2 px-3 rounded-lg border border-[#CBD5E1] hover:bg-[#F8FAFC] text-[#0F172A] font-semibold flex items-center justify-center gap-1.5 transition-colors w-full"
-            >
-              <Calendar className="w-3.5 h-3.5 text-[#1B3B6F]" />
-              Schedule 30-Min Diligence Call
-            </a>
-          </div>
+          {/* Direct contact: the other party's real sign-in email, when on file */}
+          {counterpartyEmail && (
+            <div className="rounded-xl border border-[#E2E8F0] bg-white p-4 shadow-subtle space-y-2 text-xs">
+              <span className="text-[10px] font-bold uppercase tracking-wider text-[#64748B] block">
+                Direct Contact
+              </span>
+              <p className="text-[#64748B]">
+                Want to set up a call? Email {counterpartyName || `the ${counterpartyRole.toLowerCase()}`} directly.
+              </p>
+              <a
+                href={`mailto:${counterpartyEmail}`}
+                className="py-2 px-3 rounded-lg border border-[#CBD5E1] hover:bg-[#F8FAFC] text-[#0F172A] font-semibold flex items-center justify-center gap-1.5 transition-colors w-full truncate"
+              >
+                <Mail className="w-3.5 h-3.5 text-[#1B3B6F] shrink-0" />
+                <span className="truncate">{counterpartyEmail}</span>
+              </a>
+            </div>
+          )}
         </aside>
 
         {/* RIGHT COLUMN: Full-Fledged Direct Conversation Thread (8 cols) */}
@@ -970,7 +971,7 @@ function DealRoomDetailContent({ params }: PageProps) {
                   required
                   value={newDocUrl}
                   onChange={(e) => setNewDocUrl(e.target.value)}
-                  placeholder="https://dataroom.venturex.io/... or uploaded path"
+                  placeholder="https://… link to the file (Drive, Dropbox, DocSend…)"
                   className="w-full p-2.5 bg-[#F8FAFC] border border-[#E2E8F0] rounded-lg font-mono text-[11px]"
                 />
               </div>
@@ -987,7 +988,7 @@ function DealRoomDetailContent({ params }: PageProps) {
                   type="submit"
                   className="px-4 py-2 rounded-lg bg-[#1B3B6F] text-white font-semibold shadow-subtle"
                 >
-                  Share & Record in Escrow
+                  Share & Record in Room
                 </button>
               </div>
             </form>

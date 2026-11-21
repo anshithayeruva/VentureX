@@ -32,3 +32,16 @@ def client():
     from starlette.testclient import TestClient
     with TestClient(app) as test_client:
         yield test_client
+        # Tests run against the real database: remove what the test founder created.
+        test_client.portal.call(_remove_test_founder_data)
+
+
+async def _remove_test_founder_data():
+    from app.database import postgres as pg
+
+    owned = "SELECT id FROM projects WHERE founder_id = %s"
+    for table in ("matches", "project_interests"):
+        await pg.execute(f"DELETE FROM {table} WHERE project_id IN ({owned})", [TEST_FOUNDER.id])
+    await pg.execute("DELETE FROM notifications WHERE user_id = %s", [TEST_FOUNDER.id])
+    # project_documents and project_analyses go with their project (ON DELETE CASCADE).
+    await pg.execute("DELETE FROM projects WHERE founder_id = %s", [TEST_FOUNDER.id])

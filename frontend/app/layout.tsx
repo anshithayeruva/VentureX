@@ -3,7 +3,7 @@ import "./globals.css";
 import { AppShell } from "@/components/AppShell";
 
 export const metadata: Metadata = {
-  title: "Ventre X — AI-Powered Founder & Investor Matching Platform",
+  title: "VentureX — AI-Powered Founder & Investor Matching Platform",
   description:
     "Intelligently connect early-stage startup founders with relevant investors, syndicates, and capital opportunities via explainable AI readiness analysis and vector embeddings.",
 };

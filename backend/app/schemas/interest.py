@@ -19,14 +19,10 @@ class DealRoomDetails(BaseModel):
     unlocked_at: Optional[str] = None
     founder_name: Optional[str] = None
     founder_email: Optional[str] = None
-    founder_phone: Optional[str] = None
     founder_linkedin: Optional[str] = None
-    direct_messaging_channel: Optional[str] = None
-    meeting_scheduler_url: Optional[str] = None
-    data_room_url: Optional[str] = None
+    founder_website: Optional[str] = None
     pitch_deck_url: Optional[str] = None
-    financial_model_url: Optional[str] = None
-    cap_table_verified: bool = True
+    room_id: Optional[str] = None
 
 
 class ProjectInterestResponse(BaseModel):

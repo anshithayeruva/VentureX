@@ -58,6 +58,11 @@ async def list_interests(
         founder_id=founder_id,
         status=status,
     )
+    if user is not None and user.is_investor:
+        # The founder's contact details are only shared once they accept the intro.
+        for item in interests:
+            if item.get("status") != "accepted":
+                item["founder_email"] = None
     return interests
 
 

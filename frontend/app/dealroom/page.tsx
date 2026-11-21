@@ -104,7 +104,7 @@ function DealRoomsContent() {
                 </span>
               </div>
               <p className="text-xs text-[#64748B]">
-                Confidential direct messaging and diligence data escrow between matched founders and investors.
+                Private messaging and document sharing between matched founders and investors.
               </p>
             </div>
           </div>
@@ -154,19 +154,19 @@ function DealRoomsContent() {
             </div>
             <div>
               <div className="text-sm font-bold flex items-center gap-2">
-                SEC & FINRA Regulatory Compliance Standard Enabled
+                Private, Tamper-Evident Deal Rooms
                 <Badge variant="outline" className="border-white/30 text-white bg-white/10 text-[10px]">
                   SHA-256 Chained
                 </Badge>
               </div>
               <p className="text-xs text-white/80 mt-1 max-w-2xl leading-relaxed">
-                All communications, document disclosures, and term sheet negotiations within VentureX Deal Rooms are
-                permanently recorded with cryptographic audit hashes. Transcripts can be exported at any time with legal verification certificates.
+                Only the founder and investor in a room can open it. Every message is linked to the one before it
+                with a SHA-256 hash, so any later change to the conversation history can be detected.
               </p>
             </div>
           </div>
           <div className="text-xs text-white/70 bg-black/20 px-3.5 py-2 rounded-lg border border-white/10 whitespace-nowrap">
-            🔒 End-to-End Escrow Enforced
+            🔒 Participants only
           </div>
         </div>
 

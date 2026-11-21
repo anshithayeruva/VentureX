@@ -68,12 +68,12 @@ function FounderDashboardContent() {
 
 
   const [founderProfile, setFounderProfile] = useState({
-    name: "Alex Rivers",
-    company: "NeuroPulse AI",
-    bio: "Founding engineer & biomedical researcher building ultra-low-latency edge diagnostic hardware for cardiology.",
-    location: "San Francisco, CA",
-    linkedin: "https://linkedin.com/in/alexrivers",
-    website: "https://neuropulse.demo",
+    name: "",
+    company: "",
+    bio: "",
+    location: "",
+    linkedin: "",
+    website: "",
   });
   const [saveSuccess, setSaveSuccess] = useState(false);
   const [settingsSuccess, setSettingsSuccess] = useState(false);
@@ -116,12 +116,12 @@ function FounderDashboardContent() {
       if (mounted && data) {
         setFounderProfile((prev) => ({
           ...prev,
-          name: data.name || prev.name,
-          company: data.company || prev.company,
-          bio: data.bio || prev.bio,
-          location: data.location || prev.location,
-          linkedin: data.linkedin || prev.linkedin,
-          website: data.website || prev.website,
+          name: data.name || "",
+          company: data.company || "",
+          bio: data.bio || "",
+          location: data.location || "",
+          linkedin: data.linkedin || "",
+          website: data.website || "",
         }));
       }
     });
@@ -951,9 +951,6 @@ function FounderDashboardContent() {
                             <h4 className="text-xs sm:text-sm font-bold text-[#1E5236] font-display">
                               Confidential Deal Room Active
                             </h4>
-                            <span className="px-2 py-0.5 rounded-full text-[10px] font-semibold bg-[#2E7D52] text-white">
-                              Cap Table Verified
-                            </span>
                           </div>
                           <span className="text-[11px] text-[#2E7D52] font-mono">Status: Connected</span>
                         </div>
@@ -965,31 +962,18 @@ function FounderDashboardContent() {
                         )}
 
                         <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5 pt-1">
-                          <a
-                            href={`https://dataroom.venturex.io/room/${item.project_id}?access=granted`}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            className="p-3 bg-white border border-[#C8E6C9] hover:border-[#2E7D52] rounded-lg text-xs font-medium text-[#0F172A] transition-all flex items-center justify-between shadow-subtle group"
-                          >
-                            <span className="flex items-center gap-2">
-                              <FileText className="w-4 h-4 text-[#2E7D52]" />
-                              Data Room & Cap Table
-                            </span>
-                            <ExternalLink className="w-3.5 h-3.5 text-[#94A3B8] group-hover:text-[#2E7D52]" />
-                          </a>
-
-                          <a
-                            href="https://cal.com/alexrivers/seed-intro-30min"
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            className="p-3 bg-white border border-[#C8E6C9] hover:border-[#2E7D52] rounded-lg text-xs font-medium text-[#0F172A] transition-all flex items-center justify-between shadow-subtle group"
-                          >
-                            <span className="flex items-center gap-2">
-                              <Calendar className="w-4 h-4 text-[#2E7D52]" />
-                              Schedule Partner Call
-                            </span>
-                            <ExternalLink className="w-3.5 h-3.5 text-[#94A3B8] group-hover:text-[#2E7D52]" />
-                          </a>
+                          {item.investor_email && (
+                            <a
+                              href={`mailto:${item.investor_email}`}
+                              className="p-3 bg-white border border-[#C8E6C9] hover:border-[#2E7D52] rounded-lg text-xs font-medium text-[#0F172A] transition-all flex items-center justify-between shadow-subtle group"
+                            >
+                              <span className="flex items-center gap-2 min-w-0">
+                                <Mail className="w-4 h-4 text-[#2E7D52] shrink-0" />
+                                <span className="truncate">Email {item.investor_name || "the investor"}</span>
+                              </span>
+                              <ExternalLink className="w-3.5 h-3.5 text-[#94A3B8] group-hover:text-[#2E7D52] shrink-0" />
+                            </a>
+                          )}
 
                           <Link
                             href={item.deal_room?.room_id ? `/dealroom/${item.deal_room.room_id}` : "/dealroom"}
