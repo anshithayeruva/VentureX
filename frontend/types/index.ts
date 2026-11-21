@@ -181,14 +181,9 @@ export interface DealRoomDetails {
   unlocked_at?: string;
   founder_name?: string;
   founder_email?: string;
-  founder_phone?: string;
-  founder_linkedin?: string;
-  direct_messaging_channel?: string;
-  meeting_scheduler_url?: string;
-  data_room_url?: string;
-  pitch_deck_url?: string;
-  financial_model_url?: string;
-  cap_table_verified?: boolean;
+  founder_linkedin?: string | null;
+  founder_website?: string | null;
+  pitch_deck_url?: string | null;
   /** Set when the founder accepts the intro and the deal room is opened. */
   room_id?: string;
 }

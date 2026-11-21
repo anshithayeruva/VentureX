@@ -613,14 +613,16 @@ function InvestorDashboardContent() {
                             <h4 className="text-xs sm:text-sm font-bold text-[#1E5236] font-display">
                               Confidential Deal Room Unlocked
                             </h4>
-                            <span className="px-2 py-0.5 rounded-full text-[10px] font-semibold bg-[#2E7D52] text-white">
-                              Cap Table Verified
-                            </span>
                           </div>
-                          <span className="text-xs text-[#2E7D52] font-semibold flex items-center gap-1">
-                            <Mail className="w-3.5 h-3.5" />
-                            {interest.founder_email || "founder@venturex.demo"}
-                          </span>
+                          {interest.founder_email && (
+                            <a
+                              href={`mailto:${interest.founder_email}`}
+                              className="text-xs text-[#2E7D52] font-semibold flex items-center gap-1 hover:underline"
+                            >
+                              <Mail className="w-3.5 h-3.5" />
+                              {interest.founder_email}
+                            </a>
+                          )}
                         </div>
 
                         {interest.response_note && (
@@ -630,31 +632,48 @@ function InvestorDashboardContent() {
                         )}
 
                         <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5 pt-1">
-                          <a
-                            href={`https://dataroom.venturex.io/room/${interest.project_id}?access=granted`}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            className="p-3 bg-white border border-[#C8E6C9] hover:border-[#2E7D52] rounded-lg text-xs font-medium text-[#0F172A] transition-all flex items-center justify-between shadow-subtle group"
-                          >
-                            <span className="flex items-center gap-2">
-                              <FileText className="w-4 h-4 text-[#2E7D52]" />
-                              Data Room & Cap Table
-                            </span>
-                            <ExternalLink className="w-3.5 h-3.5 text-[#94A3B8] group-hover:text-[#2E7D52]" />
-                          </a>
-
-                          <a
-                            href="https://cal.com/alexrivers/seed-intro-30min"
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            className="p-3 bg-white border border-[#C8E6C9] hover:border-[#2E7D52] rounded-lg text-xs font-medium text-[#0F172A] transition-all flex items-center justify-between shadow-subtle group"
-                          >
-                            <span className="flex items-center gap-2">
-                              <Calendar className="w-4 h-4 text-[#2E7D52]" />
-                              Schedule Partner Call
-                            </span>
-                            <ExternalLink className="w-3.5 h-3.5 text-[#94A3B8] group-hover:text-[#2E7D52]" />
-                          </a>
+                          {interest.deal_room?.pitch_deck_url && (
+                            <a
+                              href={interest.deal_room?.pitch_deck_url ?? undefined}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="p-3 bg-white border border-[#C8E6C9] hover:border-[#2E7D52] rounded-lg text-xs font-medium text-[#0F172A] transition-all flex items-center justify-between shadow-subtle group"
+                            >
+                              <span className="flex items-center gap-2 min-w-0">
+                                <FileText className="w-4 h-4 text-[#2E7D52] shrink-0" />
+                                <span className="truncate">Pitch Deck</span>
+                              </span>
+                              <ExternalLink className="w-3.5 h-3.5 text-[#94A3B8] group-hover:text-[#2E7D52] shrink-0" />
+                            </a>
+                          )}
+                          {interest.deal_room?.founder_linkedin && (
+                            <a
+                              href={interest.deal_room?.founder_linkedin ?? undefined}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="p-3 bg-white border border-[#C8E6C9] hover:border-[#2E7D52] rounded-lg text-xs font-medium text-[#0F172A] transition-all flex items-center justify-between shadow-subtle group"
+                            >
+                              <span className="flex items-center gap-2 min-w-0">
+                                <User className="w-4 h-4 text-[#2E7D52] shrink-0" />
+                                <span className="truncate">Founder LinkedIn</span>
+                              </span>
+                              <ExternalLink className="w-3.5 h-3.5 text-[#94A3B8] group-hover:text-[#2E7D52] shrink-0" />
+                            </a>
+                          )}
+                          {interest.deal_room?.founder_website && (
+                            <a
+                              href={interest.deal_room?.founder_website ?? undefined}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="p-3 bg-white border border-[#C8E6C9] hover:border-[#2E7D52] rounded-lg text-xs font-medium text-[#0F172A] transition-all flex items-center justify-between shadow-subtle group"
+                            >
+                              <span className="flex items-center gap-2 min-w-0">
+                                <ArrowUpRight className="w-4 h-4 text-[#2E7D52] shrink-0" />
+                                <span className="truncate">Company Website</span>
+                              </span>
+                              <ExternalLink className="w-3.5 h-3.5 text-[#94A3B8] group-hover:text-[#2E7D52] shrink-0" />
+                            </a>
+                          )}
 
                           <Link
                             href={interest.deal_room?.room_id ? `/dealroom/${interest.deal_room.room_id}` : "/dealroom"}
