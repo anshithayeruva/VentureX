@@ -26,6 +26,14 @@ def signed_in_founder():
     app.dependency_overrides.pop(get_current_user, None)
 
 
+@pytest.fixture(autouse=True)
+def fresh_rate_limits():
+    """Rate-limit counts live in memory; start every test from zero."""
+    from app.core import rate_limit
+    rate_limit.reset()
+    yield
+
+
 @pytest.fixture(scope="module")
 def client():
     """App client with lifespan (opens the Neon transport, applies schema, seeds demo data)."""

@@ -2,6 +2,7 @@ import logging
 from typing import List, Optional
 from fastapi import APIRouter, Depends, HTTPException, status, Query
 from app.core.auth import CurrentUser, get_current_user, require_founder, require_investor, require_user
+from app.core.rate_limit import rate_limit
 from app.schemas.dealroom import DealRoomCreateInput
 from app.services.deal_room_service import DealRoomService
 from app.schemas.interest import (
@@ -16,7 +17,8 @@ logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/interests", tags=["Interests & Introductions"])
 
 
-@router.post("", response_model=ProjectInterestResponse, status_code=status.HTTP_201_CREATED)
+@router.post("", response_model=ProjectInterestResponse, status_code=status.HTTP_201_CREATED,
+             dependencies=[Depends(rate_limit("intro_request", 30, 3600))])
 async def express_interest(
     interest_in: ProjectInterestCreate,
     user: CurrentUser = Depends(require_investor),
@@ -35,7 +37,7 @@ async def express_interest(
         logger.error("Failed to record interest: %s", e)
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Could not record interest: {str(e)}",
+            detail="Could not record interest. Please try again.",
         )
 
 

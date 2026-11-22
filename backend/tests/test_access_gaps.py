@@ -117,6 +117,8 @@ def test_drafts_are_not_matched_or_announced(client, as_user, clean):
     assert _match_count(client, pid) == 0
     assert _draft_notifications(client) == 0
     as_user(None)
+    assert client.get("/api/matches", params={"project_id": pid}).status_code == 401
+    as_user(INVESTOR)
     assert client.get("/api/matches", params={"project_id": pid}).json() == []
 
     # Publishing makes it matchable...

@@ -4,7 +4,7 @@ import React, { useEffect, useState } from "react";
 import { Check, CheckCircle2 } from "lucide-react";
 import { PortalLayout } from "@/components/PortalLayout";
 import { BUSINESS_MODELS, INDUSTRIES, STAGES } from "@/components/ProjectForm";
-import { Card, Field, LoadingRows, PageHeader, buttonClass, cx, inputClass } from "@/components/ui";
+import { Card, EmptyState, Field, LoadingRows, PageHeader, buttonClass, cx, inputClass } from "@/components/ui";
 import { api } from "@/lib/api";
 import { InvestorPreference } from "@/types";
 
@@ -26,10 +26,15 @@ export default function InvestorPreferencesPage() {
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [loadFailed, setLoadFailed] = useState(false);
 
   useEffect(() => {
     let mounted = true;
-    api.getInvestorPreferences().then((data) => mounted && setPrefs(data));
+    api.getInvestorPreferences().then((data) => {
+      if (!mounted) return;
+      setPrefs(data);
+      setLoadFailed(data === null);
+    });
     return () => {
       mounted = false;
     };
@@ -69,7 +74,12 @@ export default function InvestorPreferencesPage() {
           title="Investment criteria"
           description="Tell us what you invest in. We match you with published startups that fit."
         />
-        {!prefs ? (
+        {loadFailed ? (
+          <EmptyState
+            title="Couldn't load your criteria"
+            description="Check your connection and refresh the page. Nothing has been changed."
+          />
+        ) : !prefs ? (
           <LoadingRows />
         ) : (
           <form onSubmit={save} className="space-y-6">

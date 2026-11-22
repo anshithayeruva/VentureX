@@ -1,7 +1,8 @@
 import logging
 from typing import List, Optional
 from fastapi import APIRouter, Depends, File, Form, HTTPException, status, Query, UploadFile
-from app.core.auth import CurrentUser, get_current_user, require_founder
+from app.core.auth import CurrentUser, get_current_user, require_founder, require_user
+from app.core.rate_limit import rate_limit
 from fastapi.responses import FileResponse, Response
 from app.schemas.project import (
     ProjectCreate,
@@ -40,7 +41,6 @@ async def _readable_project(project_id: str, user: Optional[CurrentUser]):
     project = await ProjectService.get_by_id(project_id)
     if not project or (
         not project["is_published"]
-        and project["founder_id"] != "founder-001"  # demo drafts stay browsable
         and (user is None or project["founder_id"] != user.id)
     ):
         raise HTTPException(
@@ -48,18 +48,12 @@ async def _readable_project(project_id: str, user: Optional[CurrentUser]):
             detail=f"Project with ID '{project_id}' not found",
         )
     return project
-
-
-DEMO_FOUNDER_ID = "founder-001"
 
 
 async def _private_report_project(project_id: str, user: Optional[CurrentUser]):
-    """Readiness reports are private to the founder (demo projects stay viewable for the demo)."""
+    """Readiness reports are private to the project's founder (404 for everyone else)."""
     project = await ProjectService.get_by_id(project_id)
-    if not project or (
-        project["founder_id"] != DEMO_FOUNDER_ID
-        and (user is None or project["founder_id"] != user.id)
-    ):
+    if not project or user is None or project["founder_id"] != user.id:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail=f"Project with ID '{project_id}' not found",
@@ -67,7 +61,8 @@ async def _private_report_project(project_id: str, user: Optional[CurrentUser]):
     return project
 
 
-@router.post("", response_model=ProjectResponse, status_code=status.HTTP_201_CREATED)
+@router.post("", response_model=ProjectResponse, status_code=status.HTTP_201_CREATED,
+             dependencies=[Depends(rate_limit("create_project", 20, 3600))])
 async def create_project(project_in: ProjectCreate, user: CurrentUser = Depends(require_founder)):
     """Create and submit a new startup project, automatically evaluating AI readiness."""
     try:
@@ -77,7 +72,7 @@ async def create_project(project_in: ProjectCreate, user: CurrentUser = Depends(
         logger.error("Failed to create project: %s", e)
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Could not create project: {str(e)}",
+            detail="Could not create project. Please try again.",
         )
 
 
@@ -158,7 +153,8 @@ async def get_project_readiness_report(
     return report
 
 
-@router.post("/{project_id}/re-evaluate", response_model=ProjectReadinessResponse)
+@router.post("/{project_id}/re-evaluate", response_model=ProjectReadinessResponse,
+             dependencies=[Depends(rate_limit("analyze", 10, 3600))])
 async def re_evaluate_project_readiness(project_id: str, user: CurrentUser = Depends(require_founder)):
     """Re-run the readiness analysis (same as POST /analyze; kept for existing clients)."""
     await _owned_project(project_id, user)
@@ -196,7 +192,7 @@ async def export_project_readiness_pdf(
         logger.error("Failed to generate readiness PDF for project %s: %s", project_id, e)
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Could not generate readiness PDF: {str(e)}",
+            detail="Could not generate readiness PDF. Please try again.",
         )
 
 
@@ -208,6 +204,7 @@ async def export_project_readiness_pdf(
     "/{project_id}/documents",
     response_model=ProjectDocumentResponse,
     status_code=status.HTTP_201_CREATED,
+    dependencies=[Depends(rate_limit("upload", 60, 3600))],
 )
 async def upload_project_document(
     project_id: str,
@@ -224,8 +221,8 @@ async def upload_project_document(
 
 
 @router.get("/{project_id}/documents", response_model=List[ProjectDocumentResponse])
-async def list_project_documents(project_id: str, user: Optional[CurrentUser] = Depends(get_current_user)):
-    """List a project's materials (visible to investors once the project is published)."""
+async def list_project_documents(project_id: str, user: CurrentUser = Depends(require_user)):
+    """List a project's materials (signed-in users only; others see them once it is published)."""
     project = await _readable_project(project_id, user)
     return await DocumentService.list(project["id"])
 
@@ -234,9 +231,9 @@ async def list_project_documents(project_id: str, user: Optional[CurrentUser] = 
 async def download_project_document(
     project_id: str,
     doc_id: int,
-    user: Optional[CurrentUser] = Depends(get_current_user),
+    user: CurrentUser = Depends(require_user),
 ):
-    """Download one of a project's materials."""
+    """Download one of a project's materials (signed-in users only)."""
     project = await _readable_project(project_id, user)
     found = await DocumentService.file_path(project["id"], doc_id)
     if not found:
@@ -254,7 +251,8 @@ async def delete_project_document(project_id: str, doc_id: int, user: CurrentUse
     return {"status": "deleted", "id": doc_id}
 
 
-@router.post("/{project_id}/analyze", response_model=ProjectReadinessResponse)
+@router.post("/{project_id}/analyze", response_model=ProjectReadinessResponse,
+             dependencies=[Depends(rate_limit("analyze", 10, 3600))])
 async def analyze_project(project_id: str, user: CurrentUser = Depends(require_founder)):
     """Analyze the project's profile, materials and repository; returns the new readiness report."""
     project = await _owned_project(project_id, user)
