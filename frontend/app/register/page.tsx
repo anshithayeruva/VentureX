@@ -90,20 +90,20 @@ function RegisterForm() {
   };
 
   return (
-    <div className="min-h-[85vh] flex items-center justify-center px-4 py-12 bg-[#F8FAFC]">
-      <div className="w-full max-w-md rounded-2xl border border-[#E2E8F0] bg-white p-7 sm:p-9 shadow-elevated">
+    <div className="min-h-[85vh] flex items-center justify-center px-4 py-12 bg-surface">
+      <div className="w-full max-w-md rounded-2xl border border-line bg-white p-7 sm:p-9 shadow-elevated">
         <div className="text-center mb-7">
           <BrandMark size={48} className="mb-3 rounded-xl" />
-          <h1 className="text-2xl font-bold text-[#0F172A] tracking-tight font-display">
+          <h1 className="text-3xl font-medium text-ink tracking-tight font-display">
             Create your VentureX account
           </h1>
-          <p className="text-xs text-[#64748B] mt-1">
+          <p className="text-xs text-muted mt-1">
             Free to start. Tell us whether you&apos;re raising or investing.
           </p>
         </div>
 
         {originWarning && (
-          <p role="alert" className="mb-5 text-xs text-[#9A3412] bg-[#FFF7ED] border border-[#FED7AA] rounded-lg px-3 py-2">
+          <p role="alert" className="mb-5 text-xs text-warning bg-warning-soft border border-warning/20 rounded-lg px-3 py-2">
             {originWarning}
           </p>
         )}
@@ -111,15 +111,15 @@ function RegisterForm() {
         <form onSubmit={handleRegister} className="space-y-4 text-xs sm:text-sm">
           {/* Role selector */}
           <div>
-            <label className="block text-xs font-semibold text-[#0F172A] mb-1.5">I am a</label>
+            <label className="block text-xs font-semibold text-ink mb-1.5">I am a</label>
             <div className="grid grid-cols-2 gap-2">
               <button
                 type="button"
                 onClick={() => setRole("FOUNDER")}
                 className={`py-2 px-3 rounded-lg border text-xs font-medium flex items-center justify-center gap-1.5 transition-all ${
                   role === "FOUNDER"
-                    ? "bg-[#1B3B6F] text-white border-[#1B3B6F] shadow-sm"
-                    : "bg-[#F8FAFC] text-[#64748B] border-[#E2E8F0] hover:text-[#0F172A]"
+                    ? "bg-accent text-white border-accent shadow-sm"
+                    : "bg-surface text-muted border-line hover:text-ink"
                 }`}
               >
                 <Rocket className="w-3.5 h-3.5" />
@@ -130,8 +130,8 @@ function RegisterForm() {
                 onClick={() => setRole("INVESTOR")}
                 className={`py-2 px-3 rounded-lg border text-xs font-medium flex items-center justify-center gap-1.5 transition-all ${
                   role === "INVESTOR"
-                    ? "bg-[#0F1E36] text-white border-[#0F1E36] shadow-sm"
-                    : "bg-[#F8FAFC] text-[#64748B] border-[#E2E8F0] hover:text-[#0F172A]"
+                    ? "bg-sidebar text-white border-sidebar shadow-sm"
+                    : "bg-surface text-muted border-line hover:text-ink"
                 }`}
               >
                 <Briefcase className="w-3.5 h-3.5" />
@@ -141,14 +141,14 @@ function RegisterForm() {
           </div>
 
           <div>
-            <label htmlFor="reg-name" className="block text-xs font-semibold text-[#0F172A] mb-1">Full Name</label>
+            <label htmlFor="reg-name" className="block text-xs font-semibold text-ink mb-1">Full Name</label>
             <input id="reg-name"
               type="text"
               required
               placeholder="Your name"
               value={fullName}
               onChange={(e) => setFullName(e.target.value)}
-              className="w-full px-3.5 py-2.5 bg-[#F8FAFC] border border-[#E2E8F0] rounded-lg text-[#0F172A] placeholder-[#94A3B8] focus:outline-none focus:border-[#1B3B6F]"
+              className="w-full px-3.5 py-2.5 bg-surface border border-line rounded-lg text-ink placeholder-faint focus:outline-none focus:border-accent"
             />
           </div>
 
@@ -156,7 +156,7 @@ function RegisterForm() {
               so only investors are asked for an organization here. */}
           {role === "INVESTOR" && (
             <div>
-              <label htmlFor="reg-org" className="block text-xs font-semibold text-[#0F172A] mb-1">
+              <label htmlFor="reg-org" className="block text-xs font-semibold text-ink mb-1">
                 Firm or fund
               </label>
               <input id="reg-org"
@@ -164,25 +164,25 @@ function RegisterForm() {
                 placeholder="e.g. Horizon Seed Capital"
                 value={organization}
                 onChange={(e) => setOrganization(e.target.value)}
-                className="w-full px-3.5 py-2.5 bg-[#F8FAFC] border border-[#E2E8F0] rounded-lg text-[#0F172A] placeholder-[#94A3B8] focus:outline-none focus:border-[#1B3B6F]"
+                className="w-full px-3.5 py-2.5 bg-surface border border-line rounded-lg text-ink placeholder-faint focus:outline-none focus:border-accent"
               />
             </div>
           )}
 
           <div>
-            <label htmlFor="reg-email" className="block text-xs font-semibold text-[#0F172A] mb-1">Email</label>
+            <label htmlFor="reg-email" className="block text-xs font-semibold text-ink mb-1">Email</label>
             <input id="reg-email"
               type="email"
               required
               placeholder="you@company.com"
               value={email}
               onChange={(e) => setEmail(e.target.value)}
-              className="w-full px-3.5 py-2.5 bg-[#F8FAFC] border border-[#E2E8F0] rounded-lg text-[#0F172A] placeholder-[#94A3B8] focus:outline-none focus:border-[#1B3B6F]"
+              className="w-full px-3.5 py-2.5 bg-surface border border-line rounded-lg text-ink placeholder-faint focus:outline-none focus:border-accent"
             />
           </div>
 
           <div>
-            <label htmlFor="reg-password" className="block text-xs font-semibold text-[#0F172A] mb-1">Password</label>
+            <label htmlFor="reg-password" className="block text-xs font-semibold text-ink mb-1">Password</label>
             <input id="reg-password"
               type="password"
               required
@@ -191,12 +191,12 @@ function RegisterForm() {
               autoComplete="new-password"
               value={password}
               onChange={(e) => setPassword(e.target.value)}
-              className="w-full px-3.5 py-2.5 bg-[#F8FAFC] border border-[#E2E8F0] rounded-lg text-[#0F172A] placeholder-[#94A3B8] focus:outline-none focus:border-[#1B3B6F]"
+              className="w-full px-3.5 py-2.5 bg-surface border border-line rounded-lg text-ink placeholder-faint focus:outline-none focus:border-accent"
             />
           </div>
 
           {error && (
-            <p role="alert" className="text-xs text-[#B91C1C] bg-[#FEF2F2] border border-[#FECACA] rounded-lg px-3 py-2">
+            <p role="alert" className="text-xs text-danger bg-danger-soft border border-danger/20 rounded-lg px-3 py-2">
               {error}
             </p>
           )}
@@ -204,15 +204,15 @@ function RegisterForm() {
           <button
             type="submit"
             disabled={pending}
-            className="w-full mt-2 py-2.5 rounded-lg text-xs sm:text-sm font-medium text-white bg-[#1B3B6F] hover:bg-[#142C54] transition-all shadow-sm disabled:opacity-60 disabled:cursor-wait"
+            className="w-full mt-2 py-2.5 rounded-lg text-xs sm:text-sm font-medium text-white bg-accent hover:bg-accent-hover transition-all shadow-sm disabled:opacity-60 disabled:cursor-wait"
           >
             {pending ? "Creating account…" : "Create account"}
           </button>
         </form>
 
-        <p className="mt-6 text-center text-xs text-[#64748B]">
+        <p className="mt-6 text-center text-xs text-muted">
           Already registered?{" "}
-          <Link href="/login" className="text-[#1B3B6F] hover:text-[#142C54] font-semibold underline underline-offset-4">
+          <Link href="/login" className="text-accent hover:text-accent-hover font-semibold underline underline-offset-4">
             Sign in
           </Link>
         </p>

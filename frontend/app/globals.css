@@ -1,34 +1,46 @@
 @import "tailwindcss";
 
 /*
- * VentureX design tokens — calm & minimal.
- * One typeface (Inter), neutral surfaces, thin borders, one navy accent.
+ * VentureX design tokens — "private bank".
+ * Ivory canvas, warm-white cards, deep navy ink and sidebar, a book serif for headings and
+ * key figures, Inter for everything else. Brand: Deep Navy #111C32, Professional Blue #20477F,
+ * Investor Green (text-safe shade #147A4C of #168653).
  * Tailwind v4 turns each --color-* into utilities: bg-canvas, text-ink, border-line, ...
  */
 @theme {
   --font-sans: "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  --font-serif: "Newsreader", "Iowan Old Style", Georgia, "Times New Roman", serif;
 
-  --color-canvas: #f7f8fa;        /* page / sidebar background */
-  --color-surface: #ffffff;       /* cards */
-  --color-subtle: #f2f4f7;        /* hover rows, inset areas */
-  --color-line: #e4e7ec;          /* borders and dividers */
-  --color-line-strong: #d0d5dd;
+  --color-canvas: #f7f4ee;        /* ivory page background */
+  --color-surface: #fffdf9;       /* warm-white cards */
+  --color-subtle: #f0eadf;        /* hover rows, inset areas */
+  --color-line: #e7e0d3;          /* borders and dividers */
+  --color-line-strong: #d3c9b6;
 
-  --color-ink: #101828;           /* primary text */
-  --color-ink-2: #344054;         /* secondary headings, body */
-  --color-muted: #667085;         /* supporting text */
-  --color-faint: #98a2b3;         /* placeholders, meta */
+  --color-ink: #111c32;           /* deep navy: primary text */
+  --color-ink-2: #33405a;         /* secondary headings, body */
+  --color-muted: #6b6457;         /* supporting text (warm grey) */
+  --color-faint: #857c6c;         /* placeholders, meta */
 
-  --color-accent: #1d4e96;        /* brand blue: primary actions, active nav */
-  --color-accent-hover: #173f7a;
-  --color-accent-soft: #eef3fb;
+  --color-accent: #20477f;        /* professional blue: primary actions, links */
+  --color-accent-hover: #183863;
+  --color-accent-soft: #e9eef6;
 
-  --color-positive: #1f7a4d;
-  --color-positive-soft: #ecf7f1;
-  --color-warning: #a15c07;
-  --color-warning-soft: #fdf6e7;
+  --color-positive: #147a4c;      /* investor green, deepened for readable text */
+  --color-positive-soft: #edf6f0;
+  --color-warning: #9a5800;
+  --color-warning-soft: #fbf1de;
   --color-danger: #b42318;
-  --color-danger-soft: #fef3f2;
+  --color-danger-soft: #fcedea;
+
+  /* Navy sidebar */
+  --color-sidebar: #111c32;
+  --color-sidebar-hover: #1a2742;
+  --color-sidebar-active: #1e3358;
+  --color-sidebar-line: #233150;
+  --color-sidebar-text: #b4bed1;
+  --color-sidebar-faint: #8793ab;
+  --color-sidebar-icon: #8fb0e8;
 }
 
 @layer base {
@@ -48,12 +60,26 @@
   h1, h2, h3, h4 {
     letter-spacing: -0.015em;
   }
+
+  /* Page and section titles speak in the serif; small label-style h2s opt out with font-sans. */
+  h1, h2 {
+    font-family: var(--font-serif);
+    font-optical-sizing: auto;
+    letter-spacing: -0.01em;
+  }
 }
 
 /* Older pages still use these helpers; they map onto the same palette. */
 .font-display {
-  font-family: var(--font-sans);
-  letter-spacing: -0.015em;
+  font-family: var(--font-serif);
+  letter-spacing: -0.01em;
+}
+
+/* Key figures (stat values, money headlines): serif with aligned digits. */
+.figure {
+  font-family: var(--font-serif);
+  font-variant-numeric: lining-nums tabular-nums;
+  letter-spacing: -0.01em;
 }
 .bg-canvas { background-color: var(--color-canvas); }
 .bg-surface { background-color: var(--color-surface); }
@@ -66,7 +92,7 @@
 .bg-navy { background-color: var(--color-accent); }
 .bg-navy:hover { background-color: var(--color-accent-hover); }
 .bg-navy-soft { background-color: var(--color-accent-soft); }
-.bg-navy-sidebar { background-color: #0f1e36; }
+.bg-navy-sidebar { background-color: var(--color-sidebar); }
 .bg-navy-dark { background-color: #0b1628; }
 .bg-navy-surface { background-color: #182c4c; }
 .bg-navy-active { background-color: #1c355e; }
@@ -77,7 +103,7 @@
   box-shadow: 0 1px 2px rgba(16, 24, 40, 0.04);
 }
 .shadow-card {
-  box-shadow: 0 1px 3px rgba(16, 24, 40, 0.06), 0 1px 2px rgba(16, 24, 40, 0.03);
+  box-shadow: 0 1px 3px rgba(17, 28, 50, 0.06), 0 1px 2px rgba(17, 28, 50, 0.03);
 }
 .shadow-elevated {
   box-shadow: 0 12px 24px -8px rgba(16, 24, 40, 0.1), 0 4px 8px -4px rgba(16, 24, 40, 0.05);

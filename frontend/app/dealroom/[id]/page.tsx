@@ -354,7 +354,7 @@ function DealRoomContent({ params }: PageProps) {
           <div className="mt-4 flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
             <div className="min-w-0">
               <div className="flex flex-wrap items-center gap-2">
-                <h1 className="text-2xl font-semibold text-ink">{room.project_title}</h1>
+                <h1 className="text-[28px] leading-tight font-medium text-ink">{room.project_title}</h1>
                 <Tag tone={stageTone(room.stage)}>{stageLabel(room.stage)}</Tag>
               </div>
               <p className="mt-1 flex items-center gap-2 text-sm text-muted">
@@ -481,7 +481,7 @@ function DealRoomContent({ params }: PageProps) {
           <div className="space-y-6">
             <Card className="space-y-3">
               <div className="flex items-center justify-between">
-                <h2 className="text-base font-semibold text-ink">NDA</h2>
+                <h2 className="text-lg font-medium text-ink">NDA</h2>
                 {room.nda_signed ? <Tag tone="positive">Signed</Tag> : <Tag tone="warning">Not signed</Tag>}
               </div>
               {room.nda_signed ? (
@@ -502,7 +502,7 @@ function DealRoomContent({ params }: PageProps) {
 
             <Card className="space-y-3">
               <div className="flex items-center justify-between">
-                <h2 className="text-base font-semibold text-ink">Documents</h2>
+                <h2 className="text-lg font-medium text-ink">Documents</h2>
                 <Button variant="ghost" onClick={() => setShowDocModal(true)}>
                   <Plus className="h-4 w-4" />
                   Share
@@ -536,7 +536,7 @@ function DealRoomContent({ params }: PageProps) {
             </Card>
 
             <Card className="space-y-3">
-              <h2 className="text-base font-semibold text-ink">{role === "FOUNDER" ? "Investor" : "Founder"}</h2>
+              <h2 className="text-lg font-medium text-ink">{role === "FOUNDER" ? "Investor" : "Founder"}</h2>
               <div className="flex items-center gap-3">
                 <Avatar name={otherName} />
                 <div className="min-w-0">
@@ -690,7 +690,7 @@ function DealRoomContent({ params }: PageProps) {
           >
             <div className="flex items-center justify-between border-b border-line px-5 py-4">
               <div>
-                <h2 className="text-base font-semibold text-ink">Activity</h2>
+                <h2 className="text-lg font-medium text-ink">Activity</h2>
                 <p className="text-sm text-muted">Everything that has happened in this room.</p>
               </div>
               <button type="button" onClick={() => setShowActivity(false)} className="rounded-md p-1.5 text-muted hover:bg-subtle" aria-label="Close">
@@ -789,7 +789,7 @@ function Modal({ title, onClose, children }: { title: string; onClose: () => voi
         onClick={(e) => e.stopPropagation()}
       >
         <div className="mb-4 flex items-center justify-between">
-          <h2 className="text-base font-semibold text-ink">{title}</h2>
+          <h2 className="text-lg font-medium text-ink">{title}</h2>
           <button type="button" onClick={onClose} className="rounded-md p-1 text-muted hover:bg-subtle" aria-label="Close">
             <X className="h-4 w-4" />
           </button>

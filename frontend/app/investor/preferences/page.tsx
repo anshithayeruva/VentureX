@@ -454,7 +454,7 @@ export default function InvestorCriteriaPage() {
           {/* J. Thesis summary */}
           <aside className="xl:sticky xl:top-6 xl:self-start">
             <Card className="space-y-3">
-              <h2 className="text-base font-semibold text-ink">Your thesis</h2>
+              <h2 className="text-lg font-medium text-ink">Your thesis</h2>
               {summary.length ? (
                 <div className="space-y-2 text-sm leading-relaxed text-ink-2">
                   {summary.map((line) => (
@@ -489,7 +489,7 @@ function Block({
   return (
     <Card className="scroll-mt-6 space-y-5">
       <div id={id} className="scroll-mt-6">
-        <h2 className="text-base font-semibold text-ink">{title}</h2>
+        <h2 className="text-lg font-medium text-ink">{title}</h2>
         {description && <p className="mt-0.5 text-sm text-muted">{description}</p>}
         {note && (
           <p className="mt-2 flex items-start gap-1.5 text-xs text-muted">

@@ -26,7 +26,7 @@ export function PageHeader({
   return (
     <div className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between pb-6">
       <div className="min-w-0">
-        <h1 className="text-2xl font-semibold text-ink">{title}</h1>
+        <h1 className="text-[28px] leading-tight font-medium text-ink">{title}</h1>
         {description && <p className="mt-1 text-sm text-muted max-w-2xl">{description}</p>}
       </div>
       {actions && <div className="flex items-center gap-2 shrink-0">{actions}</div>}
@@ -56,18 +56,21 @@ export function Section({
   action,
   children,
   className,
+  fill = false,
 }: {
   title: string;
   description?: React.ReactNode;
   action?: React.ReactNode;
   children: React.ReactNode;
   className?: string;
+  /** Stretch the body to the full height of the grid cell, so paired sections line up. */
+  fill?: boolean;
 }) {
   return (
-    <section className={cx("space-y-3", className)}>
+    <section className={cx("space-y-3", fill && "flex h-full flex-col [&>*:last-child]:flex-1", className)}>
       <div className="flex items-end justify-between gap-4">
         <div>
-          <h2 className="text-base font-semibold text-ink">{title}</h2>
+          <h2 className="text-lg font-medium text-ink">{title}</h2>
           {description && <p className="text-sm text-muted mt-0.5">{description}</p>}
         </div>
         {action && <div className="shrink-0 text-sm">{action}</div>}
@@ -96,7 +99,7 @@ export function Stat({
         <span className="text-sm text-muted">{label}</span>
         {Icon && <Icon className="w-4 h-4 text-faint" />}
       </div>
-      <div className="mt-2 text-2xl font-semibold text-ink tabular-nums">{value}</div>
+      <div className="figure mt-2 text-[28px] leading-none font-medium text-ink">{value}</div>
       {hint && <div className="mt-1 text-xs text-muted">{hint}</div>}
     </Card>
   );
@@ -110,18 +113,21 @@ export function EmptyState({
   description,
   action,
   compact = false,
+  className,
 }: {
   icon?: LucideIcon;
   title: string;
   description?: React.ReactNode;
   action?: React.ReactNode;
   compact?: boolean;
+  className?: string;
 }) {
   return (
     <div
       className={cx(
-        "rounded-xl border border-dashed border-line-strong bg-surface text-center",
-        compact ? "px-5 py-6" : "px-6 py-12"
+        "flex flex-col items-center justify-center rounded-xl border border-dashed border-line-strong bg-surface text-center",
+        compact ? "px-5 py-6" : "px-6 py-12",
+        className
       )}
     >
       {Icon && (
@@ -129,7 +135,7 @@ export function EmptyState({
           <Icon className="w-5 h-5 text-muted" />
         </div>
       )}
-      <p className="text-sm font-medium text-ink">{title}</p>
+      <p className="font-serif text-lg font-medium text-ink">{title}</p>
       {description && <p className="mt-1 text-sm text-muted max-w-md mx-auto">{description}</p>}
       {action && <div className="mt-4 flex justify-center">{action}</div>}
     </div>

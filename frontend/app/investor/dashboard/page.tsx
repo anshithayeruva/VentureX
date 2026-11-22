@@ -280,6 +280,7 @@ function InvestorDashboardContent() {
 
           <div className="grid gap-6 lg:grid-cols-2">
             <Section
+              fill
               title="Recent deal activity"
               action={
                 <Link href="/investor/deal-flow" className="inline-flex items-center gap-1 font-medium text-accent hover:underline">
@@ -291,9 +292,16 @@ function InvestorDashboardContent() {
               {flow == null ? (
                 loadError ? null : <LoadingRows />
               ) : flow.items.length === 0 ? (
-                <EmptyState compact title="No deals yet" description="Save startups or request intros from Discover." />
+                <EmptyState
+                  compact
+                  icon={MessagesSquare}
+                  title="No deals yet"
+                  description="Save startups or request intros from Discover to start your pipeline."
+                  action={<ButtonLink href="/investor/discover" variant="secondary">Discover startups</ButtonLink>}
+                />
               ) : (
-                <Card padded={false} className="divide-y divide-line">
+                <Card padded={false} className="flex flex-col overflow-hidden">
+                  <div className="divide-y divide-line">
                   {flow.items.slice(0, 5).map((d) => (
                     <div key={d.project_id} className="flex items-center justify-between gap-3 px-5 py-3.5">
                       <div className="min-w-0">
@@ -309,11 +317,39 @@ function InvestorDashboardContent() {
                       )}
                     </div>
                   ))}
+                  </div>
+                  {/* Pipeline summary pinned to the bottom, so a short list never leaves a blank panel. */}
+                  <div className="mt-auto border-t border-line bg-canvas/60 px-5 py-4">
+                    <div className="grid grid-cols-4 gap-2">
+                      {(
+                        [
+                          ["saved", "Saved"],
+                          ["requested", "Requested"],
+                          ["active", "Active"],
+                          ["closed", "Closed"],
+                        ] as const
+                      ).map(([key, label]) => (
+                        <div key={key}>
+                          <div className="figure text-xl font-medium text-ink">{counts[key] ?? 0}</div>
+                          <div className="text-xs text-muted">{label}</div>
+                        </div>
+                      ))}
+                    </div>
+                    {flow.items.length < 3 && (
+                      <div className="mt-4 flex flex-wrap items-center justify-between gap-3 border-t border-line pt-4">
+                        <span className="text-sm text-muted">Find more startups that fit your thesis.</span>
+                        <ButtonLink href="/investor/discover" variant="secondary">
+                          Discover startups
+                        </ButtonLink>
+                      </div>
+                    )}
+                  </div>
                 </Card>
               )}
             </Section>
 
             <Section
+              fill
               title="Portfolio"
               action={
                 <Link href="/investor/portfolio" className="inline-flex items-center gap-1 font-medium text-accent hover:underline">
@@ -330,34 +366,41 @@ function InvestorDashboardContent() {
                   icon={Wallet}
                   title="No investments recorded"
                   description="Record the investments you've made to track their value and returns."
-                  action={<ButtonLink href="/investor/portfolio?record=new">Record an investment</ButtonLink>}
+                  action={<ButtonLink href="/investor/portfolio?record=new" variant="secondary">Record an investment</ButtonLink>}
                 />
               ) : (
-                <Card className="grid grid-cols-2 gap-4 text-sm">
+                <Card className="flex flex-col">
+                  <div className="grid grid-cols-2 gap-4 pb-5 text-sm">
                   <div>
                     <div className="text-muted">Invested</div>
-                    <div className="mt-0.5 text-lg font-semibold tabular-nums text-ink">{formatCompact(portfolio.totals.total_invested)}</div>
+                    <div className="figure mt-0.5 text-xl font-medium text-ink">{formatCompact(portfolio.totals.total_invested)}</div>
                   </div>
                   <div>
                     <div className="text-muted">Current value</div>
-                    <div className="mt-0.5 text-lg font-semibold tabular-nums text-ink">{formatCompact(portfolio.totals.current_value)}</div>
+                    <div className="figure mt-0.5 text-xl font-medium text-ink">{formatCompact(portfolio.totals.current_value)}</div>
                   </div>
                   <div>
                     <div className="text-muted">Cash returned</div>
-                    <div className="mt-0.5 text-lg font-semibold tabular-nums text-ink">{formatCompact(portfolio.totals.cash_returned)}</div>
+                    <div className="figure mt-0.5 text-xl font-medium text-ink">{formatCompact(portfolio.totals.cash_returned)}</div>
                   </div>
                   <div>
                     <div className="text-muted">Net gain</div>
                     <div
                       className={cx(
-                        "mt-0.5 text-lg font-semibold tabular-nums",
+                        "figure mt-0.5 text-xl font-medium",
                         gainTone(portfolio.totals.net_gain) === "positive" ? "text-positive" : gainTone(portfolio.totals.net_gain) === "danger" ? "text-danger" : "text-ink"
                       )}
                     >
                       {formatSigned(portfolio.totals.net_gain)}
                     </div>
                   </div>
-                  <p className="col-span-2 text-xs text-muted">From your own records. Values without a recorded valuation are held at cost.</p>
+                  </div>
+                  <div className="mt-auto flex flex-wrap items-center justify-between gap-3 border-t border-line pt-4">
+                    <span className="text-sm text-muted">Unvalued holdings count at cost.</span>
+                    <ButtonLink href="/investor/portfolio?record=new" variant="secondary">
+                      Record investment
+                    </ButtonLink>
+                  </div>
                 </Card>
               )}
             </Section>

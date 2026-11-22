@@ -140,18 +140,18 @@ function PortfolioContent() {
               </p>
 
               <Card className="space-y-4">
-                <h2 className="text-base font-semibold text-ink">Value over time</h2>
+                <h2 className="text-lg font-medium text-ink">Value over time</h2>
                 <ValueOverTimeChart points={summary.value_over_time} />
               </Card>
 
               <div className="grid gap-6 lg:grid-cols-2">
                 <Card className="space-y-4">
-                  <h2 className="text-base font-semibold text-ink">Invested vs value, by company</h2>
+                  <h2 className="text-lg font-medium text-ink">Invested vs value, by company</h2>
                   <CompanyComparison holdings={summary.holdings} />
                 </Card>
                 <div className="space-y-6">
                   <Card className="space-y-4">
-                    <h2 className="text-base font-semibold text-ink">Realized vs unrealized</h2>
+                    <h2 className="text-lg font-medium text-ink">Realized vs unrealized</h2>
                     <LabelledBars
                       rows={[
                         { label: "Realized gain", value: toNumber(t.realized_gain), display: formatSigned(t.realized_gain, true), note: "Cash returned minus the cost of what it came from." },
@@ -160,7 +160,7 @@ function PortfolioContent() {
                     />
                   </Card>
                   <Card className="space-y-4">
-                    <h2 className="text-base font-semibold text-ink">Allocation by industry</h2>
+                    <h2 className="text-lg font-medium text-ink">Allocation by industry</h2>
                     {summary.allocation_by_industry.length ? (
                       <LabelledBars
                         color={SERIES.value}
@@ -201,7 +201,7 @@ function Metric({
   return (
     <Card>
       <div className="text-sm text-muted">{label}</div>
-      <div className={cx("mt-2 text-2xl font-semibold tabular-nums", tone === "positive" ? "text-positive" : tone === "danger" ? "text-danger" : "text-ink")}>
+      <div className={cx("figure mt-2 text-[28px] leading-none font-medium", tone === "positive" ? "text-positive" : tone === "danger" ? "text-danger" : "text-ink")}>
         {value}
       </div>
       {hint && <div className="mt-1 text-xs text-muted">{hint}</div>}
@@ -404,7 +404,7 @@ function RecordInvestmentForm({
       <form onSubmit={submit} className="space-y-5">
         <div className="flex items-start justify-between gap-3">
           <div>
-            <h2 className="text-base font-semibold text-ink">Record an investment</h2>
+            <h2 className="text-lg font-medium text-ink">Record an investment</h2>
             <p className="text-sm text-muted">The amount becomes the first transaction. Add follow-ons, returns and valuations on the next screen.</p>
           </div>
           <button type="button" onClick={onCancel} aria-label="Close" className="rounded-md p-1 text-muted hover:bg-subtle hover:text-ink">

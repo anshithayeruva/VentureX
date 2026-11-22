@@ -3,7 +3,7 @@
 import React, { useEffect, useState } from "react";
 import Link from "next/link";
 import { ArrowRight, CheckCircle2, FileText, Handshake, Lock, Search, Sparkles } from "lucide-react";
-import { buttonClass, ScoreBar } from "@/components/ui";
+import { buttonClass, cx, ScoreBar } from "@/components/ui";
 import { api } from "@/lib/api";
 import { formatMoney } from "@/lib/format";
 import { Project } from "@/types";
@@ -34,10 +34,10 @@ const FOUNDER_POINTS = [
 ];
 
 const INVESTOR_POINTS = [
-  "Startups matched to your industries, stages and check size",
-  "A clear reason for every match",
-  "Request intros with one click",
-  "A private room with the founder once they accept",
+  "Startups ranked by fit with your thesis: sectors, stages, cheque size and geography",
+  "A clear reason for every match, including what doesn't fit",
+  "Save startups, request intros and follow every deal in one pipeline",
+  "Track your portfolio's value and returns in rupees",
 ];
 
 export default function HomePage() {
@@ -59,7 +59,7 @@ export default function HomePage() {
       {/* Hero */}
       <section className="mx-auto grid max-w-6xl items-center gap-14 px-4 pb-20 pt-16 sm:px-6 md:pt-24 lg:grid-cols-2">
         <div>
-          <h1 className="text-4xl font-semibold leading-tight text-ink sm:text-5xl">
+          <h1 className="text-[44px] font-medium leading-[1.08] text-ink sm:text-6xl">
             Get ready to raise.
             <br />
             Meet investors who fit.
@@ -126,7 +126,7 @@ export default function HomePage() {
       {/* How it works */}
       <section id="how-it-works" className="scroll-mt-20 border-t border-line bg-canvas">
         <div className="mx-auto max-w-6xl px-4 py-20 sm:px-6">
-          <h2 className="text-2xl font-semibold text-ink sm:text-3xl">How it works</h2>
+          <h2 className="text-3xl font-medium text-ink sm:text-4xl">How it works</h2>
           <div className="mt-10 grid gap-8 md:grid-cols-3">
             {STEPS.map((step, i) => (
               <div key={step.title}>
@@ -142,25 +142,26 @@ export default function HomePage() {
         </div>
       </section>
 
-      {/* For founders / for investors */}
-      <section className="mx-auto grid max-w-6xl gap-6 px-4 py-20 sm:px-6 md:grid-cols-2">
-        <Audience
-          id="founders"
-          icon={FileText}
-          title="For founders"
-          lead="Know where you stand before you pitch, and only talk to investors who fit."
-          points={FOUNDER_POINTS}
-          cta={{ href: "/register", label: "Create a founder account" }}
-        />
-        <Audience
-          id="investors"
-          icon={Search}
-          title="For investors"
-          lead="See startups that match what you invest in, with the reasons spelled out."
-          points={INVESTOR_POINTS}
-          cta={{ href: "/register?role=investor", label: "Create an investor account" }}
-        />
-      </section>
+      {/* For founders, then for investors: separate sections so each nav link lands on its own. */}
+      <Audience
+        id="founders"
+        icon={FileText}
+        eyebrow="For founders"
+        title="Know where you stand before you pitch."
+        lead="Get a private, honest read on your startup, fix what investors will question, and only talk to investors who fit."
+        points={FOUNDER_POINTS}
+        cta={{ href: "/register", label: "Create a founder account" }}
+      />
+      <Audience
+        id="investors"
+        icon={Search}
+        eyebrow="For investors"
+        title="See startups that fit your thesis."
+        lead="Set what you invest in once. VentureX ranks every published startup against it and keeps your deals and portfolio in one place."
+        points={INVESTOR_POINTS}
+        cta={{ href: "/register?role=investor", label: "Create an investor account" }}
+        reverse
+      />
 
       {/* Published startups (real data only) */}
       {projects.length > 0 && (
@@ -168,7 +169,7 @@ export default function HomePage() {
           <div className="mx-auto max-w-6xl px-4 py-20 sm:px-6">
             <div className="flex flex-wrap items-end justify-between gap-4">
               <div>
-                <h2 className="text-2xl font-semibold text-ink sm:text-3xl">Startups raising now</h2>
+                <h2 className="text-3xl font-medium text-ink sm:text-4xl">Startups raising now</h2>
                 <p className="mt-2 text-muted">Published by founders on VentureX.</p>
               </div>
               <Link href="/register?role=investor" className="inline-flex items-center gap-1 text-sm font-medium text-accent hover:underline">
@@ -200,7 +201,7 @@ export default function HomePage() {
       <section className="mx-auto max-w-6xl px-4 py-20 sm:px-6">
         <div className="flex flex-col items-start justify-between gap-6 rounded-2xl bg-ink px-8 py-10 sm:flex-row sm:items-center">
           <div>
-            <h2 className="text-2xl font-semibold text-white">Start with an honest read on your pitch.</h2>
+            <h2 className="text-3xl font-medium text-white">Start with an honest read on your pitch.</h2>
             <p className="mt-2 text-white/70">Free to try. Nothing is shared until you publish.</p>
           </div>
           <Link
@@ -219,34 +220,46 @@ export default function HomePage() {
 function Audience({
   id,
   icon: Icon,
+  eyebrow,
   title,
   lead,
   points,
   cta,
+  reverse = false,
 }: {
   id: string;
   icon: React.ComponentType<{ className?: string }>;
+  eyebrow: string;
   title: string;
   lead: string;
   points: string[];
   cta: { href: string; label: string };
+  reverse?: boolean;
 }) {
   return (
-    <div id={id} className="scroll-mt-20 rounded-2xl border border-line p-8">
-      <Icon className="h-6 w-6 text-accent" />
-      <h2 className="mt-4 text-xl font-semibold text-ink">{title}</h2>
-      <p className="mt-2 text-muted">{lead}</p>
-      <ul className="mt-6 space-y-3">
-        {points.map((point) => (
-          <li key={point} className="flex gap-2.5 text-sm text-ink-2">
-            <CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0 text-positive" />
-            {point}
-          </li>
-        ))}
-      </ul>
-      <Link href={cta.href} className={buttonClass("secondary", "mt-8")}>
-        {cta.label}
-      </Link>
-    </div>
+    <section id={id} className={cx("scroll-mt-16 border-t border-line", reverse ? "bg-canvas" : "bg-surface")}>
+      <div className="mx-auto grid max-w-6xl items-center gap-10 px-4 py-20 sm:px-6 md:grid-cols-2">
+        <div className={cx(reverse && "md:order-2")}>
+          <div className="inline-flex items-center gap-2 text-sm font-medium text-accent">
+            <Icon className="h-4 w-4" />
+            {eyebrow}
+          </div>
+          <h2 className="mt-3 text-3xl font-medium leading-tight text-ink sm:text-4xl">{title}</h2>
+          <p className="mt-3 max-w-md text-muted">{lead}</p>
+          <Link href={cta.href} className={buttonClass("primary", "mt-8")}>
+            {cta.label}
+            <ArrowRight className="h-4 w-4" />
+          </Link>
+        </div>
+        <ul className={cx("space-y-4 rounded-2xl border border-line bg-surface p-8 shadow-card", reverse && "md:order-1")}>
+          {points.map((point) => (
+            <li key={point} className="flex gap-3 text-ink-2">
+              <CheckCircle2 className="mt-0.5 h-5 w-5 shrink-0 text-positive" />
+              {point}
+            </li>
+          ))}
+        </ul>
+      </div>
+    </section>
   );
 }
