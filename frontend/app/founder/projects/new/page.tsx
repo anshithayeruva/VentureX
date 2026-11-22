@@ -1,10 +1,10 @@
 "use client";
 
-import React, { useState } from "react";
+import React, { useEffect, useState } from "react";
 import { CheckCircle2, Sparkles } from "lucide-react";
 import { PortalLayout } from "@/components/PortalLayout";
 import { EMPTY_PROJECT, ProjectForm, ProjectFormExtras } from "@/components/ProjectForm";
-import { ButtonLink, Card, PageHeader, buttonClass } from "@/components/ui";
+import { ButtonLink, Card, LoadingRows, PageHeader, buttonClass } from "@/components/ui";
 import { api } from "@/lib/api";
 import { Project, ProjectCreateInput } from "@/types";
 
@@ -14,6 +14,19 @@ export default function NewProjectPage() {
   const [created, setCreated] = useState<Project | null>(null);
   const [deckWarning, setDeckWarning] = useState<string | null>(null);
   const [formKey, setFormKey] = useState(0);
+  // "Keep new projects private" (Settings). Until it loads, projects start private.
+  const [startPublished, setStartPublished] = useState<boolean | null>(null);
+
+  useEffect(() => {
+    let mounted = true;
+    api
+      .getFounderSettings()
+      .then((s) => mounted && setStartPublished(s ? s.default_private === false : false))
+      .catch(() => mounted && setStartPublished(false));
+    return () => {
+      mounted = false;
+    };
+  }, []);
 
   const handleSubmit = async (data: ProjectCreateInput, { publish, deck }: ProjectFormExtras) => {
     setSubmitting(true);
@@ -90,9 +103,20 @@ export default function NewProjectPage() {
           </Card>
         ) : (
           <>
-            <PageHeader title="New project" description="Tell us about your startup. It stays private until you publish it." />
+            <PageHeader
+              title="New project"
+              description={
+                startPublished
+                  ? "Tell us about your startup. Your settings publish new projects to investors straight away."
+                  : "Tell us about your startup. It stays private until you publish it."
+              }
+            />
+            {startPublished === null ? (
+              <LoadingRows />
+            ) : (
             <ProjectForm
               key={formKey}
+              initialPublish={startPublished}
               mode="create"
               initial={EMPTY_PROJECT}
               submitting={submitting}
@@ -101,6 +125,7 @@ export default function NewProjectPage() {
               cancelHref="/founder/dashboard"
               onSubmit={handleSubmit}
             />
+            )}
           </>
         )}
       </div>

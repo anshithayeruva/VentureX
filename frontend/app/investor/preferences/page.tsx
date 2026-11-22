@@ -318,7 +318,11 @@ export default function InvestorCriteriaPage() {
             </Block>
 
             {/* G. Team */}
-            <Block id="team" title="Founder & team" note>
+            <Block
+              id="team"
+              title="Founder & team"
+              description="Scored against what founders report. A startup that hasn't said is scored lower, not excluded."
+            >
               <RequirementRow label="Technical founder" value={thesis.team.technical_founder} onChange={(v) => set("team", { technical_founder: v })} />
               <RequirementRow label="Repeat founder" value={thesis.team.repeat_founder} onChange={(v) => set("team", { repeat_founder: v })} />
               <RequirementRow label="Domain expertise" value={thesis.team.domain_expertise} onChange={(v) => set("team", { domain_expertise: v })} />
@@ -339,6 +343,7 @@ export default function InvestorCriteriaPage() {
 
             {/* H. Additional */}
             <Block id="additional" title="Additional preferences" note>
+              <p className="-mt-2 text-xs text-muted">IP protection is scored with your team criteria.</p>
               <div className="grid gap-5 sm:grid-cols-3">
                 <Field label="Horizon (years)" htmlFor="c-horizon">
                   <input
@@ -412,6 +417,7 @@ export default function InvestorCriteriaPage() {
                   ["check_size", "Check size"],
                   ["geography", "Geography"],
                   ["traction", "Traction"],
+                  ["team", "Team and IP"],
                   ["business_model", "Business model"],
                 ] as [keyof InvestmentThesis["priorities"], string][]
               ).map(([key, label]) => (
@@ -494,7 +500,7 @@ function Block({
         {note && (
           <p className="mt-2 flex items-start gap-1.5 text-xs text-muted">
             <Info className="mt-px h-3.5 w-3.5 shrink-0" />
-            Saved to your thesis and summary. Not used in fit scores yet, because startups don&apos;t report these details.
+            Saved to your thesis and summary. Except IP protection, these aren&apos;t used in fit scores, because startups don&apos;t report them.
           </p>
         )}
       </div>

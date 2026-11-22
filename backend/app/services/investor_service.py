@@ -2,6 +2,7 @@ import logging
 from datetime import datetime, timezone
 from typing import Dict, Any, Optional, List
 from app.database import postgres as pg
+from app.schemas.thesis import InvestmentThesis
 from app.services.criteria import legacy_columns, thesis_from_row
 from app.schemas.investor import (
     InvestorProfileUpdate,
@@ -27,14 +28,16 @@ DEFAULT_SETTINGS = {
     "direct_founder_messaging": True,
 }
 
+# A new investor starts with no criteria: nothing is chosen for them. Until they set some,
+# no fit scores are computed. (Legacy columns are NOT NULL, so they hold neutral values.)
 DEFAULT_PREFERENCES = {
-    "preferred_industries": ["Healthcare & AI", "AI/ML", "BioTech", "Cybersecurity"],
-    "preferred_stages": ["Seed", "Pre-seed", "Series A"],
-    "min_investment": 500000.0,
-    "max_investment": 1500000.0,
-    "preferred_business_models": ["B2B SaaS", "Enterprise Infrastructure", "DeepTech IP Licensing"],
-    "geography": "North America & Europe",
-    "tech_preferences": ["Edge Machine Learning", "Bioinformatics", "Generative AI & LLMs"],
+    "preferred_industries": [],
+    "preferred_stages": [],
+    "min_investment": 0.0,
+    "max_investment": 0.0,
+    "preferred_business_models": [],
+    "geography": "Not specified",
+    "tech_preferences": [],
 }
 
 # Profile model field name -> investor_profiles column
@@ -106,7 +109,14 @@ class InvestorService:
         pref = await pg.fetch_one("SELECT * FROM investor_preferences WHERE investor_id = %s", [investor_id])
         if not pref:
             now = datetime.now(timezone.utc)
-            doc = {"investor_id": investor_id, **DEFAULT_PREFERENCES, "created_at": now, "updated_at": now}
+            doc = {
+                "investor_id": investor_id,
+                **DEFAULT_PREFERENCES,
+                # An explicit empty thesis, so the neutral legacy values above are never read as criteria.
+                "thesis": InvestmentThesis().model_dump(mode="json"),
+                "created_at": now,
+                "updated_at": now,
+            }
             pref = await pg.upsert("investor_preferences", doc, ["investor_id"], update=["updated_at"])
         return {**pref, "thesis": thesis_from_row(pref)}
 

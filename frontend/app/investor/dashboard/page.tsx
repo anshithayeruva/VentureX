@@ -487,19 +487,13 @@ function InvestorDashboardContent() {
             <div className="divide-y divide-line">
               <Toggle
                 label="Notify me about strong fits"
-                description="When a newly published startup closely fits your criteria."
+                description="A notification when a published startup fits your criteria at 90% or more."
                 checked={settings.autoNotifyHighConviction}
                 onChange={(v) => setSettings({ ...settings, autoNotifyHighConviction: v })}
               />
               <Toggle
-                label="Weekly summary"
-                description="A short weekly email with the best new fits."
-                checked={settings.weeklyDealflowSummary}
-                onChange={(v) => setSettings({ ...settings, weeklyDealflowSummary: v })}
-              />
-              <Toggle
                 label="Allow founders to message me"
-                description="Founders who accept your intro can message you in the deal room."
+                description="When off, founders in your deal rooms can share documents but can't send messages."
                 checked={settings.directFounderMessaging}
                 onChange={(v) => setSettings({ ...settings, directFounderMessaging: v })}
               />

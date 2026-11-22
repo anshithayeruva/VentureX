@@ -40,7 +40,7 @@ class MatchingEngineService:
                     },
                     {
                         "category": "Stage Alignment",
-                        "explanation": "Founder is raising Seed round ($750K), matching investor's sweet spot of $500K-$1.5M.",
+                        "explanation": "Founder is raising Seed round (₹7.5 L), matching the investor's cheque range of ₹5 L–₹15 L.",
                         "weight": 0.35,
                     },
                     {
@@ -94,7 +94,7 @@ class MatchingEngineService:
                     },
                     {
                         "category": "Target Ticket Size",
-                        "explanation": "Founder seeking $1.2M matches fund typical co-investment check.",
+                        "explanation": "Founder seeking ₹12 L matches fund typical co-investment check.",
                         "weight": 0.40,
                     },
                 ],

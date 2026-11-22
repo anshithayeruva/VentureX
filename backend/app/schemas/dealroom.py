@@ -83,6 +83,8 @@ class DealRoom(BaseModel):
     messages_count: int = 0
     audit_trail_hash: str = ""
     is_secure_recording_active: bool = True
+    # Whether the founder may post messages (the investor can turn this off in Settings).
+    founder_messaging_open: bool = True
 
 
 class DealRoomCreateInput(BaseModel):

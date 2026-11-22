@@ -73,6 +73,12 @@ export interface Project {
   monthly_revenue?: number | null;
   customer_count?: number | null;
   product_status?: string;
+  team_size?: number | null;
+  technical_founder?: boolean | null;
+  repeat_founder?: boolean | null;
+  domain_expertise?: boolean | null;
+  full_time_team?: boolean | null;
+  ip_protected?: boolean | null;
   is_published?: boolean;
   /** Private to the founder: null whenever someone else loads the project. */
   readiness_score?: number;
@@ -110,6 +116,12 @@ export interface ProjectCreateInput {
   monthly_revenue?: number | null;
   customer_count?: number | null;
   product_status?: string;
+  team_size?: number | null;
+  technical_founder?: boolean | null;
+  repeat_founder?: boolean | null;
+  domain_expertise?: boolean | null;
+  full_time_team?: boolean | null;
+  ip_protected?: boolean | null;
   is_published?: boolean;
 }
 
@@ -289,6 +301,8 @@ export interface DealRoom {
   messages_count: number;
   audit_trail_hash: string;
   is_secure_recording_active: boolean;
+  /** False when the investor has turned off messages from founders. */
+  founder_messaging_open?: boolean;
 }
 
 export interface DealRoomAuditLog {

@@ -15,6 +15,10 @@ from app.schemas.dealroom import (
 logger = logging.getLogger(__name__)
 
 
+class MessagingClosed(Exception):
+    """The investor doesn't accept founder messages right now."""
+
+
 def _compute_sha256(data_str: str) -> str:
     """Generate SHA-256 hexadecimal hash string for message chain validation."""
     return hashlib.sha256(data_str.encode("utf-8")).hexdigest()
@@ -212,6 +216,12 @@ class DealRoomService:
             [room_id, limit],
         )
 
+    @staticmethod
+    async def founder_messaging_open(investor_id: str) -> bool:
+        """The investor's "Allow founders to message me" setting (on unless they turned it off)."""
+        settings = await pg.fetch_val("SELECT settings FROM investor_profiles WHERE user_id = %s", [investor_id])
+        return bool((settings or {}).get("direct_founder_messaging", True))
+
     @classmethod
     async def send_message(
         cls,
@@ -222,6 +232,10 @@ class DealRoomService:
         room = await cls.get_room(room_id)
         if not room:
             raise ValueError(f"Deal Room '{room_id}' not found")
+        if message_in.sender_role == "FOUNDER" and not await cls.founder_messaging_open(room["investor_id"]):
+            raise MessagingClosed(
+                "This investor has turned off messages from founders. You can still share documents here."
+            )
 
         now = datetime.now(timezone.utc)
         attachments_data = [att.model_dump() for att in (message_in.attachments or [])]

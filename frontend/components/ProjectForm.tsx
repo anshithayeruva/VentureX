@@ -50,6 +50,12 @@ export const EMPTY_PROJECT: ProjectCreateInput = {
   monthly_revenue: null,
   customer_count: null,
   product_status: "",
+  team_size: null,
+  technical_founder: null,
+  repeat_founder: null,
+  domain_expertise: null,
+  full_time_team: null,
+  ip_protected: null,
 };
 
 const MAX_DECK_BYTES = 25 * 1024 * 1024;
@@ -73,6 +79,7 @@ export function ProjectForm({
   submitLabel,
   cancelHref,
   onSubmit,
+  initialPublish = false,
 }: {
   mode: "create" | "edit";
   initial: ProjectCreateInput;
@@ -81,9 +88,11 @@ export function ProjectForm({
   submitLabel: string;
   cancelHref: string;
   onSubmit: (data: ProjectCreateInput, extras: ProjectFormExtras) => void;
+  /** Create mode: start with "Publish to investors now" on (from the founder's settings). */
+  initialPublish?: boolean;
 }) {
   const [data, setData] = useState<ProjectCreateInput>(initial);
-  const [publish, setPublish] = useState(false);
+  const [publish, setPublish] = useState(initialPublish);
   const [deck, setDeck] = useState<File | null>(null);
   const [deckError, setDeckError] = useState<string | null>(null);
 
@@ -227,6 +236,30 @@ export function ProjectForm({
       </FormSection>
 
       <FormSection
+        title="Team"
+        description="Optional. Some investors look for these. Repeat founder: someone has started a company before. IP: a patent or design filed or granted."
+      >
+        <div className="grid gap-5 sm:grid-cols-3">
+          <Field label="Team size" htmlFor="pf-team-size">
+            <input
+              id="pf-team-size"
+              type="number"
+              min={1}
+              step={1}
+              className={inputClass}
+              value={data.team_size ?? ""}
+              onChange={(e) => set("team_size", e.target.value === "" ? null : Math.max(1, Math.floor(Number(e.target.value))))}
+            />
+          </Field>
+          <YesNo id="pf-tech" label="Technical founder" value={data.technical_founder} onChange={(v) => set("technical_founder", v)} />
+          <YesNo id="pf-repeat" label="Repeat founder" value={data.repeat_founder} onChange={(v) => set("repeat_founder", v)} />
+          <YesNo id="pf-domain" label="Industry experience" value={data.domain_expertise} onChange={(v) => set("domain_expertise", v)} />
+          <YesNo id="pf-fulltime" label="Working full-time" value={data.full_time_team} onChange={(v) => set("full_time_team", v)} />
+          <YesNo id="pf-ip" label="IP filed or granted" value={data.ip_protected} onChange={(v) => set("ip_protected", v)} />
+        </div>
+      </FormSection>
+
+      <FormSection
         title={mode === "create" ? "Pitch deck and links" : "Links"}
         description="The AI review reads your deck and public GitHub repo. Everything stays private until you publish."
       >
@@ -321,4 +354,32 @@ function FormSection({ title, description, children }: { title: string; descript
 /** Keep a saved value selectable even if it is no longer in the option list. */
 function withCurrent(options: string[], current: string): string[] {
   return current && !options.includes(current) ? [current, ...options] : options;
+}
+
+/** Yes / No / Not specified, stored as true / false / null. */
+function YesNo({
+  id,
+  label,
+  value,
+  onChange,
+}: {
+  id: string;
+  label: string;
+  value: boolean | null | undefined;
+  onChange: (v: boolean | null) => void;
+}) {
+  return (
+    <Field label={label} htmlFor={id}>
+      <select
+        id={id}
+        className={inputClass}
+        value={value == null ? "" : value ? "yes" : "no"}
+        onChange={(e) => onChange(e.target.value === "" ? null : e.target.value === "yes")}
+      >
+        <option value="">Not specified</option>
+        <option value="yes">Yes</option>
+        <option value="no">No</option>
+      </select>
+    </Field>
+  );
 }

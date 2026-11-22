@@ -21,6 +21,7 @@ import {
   InvestmentInput,
   InvestmentPatch,
   InvestmentThesis,
+  PortfolioImportResult,
   PortfolioSummary,
   TransactionInput,
   TransactionPage,
@@ -404,6 +405,33 @@ export const api = {
 
   async addValuation(investmentId: number, data: ValuationInput): Promise<InvestmentDetail> {
     return sendJson("POST", `${API_BASE_URL}/portfolio/investments/${investmentId}/valuations`, data, "Could not add the valuation");
+  },
+
+  /** Download a portfolio CSV (holdings, the transaction ledger, or the import template). */
+  async downloadPortfolioCsv(kind: "holdings" | "transactions" | "template"): Promise<void> {
+    const path = kind === "template" ? "import/template.csv" : `export/${kind}.csv`;
+    const res = await networkSafe(() => apiFetch(`${API_BASE_URL}/portfolio/${path}`, { cache: "no-store" }));
+    await throwForStatus(res, "Could not download the file");
+    const blob = await res.blob();
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = kind === "template" ? "venturex-portfolio-template.csv" : `venturex-${kind}.csv`;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    URL.revokeObjectURL(url);
+  },
+
+  /** Check (dryRun) or import a portfolio CSV. Nothing is saved when any row has a problem. */
+  async importPortfolioCsv(file: File, dryRun: boolean): Promise<PortfolioImportResult> {
+    const form = new FormData();
+    form.append("file", file);
+    const res = await networkSafe(() =>
+      apiFetch(`${API_BASE_URL}/portfolio/import?dry_run=${dryRun}`, { method: "POST", body: form })
+    );
+    await throwForStatus(res, "Could not read the file");
+    return res.json();
   },
 
   async deleteValuation(id: number): Promise<void> {

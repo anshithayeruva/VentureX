@@ -1,6 +1,8 @@
-from typing import Optional
+from typing import List, Optional
 
-from fastapi import APIRouter, Depends, Query, status
+from fastapi import APIRouter, Depends, File, Query, UploadFile, status
+from fastapi.responses import Response
+from pydantic import BaseModel
 
 from app.core.auth import CurrentUser, require_investor
 from app.core.rate_limit import rate_limit
@@ -14,6 +16,7 @@ from app.schemas.portfolio import (
     TransactionType,
     ValuationCreate,
 )
+from app.services import portfolio_csv
 from app.services.portfolio_service import PortfolioService
 
 # Investor-only. Every query is scoped to the signed-in investor, so one investor can never
@@ -91,3 +94,58 @@ async def add_valuation(investment_id: int, data: ValuationCreate, user: Current
 @router.delete("/valuations/{valuation_id}", status_code=status.HTTP_204_NO_CONTENT, dependencies=_writes)
 async def delete_valuation(valuation_id: int, user: CurrentUser = Depends(require_investor)):
     await PortfolioService.delete_valuation(user.id, valuation_id)
+
+
+# ---------------------------------------------------------------- CSV export / import
+
+
+def _csv(content: str, filename: str) -> Response:
+    return Response(
+        content=content.encode("utf-8"),
+        media_type="text/csv; charset=utf-8",
+        headers={"Content-Disposition": f'attachment; filename="{filename}"', "Cache-Control": "no-store"},
+    )
+
+
+@router.get("/export/holdings.csv")
+async def export_holdings(user: CurrentUser = Depends(require_investor)):
+    """Your holdings with invested, current value, returns and gains, as CSV."""
+    return _csv(await portfolio_csv.holdings_csv(user.id), "venturex-holdings.csv")
+
+
+@router.get("/export/transactions.csv")
+async def export_transactions(user: CurrentUser = Depends(require_investor)):
+    """Your full transaction ledger, as CSV."""
+    return _csv(await portfolio_csv.transactions_csv(user.id), "venturex-transactions.csv")
+
+
+@router.get("/import/template.csv")
+async def import_template(user: CurrentUser = Depends(require_investor)):
+    """A CSV template with the expected columns and one example row."""
+    return _csv(portfolio_csv.template_csv(), "venturex-portfolio-template.csv")
+
+
+class ImportError_(BaseModel):
+    row: int
+    message: str
+
+
+class ImportResult(BaseModel):
+    valid_rows: int
+    errors: List[ImportError_]
+    imported: int
+
+
+@router.post("/import", response_model=ImportResult, dependencies=[Depends(rate_limit("portfolio_import", 30, 3600))])
+async def import_csv(
+    file: UploadFile = File(...),
+    dry_run: bool = Query(True, description="Check the file without saving anything"),
+    user: CurrentUser = Depends(require_investor),
+):
+    """Check (dry_run) or import investments from a CSV. Nothing is saved if any row has a problem."""
+    content = await file.read(portfolio_csv.MAX_BYTES + 1)
+    rows, errors = portfolio_csv.parse_rows(content)
+    imported = 0
+    if not dry_run and not errors and rows:
+        imported = await portfolio_csv.save_rows(user.id, rows)
+    return {"valid_rows": len(rows), "errors": errors, "imported": imported}

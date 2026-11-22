@@ -158,6 +158,7 @@ class Priorities(_Strict):
     geography: Priority = "medium"
     business_model: Priority = "low"
     traction: Priority = "medium"
+    team: Priority = "medium"
 
 
 class InvestmentThesis(_Strict):

@@ -5,7 +5,7 @@ from typing import List, Dict, Any, Optional, Union
 from app.database import postgres as pg
 from app.utils.money import inr
 from app.schemas.thesis import INVESTOR_STAGES
-from app.services.criteria import canonical_stage, regions_for_country, thesis_from_row
+from app.services.criteria import canonical_stage, has_criteria, regions_for_country, thesis_from_row
 
 logger = logging.getLogger(__name__)
 
@@ -107,6 +107,11 @@ def _usd(amount: float) -> str:
     return inr(amount)
 
 
+def _wants_fit_alerts(profile: Dict[str, Any]) -> bool:
+    """The investor's "Notify me about strong fits" setting (on unless they turned it off)."""
+    return bool((profile.get("settings") or {}).get("auto_notify_high_conviction", True))
+
+
 class MatchService:
     # Set once the demo investors are known to exist, so match computations
     # don't repeat 8 insert-if-missing round trips on every call.
@@ -173,6 +178,8 @@ class MatchService:
         firm_name = investor_profile.get("firm") or investor_profile.get("name") or "Investor"
         project_title = project.get("title", "Project")
         thesis = thesis_from_row(preference or {})
+        if not has_criteria(thesis):
+            return None  # nothing chosen yet: no fit score rather than a made-up one
         sectors, geo, traction = thesis["sectors"], thesis["geography"], thesis["traction"]
         priorities = thesis["priorities"]
 
@@ -206,6 +213,13 @@ class MatchService:
             return None
         if t is not None:
             add("traction", "Traction", *t)
+
+        # Team and IP count only when the investor set a requirement.
+        tm = cls._team_fit(project, thesis["team"], thesis["additional"])
+        if tm == "excluded":
+            return None
+        if tm is not None:
+            add("team", "Team", *tm)
 
         weights = {f["key"]: _PRIORITY_WEIGHT[priorities.get(f["key"], "medium")] for f in factors}
         total_weight = sum(weights.values())
@@ -332,6 +346,50 @@ class MatchService:
         return 35.0, f"Based in {where}, outside {firm}'s geographic focus."
 
     @staticmethod
+    def _team_fit(project: Dict[str, Any], team: Dict[str, Any], additional: Dict[str, Any]):
+        """Average of the team / IP checks the investor cares about; 'excluded' on an unmet requirement.
+        A fact the founder hasn't reported scores in the middle rather than excluding the startup."""
+        parts: List[float] = []
+        notes: List[str] = []
+        checks = (
+            (team.get("technical_founder"), "technical_founder", "a technical founder", "no technical founder"),
+            (team.get("repeat_founder"), "repeat_founder", "a repeat founder", "first-time founders"),
+            (team.get("domain_expertise"), "domain_expertise", "industry experience", "no industry experience"),
+            (team.get("full_time_team"), "full_time_team", "a full-time team", "not yet full-time"),
+            (additional.get("ip_protection"), "ip_protected", "protected IP", "no protected IP"),
+        )
+        for level, key, yes, no in checks:
+            if not level or level == "not_relevant":
+                continue
+            value = project.get(key)
+            if value is None:
+                parts.append(50.0)
+                notes.append(f"{yes.replace('a ', '')} not reported")
+            elif value:
+                parts.append(95.0)
+                notes.append(yes)
+            elif level == "required":
+                return "excluded"
+            else:
+                parts.append(40.0)
+                notes.append(no)
+        min_size = team.get("min_team_size")
+        if min_size:
+            size = project.get("team_size")
+            if size is None:
+                parts.append(50.0)
+                notes.append("team size not reported")
+            elif size >= min_size:
+                parts.append(95.0)
+                notes.append(f"team of {size}")
+            else:
+                parts.append(40.0)
+                notes.append(f"team of {size}, below {min_size}")
+        if not parts:
+            return None
+        return sum(parts) / len(parts), "Team: " + "; ".join(notes) + " (as reported by the founder)."
+
+    @staticmethod
     def _traction_fit(project: Dict[str, Any], t: Dict[str, Any]):
         """Average of the traction checks the investor cares about; 'excluded' on an unmet requirement."""
         parts: List[float] = []
@@ -379,6 +437,51 @@ class MatchService:
             return None
         return sum(parts) / len(parts), "Traction: " + "; ".join(notes) + " (as reported by the founder)."
 
+    @staticmethod
+    async def _alert_founder_of_strong_fit(project: Dict[str, Any], investor: Dict[str, Any], match: Dict[str, Any]) -> None:
+        """In-app notice to the founder about a strong investor fit (once per investor and project),
+        plus an email when the founder has "Email me about strong matches" on."""
+        founder_id = project.get("founder_id")
+        if not founder_id:
+            return
+        try:
+            from app.services.notification_service import NotificationService
+            label = investor.get("firm") or investor.get("name") or "An investor"
+            p_title = project.get("title", "your project")
+            title = f"Strong investor fit: {label} for {p_title}"
+            already = await pg.fetch_val(
+                "SELECT EXISTS (SELECT 1 FROM notifications WHERE user_id = %s AND title = %s) AS e",
+                [founder_id, title],
+            )
+            if already:
+                return
+            score = float(match.get("match_score") or 0)
+            await NotificationService.create_notification(
+                target_role="FOUNDER",
+                user_id=founder_id,
+                title=title,
+                desc=f"{label}'s criteria closely fit {p_title} ({round(score)}% fit).",
+                badge="Match",
+                badge_variant="success",
+                link="/founder/dashboard?tab=investors",
+            )
+            row = await pg.fetch_one(
+                "SELECT u.email, u.name, fp.settings FROM app_users u "
+                "LEFT JOIN founder_profiles fp ON fp.user_id = u.id WHERE u.id = %s",
+                [founder_id],
+            )
+            if row and row.get("email") and (row.get("settings") or {}).get("email_alerts", True):
+                from app.services.email_service import EmailService
+                EmailService.send_strong_match_email(
+                    founder_email=row["email"],
+                    founder_name=row.get("name") or "there",
+                    investor_label=label,
+                    project_title=p_title,
+                    score=score,
+                )
+        except Exception as e:
+            logger.warning("Could not alert founder %s of a strong fit: %s", founder_id, e)
+
     @classmethod
     async def compute_matches_for_project(cls, project_id: Union[int, str]) -> List[Dict[str, Any]]:
         """Recalculate dynamic matches for a specific project across all investors."""
@@ -422,8 +525,10 @@ class MatchService:
                 await cls._store_match(match_data)
                 results.append(match_data)
 
-                # Emit automated notification for high-fit deals (> 90%)
+                # Strong fits: tell the founder, and the investor if they want these alerts.
                 if match_data.get("match_score", 0) >= 90.0:
+                    await cls._alert_founder_of_strong_fit(project, inv, match_data)
+                if match_data.get("match_score", 0) >= 90.0 and _wants_fit_alerts(inv):
                     try:
                         from app.services.notification_service import NotificationService
                         p_title = project.get("title", "Startup")
@@ -481,8 +586,10 @@ class MatchService:
                 await cls._store_match(match_data)
                 results.append(match_data)
 
-                # Emit automated notification for high-fit deals (> 90%)
+                # Strong fits: tell the founder, and the investor if they want these alerts.
                 if match_data.get("match_score", 0) >= 90.0:
+                    await cls._alert_founder_of_strong_fit(project, investor, match_data)
+                if match_data.get("match_score", 0) >= 90.0 and _wants_fit_alerts(investor):
                     try:
                         from app.services.notification_service import NotificationService
                         p_title = project.get("title", "Startup")

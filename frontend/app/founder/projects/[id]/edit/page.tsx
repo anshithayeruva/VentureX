@@ -47,6 +47,12 @@ export default function EditProjectPage({ params }: { params: Promise<{ id: stri
         monthly_revenue: found.monthly_revenue ?? null,
         customer_count: found.customer_count ?? null,
         product_status: found.product_status || "",
+        team_size: found.team_size ?? null,
+        technical_founder: found.technical_founder ?? null,
+        repeat_founder: found.repeat_founder ?? null,
+        domain_expertise: found.domain_expertise ?? null,
+        full_time_team: found.full_time_team ?? null,
+        ip_protected: found.ip_protected ?? null,
       });
     });
     return () => {
