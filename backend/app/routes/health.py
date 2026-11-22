@@ -17,7 +17,7 @@ async def health_check():
             db_status = "connected" if await pg.ping() else "degraded"
         except Exception as e:
             logger.error("Postgres health ping failed: %s", e)
-            db_status = f"unavailable: {str(e)[:80]}"
+            db_status = "unavailable"
 
     return {
         "status": "healthy" if db_status == "connected" else "mock",

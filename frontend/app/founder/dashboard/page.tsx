@@ -168,8 +168,15 @@ function FounderDashboardContent() {
 
   const togglePublish = async (project: Project) => {
     const next = !project.is_published;
-    setProjects((prev) => prev.map((p) => (p.id === project.id ? { ...p, is_published: next } : p)));
-    await api.togglePublishProject(project.id, next);
+    const setPublished = (value: boolean) =>
+      setProjects((prev) => prev.map((p) => (p.id === project.id ? { ...p, is_published: value } : p)));
+    setPublished(next);
+    try {
+      await api.togglePublishProject(project.id, next);
+    } catch (err) {
+      setPublished(!next);
+      window.alert(err instanceof Error ? err.message : "Couldn't change the project's visibility.");
+    }
   };
 
   const markRead = async (id: string | number) => {

@@ -105,6 +105,11 @@ class MatchService:
         """Ensure all benchmark syndicate investors exist (insert-if-missing, never overwrite)."""
         if cls._investors_ready:
             return
+        from app.core.config import settings
+        if not settings.seed_demo_data:
+            # Outside development, only real investors are matched.
+            cls._investors_ready = True
+            return
         now = datetime.now(timezone.utc)
         for inv in DEMO_INVESTORS:
             user_id = inv["user_id"]

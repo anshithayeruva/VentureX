@@ -29,6 +29,9 @@ class Settings(BaseSettings):
     APP_ENV: str = "development"
     ENVIRONMENT: Optional[str] = None  # Backward-compatibility alias for APP_ENV
     DEBUG: bool = True
+    # Insert the demo projects, investors, intros and deal rooms at startup (into empty tables).
+    # Unset = only in development. Never enable it on a database real users rely on.
+    SEED_DEMO_DATA: Optional[bool] = None
 
     # Lakebase Postgres on Neon (pooled connection string from `neon env pull`)
     DATABASE_URL: str = ""
@@ -90,6 +93,13 @@ class Settings(BaseSettings):
         if self.gemini_api_key:
             return "gemini"
         return "rules"
+
+    @property
+    def seed_demo_data(self) -> bool:
+        """Whether demo data may be inserted at startup (explicit setting, else development only)."""
+        if self.SEED_DEMO_DATA is not None:
+            return self.SEED_DEMO_DATA
+        return self.environment_name == "development"
 
     @property
     def environment_name(self) -> str:

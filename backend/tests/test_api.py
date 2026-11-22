@@ -134,8 +134,26 @@ def test_ai_matches(client):
 
 
 def test_investor_preferences(client):
-    """Verify retrieval of investor matching preferences."""
-    response = client.get("/api/investors/preferences")
+    """An investor reads their own matching criteria; a founder gets 403 (no demo fallback)."""
+    from app.core.auth import CurrentUser, get_current_user
+    from app.main import app
+
+    assert client.get("/api/investors/preferences").status_code == 403  # signed in as a founder
+    previous = app.dependency_overrides[get_current_user]
+
+    async def _investor():
+        return CurrentUser(id="test-investor-prefs", email="inv@test.venturex.io", name="Test Investor", role="INVESTOR")
+
+    app.dependency_overrides[get_current_user] = _investor
+    try:
+        response = client.get("/api/investors/preferences")
+    finally:
+        app.dependency_overrides[get_current_user] = previous
+        from app.database import postgres as pg
+        client.portal.call(pg.run_batch, [
+            ("DELETE FROM investor_preferences WHERE investor_id = 'test-investor-prefs'", []),
+            ("DELETE FROM investor_profiles WHERE user_id = 'test-investor-prefs'", []),
+        ])
     assert response.status_code == 200
     prefs = response.json()
     assert "preferred_industries" in prefs

@@ -44,6 +44,8 @@ export default function FounderProjectPage({ params }: { params: Promise<{ id: s
     try {
       const updated = await api.togglePublishProject(projectId, !published);
       setPublished(Boolean(updated.is_published));
+    } catch (err) {
+      window.alert(err instanceof Error ? err.message : "Couldn't change the project's visibility.");
     } finally {
       setPublishing(false);
     }

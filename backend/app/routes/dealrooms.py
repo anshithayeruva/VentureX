@@ -16,6 +16,7 @@ from app.schemas.dealroom import (
     DealRoomAuditLog,
 )
 from app.core.auth import CurrentUser, require_user, user_from_token
+from app.core.rate_limit import rate_limit
 from app.services import dealroom_files
 from app.services.deal_room_service import DealRoomService
 from app.utils.pdf_generator import PDFGenerator
@@ -102,7 +103,7 @@ async def create_deal_room(room_in: DealRoomCreateInput, user: CurrentUser = Dep
         logger.error("Failed to create deal room: %s", e)
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Could not initialize Deal Room: {str(e)}",
+            detail="Could not initialize Deal Room. Please try again.",
         )
 
 
@@ -123,7 +124,8 @@ async def get_messages(
     return await DealRoomService.get_messages(room_id, user_id=user.id, limit=limit)
 
 
-@router.post("/{room_id}/messages", response_model=DealMessage, status_code=status.HTTP_201_CREATED)
+@router.post("/{room_id}/messages", response_model=DealMessage, status_code=status.HTTP_201_CREATED,
+             dependencies=[Depends(rate_limit("message", 60, 60))])
 async def send_message(
     room_id: str,
     message_in: MessageCreateInput,
@@ -146,7 +148,7 @@ async def send_message(
         logger.error("Failed to post message in deal room %s: %s", room_id, e)
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Failed to record message: {str(e)}",
+            detail="Failed to record message. Please try again.",
         )
 
 
@@ -232,7 +234,8 @@ async def update_stage(room_id: str, stage_in: StageUpdateInput, user: CurrentUs
     except ValueError as e:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e))
     except Exception as e:
-        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(e))
+        logger.exception("Request failed")
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Something went wrong. Please try again.")
 
 
 @router.post("/{room_id}/nda", response_model=DealRoom)
@@ -251,7 +254,8 @@ async def sign_nda(room_id: str, nda_in: NDASignInput, user: CurrentUser = Depen
     except ValueError as e:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e))
     except Exception as e:
-        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(e))
+        logger.exception("Request failed")
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Something went wrong. Please try again.")
 
 
 @router.post("/{room_id}/documents", response_model=DealRoom)
@@ -268,10 +272,12 @@ async def share_document(room_id: str, doc_in: DocumentShareInput, user: Current
     except ValueError as e:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e))
     except Exception as e:
-        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(e))
+        logger.exception("Request failed")
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Something went wrong. Please try again.")
 
 
-@router.post("/{room_id}/files", response_model=DealRoom)
+@router.post("/{room_id}/files", response_model=DealRoom,
+             dependencies=[Depends(rate_limit("upload", 60, 3600))])
 async def upload_room_file(
     room_id: str,
     file: UploadFile = File(...),
@@ -320,7 +326,8 @@ async def export_transcript(room_id: str, user: CurrentUser = Depends(require_us
     except ValueError as e:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e))
     except Exception as e:
-        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(e))
+        logger.exception("Request failed")
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Something went wrong. Please try again.")
 
 
 @router.get("/{room_id}/export-pdf")
@@ -347,7 +354,7 @@ async def export_dealroom_pdf(room_id: str, user: CurrentUser = Depends(require_
         logger.error("Failed to generate deal room audit PDF: %s", e)
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Could not generate audit PDF: {str(e)}",
+            detail="Could not generate audit PDF. Please try again.",
         )
 
 

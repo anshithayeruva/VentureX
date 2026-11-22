@@ -79,7 +79,7 @@ function InvestorDashboardContent() {
   const [query, setQuery] = useState("");
   const [connectingId, setConnectingId] = useState<string | null>(null);
   const [interestFilter, setInterestFilter] = useState<"all" | "pending" | "accepted" | "declined">("all");
-  const [notice, setNotice] = useState<string | null>(null);
+  const [notice, setNotice] = useState<{ text: string; ok: boolean } | null>(null);
 
   const [profile, setProfile] = useState({
     name: "",
@@ -178,10 +178,10 @@ function InvestorDashboardContent() {
         project_industry: project.industry,
         message: `Interested in learning more about ${project.title} and discussing the ${project.stage} round.`,
       });
-      if (created) {
-        setInterests((prev) => [created, ...prev.filter((i) => String(i.id) !== String(created.id))]);
-        flash(`Intro requested for ${project.title}. You'll be notified when the founder replies.`);
-      }
+      setInterests((prev) => [created, ...prev.filter((i) => String(i.id) !== String(created.id))]);
+      flash(`Intro requested for ${project.title}. You'll be notified when the founder replies.`);
+    } catch (err) {
+      flash(err instanceof Error ? err.message : "Couldn't send the intro request.", false);
     } finally {
       setConnectingId(null);
     }
@@ -193,9 +193,9 @@ function InvestorDashboardContent() {
     flash(`Request for ${interest.project_title || "this project"} withdrawn.`);
   };
 
-  const flash = (message: string) => {
-    setNotice(message);
-    setTimeout(() => setNotice(null), 5000);
+  const flash = (message: string, ok = true) => {
+    setNotice({ text: message, ok });
+    setTimeout(() => setNotice(null), ok ? 5000 : 8000);
   };
 
   const markRead = async (id: string | number) => {
@@ -337,9 +337,15 @@ function InvestorDashboardContent() {
       />
 
       {notice && (
-        <div role="status" className="mb-6 flex items-center gap-2 rounded-lg bg-positive-soft px-4 py-3 text-sm text-positive">
-          <CheckCircle2 className="h-4 w-4 shrink-0" />
-          {notice}
+        <div
+          role={notice.ok ? "status" : "alert"}
+          className={cx(
+            "mb-6 flex items-center gap-2 rounded-lg px-4 py-3 text-sm",
+            notice.ok ? "bg-positive-soft text-positive" : "bg-danger-soft text-danger"
+          )}
+        >
+          {notice.ok && <CheckCircle2 className="h-4 w-4 shrink-0" />}
+          {notice.text}
         </div>
       )}
 
