@@ -2,6 +2,8 @@ import io
 import datetime
 from typing import List, Dict, Any, Optional
 
+from app.utils.money import inr
+
 
 class SimplePDFCanvas:
     """Pure Python, zero-dependency PDF 1.4 canvas and document builder.
@@ -191,7 +193,7 @@ class PDFGenerator:
         industry = project.get("industry", "DeepTech")
         stage = project.get("stage", "Seed")
         funding = project.get("funding_required", 0)
-        formatted_funding = f"${funding:,.0f}" if isinstance(funding, (int, float)) else str(funding)
+        formatted_funding = inr(funding, compact=False, ascii_only=True) if isinstance(funding, (int, float)) else str(funding)
 
         canvas.draw_text(title, 36, 625, font="/F2", size=16, color=(0.06, 0.09, 0.16))
         canvas.draw_text(f"Sector: {industry}   |   Stage: {stage}   |   Target Raise Ask: {formatted_funding}", 36, 608, font="/F1", size=9.5, color=(0.3, 0.35, 0.42))

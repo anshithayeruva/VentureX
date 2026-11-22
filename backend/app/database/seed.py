@@ -201,8 +201,8 @@ async def seed_core_data() -> None:
             "bio": "Investing in Healthcare AI, MedTech diagnostics, and clinical automation infrastructure.",
             "location": "New York & Boston",
             "thesis": "Leading Seed and Series A rounds for high-defensibility technical founders solving critical clinical bottleneck problems.",
-            "min_check": "$500,000",
-            "max_check": "$1,500,000",
+            "min_check": "₹5,00,000",
+            "max_check": "₹15,00,000",
             "settings": {
                 "auto_notify_high_conviction": True,
                 "weekly_dealflow_summary": True,

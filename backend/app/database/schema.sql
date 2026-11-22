@@ -241,3 +241,76 @@ CREATE TABLE IF NOT EXISTS project_analyses (
     created_at       TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 CREATE INDEX IF NOT EXISTS project_analyses_project_idx ON project_analyses (project_id, created_at DESC);
+
+-- Investor portal ------------------------------------------------------------
+
+-- Structured investment thesis (sections A-J of the criteria page). The legacy
+-- preference columns above are kept in sync from it for older readers.
+ALTER TABLE investor_preferences ADD COLUMN IF NOT EXISTS thesis JSONB NOT NULL DEFAULT '{}';
+
+-- Optional, founder-provided facts investors can filter on. All self-reported.
+ALTER TABLE projects ADD COLUMN IF NOT EXISTS country TEXT NOT NULL DEFAULT '';
+ALTER TABLE projects ADD COLUMN IF NOT EXISTS city TEXT NOT NULL DEFAULT '';
+ALTER TABLE projects ADD COLUMN IF NOT EXISTS monthly_revenue DOUBLE PRECISION;
+ALTER TABLE projects ADD COLUMN IF NOT EXISTS customer_count INTEGER;
+ALTER TABLE projects ADD COLUMN IF NOT EXISTS product_status TEXT NOT NULL DEFAULT '';
+CREATE INDEX IF NOT EXISTS projects_published_industry_idx ON projects (industry) WHERE is_published;
+
+-- Startups an investor bookmarked from Discover (the "Saved" column of Deal Flow).
+CREATE TABLE IF NOT EXISTS saved_opportunities (
+    investor_id  TEXT NOT NULL,
+    project_id   BIGINT NOT NULL REFERENCES projects (id) ON DELETE CASCADE,
+    created_at   TIMESTAMPTZ NOT NULL DEFAULT now(),
+    PRIMARY KEY (investor_id, project_id)
+);
+
+-- Portfolio & finances. Every row is entered by the investor (self-reported) and
+-- scoped by investor_id; money is NUMERIC, never floating point.
+CREATE TABLE IF NOT EXISTS investments (
+    id               BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+    investor_id      TEXT NOT NULL,
+    project_id       BIGINT REFERENCES projects (id) ON DELETE SET NULL,
+    company_name     TEXT NOT NULL,
+    industry         TEXT NOT NULL DEFAULT '',
+    stage            TEXT NOT NULL DEFAULT '',
+    instrument       TEXT NOT NULL DEFAULT 'equity',
+    investment_date  DATE NOT NULL,
+    currency         TEXT NOT NULL DEFAULT 'INR',
+    ownership_pct    NUMERIC(7, 4),
+    status           TEXT NOT NULL DEFAULT 'active' CHECK (status IN ('active', 'exited', 'written_off')),
+    notes            TEXT NOT NULL DEFAULT '',
+    created_at       TIMESTAMPTZ NOT NULL DEFAULT now(),
+    updated_at       TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS investments_investor_idx ON investments (investor_id, investment_date DESC);
+
+CREATE TABLE IF NOT EXISTS investment_transactions (
+    id             BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+    investor_id    TEXT NOT NULL,
+    investment_id  BIGINT NOT NULL REFERENCES investments (id) ON DELETE CASCADE,
+    txn_date       DATE NOT NULL,
+    type           TEXT NOT NULL CHECK (type IN ('investment', 'follow_on', 'distribution', 'dividend', 'exit_proceeds', 'interest', 'fee')),
+    amount         NUMERIC(18, 2) NOT NULL CHECK (amount > 0),
+    status         TEXT NOT NULL DEFAULT 'completed' CHECK (status IN ('completed', 'pending')),
+    description    TEXT NOT NULL DEFAULT '',
+    created_at     TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS investment_transactions_investor_idx ON investment_transactions (investor_id, txn_date DESC);
+CREATE INDEX IF NOT EXISTS investment_transactions_investment_idx ON investment_transactions (investment_id, txn_date);
+
+-- Valuation marks for a holding's stake (what the investor's position is worth).
+CREATE TABLE IF NOT EXISTS investment_valuations (
+    id              BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+    investor_id     TEXT NOT NULL,
+    investment_id   BIGINT NOT NULL REFERENCES investments (id) ON DELETE CASCADE,
+    valuation_date  DATE NOT NULL,
+    value           NUMERIC(18, 2) NOT NULL CHECK (value >= 0),
+    source          TEXT NOT NULL DEFAULT 'self_reported' CHECK (source IN ('self_reported', 'company_report', 'funding_round', 'third_party')),
+    note            TEXT NOT NULL DEFAULT '',
+    created_at      TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS investment_valuations_investment_idx ON investment_valuations (investment_id, valuation_date DESC);
+
+-- VentureX works in Indian rupees.
+ALTER TABLE investments ALTER COLUMN currency SET DEFAULT 'INR';
+UPDATE investments SET currency = 'INR' WHERE currency <> 'INR';

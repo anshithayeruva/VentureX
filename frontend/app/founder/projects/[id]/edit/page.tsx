@@ -42,6 +42,11 @@ export default function EditProjectPage({ params }: { params: Promise<{ id: stri
         pitch_deck_url: found.pitch_deck_url || "",
         github_url: found.github_url || "",
         demo_url: found.demo_url || "",
+        country: found.country || "",
+        city: found.city || "",
+        monthly_revenue: found.monthly_revenue ?? null,
+        customer_count: found.customer_count ?? null,
+        product_status: found.product_status || "",
       });
     });
     return () => {

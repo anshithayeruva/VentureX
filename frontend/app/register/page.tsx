@@ -65,11 +65,21 @@ function RegisterForm() {
       }
 
       // Record the workspace choice and create the matching profile.
-      await api.completeOnboarding({
-        role,
-        name: fullName,
-        organization: organization || undefined,
-      });
+      try {
+        await api.completeOnboarding({
+          role,
+          name: fullName,
+          organization: role === "INVESTOR" ? organization || undefined : undefined,
+        });
+      } catch {
+        // The account exists now; only the workspace setup didn't finish. Signing in completes it.
+        setError(
+          `Your account was created, but we couldn't finish setting it up. Sign in as ${
+            role === "FOUNDER" ? "a Founder" : "an Investor"
+          } to finish.`
+        );
+        return;
+      }
       router.replace(role === "FOUNDER" ? "/founder/dashboard" : "/investor/dashboard");
       router.refresh();
     } catch (err) {
@@ -131,8 +141,8 @@ function RegisterForm() {
           </div>
 
           <div>
-            <label className="block text-xs font-semibold text-[#0F172A] mb-1">Full Name</label>
-            <input
+            <label htmlFor="reg-name" className="block text-xs font-semibold text-[#0F172A] mb-1">Full Name</label>
+            <input id="reg-name"
               type="text"
               required
               placeholder="Your name"
@@ -142,22 +152,26 @@ function RegisterForm() {
             />
           </div>
 
-          <div>
-            <label className="block text-xs font-semibold text-[#0F172A] mb-1">
-              {role === "FOUNDER" ? "Startup name" : "Firm or fund"}
-            </label>
-            <input
-              type="text"
-              placeholder={role === "FOUNDER" ? "e.g. Synthetix Labs" : "e.g. Horizon Seed Capital"}
-              value={organization}
-              onChange={(e) => setOrganization(e.target.value)}
-              className="w-full px-3.5 py-2.5 bg-[#F8FAFC] border border-[#E2E8F0] rounded-lg text-[#0F172A] placeholder-[#94A3B8] focus:outline-none focus:border-[#1B3B6F]"
-            />
-          </div>
+          {/* Founders add each startup as a project after signing up (they can have several),
+              so only investors are asked for an organization here. */}
+          {role === "INVESTOR" && (
+            <div>
+              <label htmlFor="reg-org" className="block text-xs font-semibold text-[#0F172A] mb-1">
+                Firm or fund
+              </label>
+              <input id="reg-org"
+                type="text"
+                placeholder="e.g. Horizon Seed Capital"
+                value={organization}
+                onChange={(e) => setOrganization(e.target.value)}
+                className="w-full px-3.5 py-2.5 bg-[#F8FAFC] border border-[#E2E8F0] rounded-lg text-[#0F172A] placeholder-[#94A3B8] focus:outline-none focus:border-[#1B3B6F]"
+              />
+            </div>
+          )}
 
           <div>
-            <label className="block text-xs font-semibold text-[#0F172A] mb-1">Email</label>
-            <input
+            <label htmlFor="reg-email" className="block text-xs font-semibold text-[#0F172A] mb-1">Email</label>
+            <input id="reg-email"
               type="email"
               required
               placeholder="you@company.com"
@@ -168,8 +182,8 @@ function RegisterForm() {
           </div>
 
           <div>
-            <label className="block text-xs font-semibold text-[#0F172A] mb-1">Password</label>
-            <input
+            <label htmlFor="reg-password" className="block text-xs font-semibold text-[#0F172A] mb-1">Password</label>
+            <input id="reg-password"
               type="password"
               required
               placeholder="Minimum 8 characters"

@@ -1,26 +1,11 @@
 "use client";
 
-import React, { Suspense, useEffect, useMemo, useState } from "react";
+import React, { Suspense, useEffect, useState } from "react";
 import Link from "next/link";
-import { useSearchParams } from "next/navigation";
-import {
-  ArrowRight,
-  Bell,
-  Check,
-  CheckCircle2,
-  ExternalLink,
-  FileText,
-  Globe,
-  Heart,
-  Mail,
-  MessagesSquare,
-  Rocket,
-  Search,
-  Sliders,
-  Sparkles,
-  User,
-} from "lucide-react";
+import { useRouter, useSearchParams } from "next/navigation";
+import { ArrowRight, Bell, Bookmark, Check, MessagesSquare, Sparkles, Wallet } from "lucide-react";
 import { PortalLayout } from "@/components/PortalLayout";
+import { ReasonLine } from "@/components/forms";
 import {
   Button,
   ButtonLink,
@@ -31,55 +16,53 @@ import {
   LoadingRows,
   PageHeader,
   Section,
-  Segmented,
   Stat,
   Tag,
   Toggle,
-  buttonClass,
   cx,
   inputClass,
 } from "@/components/ui";
 import { api } from "@/lib/api";
+import { stageLabel, stageTone } from "@/lib/dealroom";
 import { formatMoney, timeAgo } from "@/lib/format";
-import { InvestorPreference, MatchItem, NotificationItem, Project, ProjectInterest } from "@/types";
+import { formatCompact, formatSigned, gainTone } from "@/lib/money";
+import { normalizeThesis, summarizeThesis } from "@/lib/thesis";
+import type { DealFlow, DiscoverItem, NotificationItem, PortfolioSummary } from "@/types";
 
-type Tab = "overview" | "recommended" | "browse" | "interests" | "notifications" | "profile" | "settings";
-type Connection = "none" | "pending" | "accepted" | "declined";
+type Tab = "overview" | "notifications" | "profile" | "settings";
 
 const TAB_COPY: Record<Tab, { title: string; description: string }> = {
-  overview: { title: "Overview", description: "Startups that fit your criteria and where your intro requests stand." },
-  recommended: {
-    title: "Recommended",
-    description: "Published startups ranked by how well they fit your criteria, with the reasons.",
-  },
-  browse: { title: "Browse", description: "Every startup founders have published." },
-  interests: {
-    title: "My interests",
-    description: "Intro requests you've sent. When a founder accepts, a private deal room opens.",
-  },
+  overview: { title: "Overview", description: "Your best fits, where your deals stand, and your portfolio at a glance." },
   notifications: { title: "Notifications", description: "Replies from founders and new matches." },
   profile: { title: "Profile", description: "What founders see about you when you request an intro." },
   settings: { title: "Settings", description: "Alerts and contact preferences." },
 };
 const TABS = Object.keys(TAB_COPY) as Tab[];
 
+// Sections that moved out of this page keep working as links.
+const MOVED: Record<string, string> = {
+  recommended: "/investor/discover",
+  browse: "/investor/discover",
+  interests: "/investor/deal-flow",
+};
+
 function InvestorDashboardContent() {
+  const router = useRouter();
   const searchParams = useSearchParams();
-  const tabParam = searchParams.get("tab") as Tab | null;
-  const activeTab: Tab = tabParam && TABS.includes(tabParam) ? tabParam : "overview";
+  const tabParam = searchParams.get("tab");
+  const activeTab: Tab = tabParam && (TABS as string[]).includes(tabParam) ? (tabParam as Tab) : "overview";
 
-  const [projects, setProjects] = useState<Project[]>([]);
-  const [loaded, setLoaded] = useState(false);
-  const [matches, setMatches] = useState<MatchItem[]>([]);
-  const [interests, setInterests] = useState<ProjectInterest[]>([]);
+  useEffect(() => {
+    if (tabParam && MOVED[tabParam]) router.replace(MOVED[tabParam]);
+  }, [tabParam, router]);
+
+  const [fits, setFits] = useState<DiscoverItem[] | null>(null);
+  const [fitCount, setFitCount] = useState<number | null>(null);
+  const [flow, setFlow] = useState<DealFlow | null>(null);
+  const [portfolio, setPortfolio] = useState<PortfolioSummary | null>(null);
+  const [thesisLines, setThesisLines] = useState<string[] | null>(null);
+  const [loadError, setLoadError] = useState<string | null>(null);
   const [notifications, setNotifications] = useState<NotificationItem[]>([]);
-  const [prefs, setPrefs] = useState<InvestorPreference | null>(null);
-
-  const [industry, setIndustry] = useState("All");
-  const [query, setQuery] = useState("");
-  const [connectingId, setConnectingId] = useState<string | null>(null);
-  const [interestFilter, setInterestFilter] = useState<"all" | "pending" | "accepted" | "declined">("all");
-  const [notice, setNotice] = useState<{ text: string; ok: boolean } | null>(null);
 
   const [profile, setProfile] = useState({
     name: "",
@@ -101,12 +84,18 @@ function InvestorDashboardContent() {
 
   useEffect(() => {
     let mounted = true;
-    Promise.all([
-      api.getProjects().then((data) => mounted && setProjects(data)),
-      api.getMatches().then((data) => mounted && setMatches(data)),
-      api.getInterests().then((data) => mounted && Array.isArray(data) && setInterests(data)),
-    ]).finally(() => mounted && setLoaded(true));
-    api.getInvestorPreferences().then((data) => mounted && setPrefs(data));
+    const failed = (err: unknown) => mounted && setLoadError(err instanceof Error ? err.message : "Some of your data couldn't be loaded.");
+    api
+      .discover({ matched_only: true, sort: "fit", page_size: 4 })
+      .then((page) => {
+        if (!mounted) return;
+        setFits(page.items);
+        setFitCount(page.total);
+      })
+      .catch(failed);
+    api.getDealFlow().then((d) => mounted && setFlow(d)).catch(failed);
+    api.getPortfolioSummary().then((p) => mounted && setPortfolio(p)).catch(failed);
+    api.getInvestorPreferences().then((p) => mounted && setThesisLines(p ? summarizeThesis(normalizeThesis(p.thesis)) : []));
     api.getNotifications("INVESTOR").then((data) => mounted && Array.isArray(data) && setNotifications(data));
     api.getInvestorProfile().then((data) => {
       if (mounted && data) {
@@ -136,67 +125,7 @@ function InvestorDashboardContent() {
     };
   }, []);
 
-  const projectById = useMemo(() => new Map(projects.map((p) => [String(p.id), p])), [projects]);
-  // Only matches whose project is published and visible to this investor.
-  const sortedMatches = useMemo(
-    () =>
-      matches.filter((m) => projectById.has(String(m.project_id))).sort((a, b) => b.match_score - a.match_score),
-    [matches, projectById]
-  );
-  const industries = useMemo(
-    () => ["All", ...Array.from(new Set(projects.map((p) => p.industry).filter(Boolean))).sort()],
-    [projects]
-  );
-  const browseProjects = projects.filter((p) => {
-    const q = query.trim().toLowerCase();
-    const inIndustry = industry === "All" || p.industry === industry;
-    const inSearch =
-      !q || [p.title, p.tagline, p.description, p.industry].some((v) => v?.toLowerCase().includes(q));
-    return inIndustry && inSearch;
-  });
-  const visibleInterests = interests.filter((i) => interestFilter === "all" || i.status === interestFilter);
   const unreadCount = notifications.filter((n) => !n.read).length;
-  const pendingCount = interests.filter((i) => i.status === "pending").length;
-  const acceptedCount = interests.filter((i) => i.status === "accepted").length;
-
-  const connectionFor = (projectId: number | string): Connection => {
-    const mine = interests.filter((i) => String(i.project_id) === String(projectId));
-    if (mine.some((i) => i.status === "accepted")) return "accepted";
-    if (mine.some((i) => i.status === "pending")) return "pending";
-    if (mine.some((i) => i.status === "declined")) return "declined";
-    return "none";
-  };
-
-  /* ---------- actions ---------- */
-
-  const requestIntro = async (project: Project) => {
-    setConnectingId(String(project.id));
-    try {
-      const created = await api.expressInterest({
-        project_id: project.id,
-        project_title: project.title,
-        project_industry: project.industry,
-        message: `Interested in learning more about ${project.title} and discussing the ${project.stage} round.`,
-      });
-      setInterests((prev) => [created, ...prev.filter((i) => String(i.id) !== String(created.id))]);
-      flash(`Intro requested for ${project.title}. You'll be notified when the founder replies.`);
-    } catch (err) {
-      flash(err instanceof Error ? err.message : "Couldn't send the intro request.", false);
-    } finally {
-      setConnectingId(null);
-    }
-  };
-
-  const withdraw = async (interest: ProjectInterest) => {
-    await api.withdrawInterest(interest.id);
-    setInterests((prev) => prev.filter((i) => String(i.id) !== String(interest.id)));
-    flash(`Request for ${interest.project_title || "this project"} withdrawn.`);
-  };
-
-  const flash = (message: string, ok = true) => {
-    setNotice({ text: message, ok });
-    setTimeout(() => setNotice(null), ok ? 5000 : 8000);
-  };
 
   const markRead = async (id: string | number) => {
     await api.markNotificationRead(id);
@@ -235,86 +164,9 @@ function InvestorDashboardContent() {
     setTimeout(() => setSettingsSaved(false), 3000);
   };
 
-  /* ---------- pieces ---------- */
-
-  const introAction = (project: Project) => {
-    const status = connectionFor(project.id);
-    if (status === "accepted")
-      return (
-        <ButtonLink href="/investor/dashboard?tab=interests" variant="secondary">
-          <MessagesSquare className="w-4 h-4" />
-          Connected
-        </ButtonLink>
-      );
-    if (status === "pending") return <Tag tone="warning">Intro requested</Tag>;
-    if (status === "declined") return <Tag>Founder declined</Tag>;
-    const busy = connectingId === String(project.id);
-    return (
-      <Button onClick={() => requestIntro(project)} disabled={busy}>
-        {busy ? "Sending…" : "Request intro"}
-      </Button>
-    );
-  };
-
-  const projectCard = (project: Project, match?: MatchItem) => (
-    <Card key={project.id} className="flex flex-col">
-      <div className="flex items-start justify-between gap-3">
-        <div className="min-w-0">
-          <Link href={`/investor/projects/${project.id}`} className="text-sm font-medium text-ink hover:underline">
-            {project.title}
-          </Link>
-          <div className="text-sm text-muted">
-            {project.stage} · {project.industry}
-          </div>
-        </div>
-        {match && <Tag tone={match.match_score >= 85 ? "positive" : "accent"}>{Math.round(match.match_score)}% fit</Tag>}
-      </div>
-      {(project.tagline || project.description) && (
-        <p className="mt-3 text-sm text-ink-2 line-clamp-2">{project.tagline || project.description}</p>
-      )}
-      {match?.reasons?.length ? (
-        <ul className="mt-3 space-y-1">
-          {match.reasons.slice(0, 3).map((r) => (
-            <li key={r.category} className="flex gap-2 text-sm text-muted">
-              <CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0 text-positive" />
-              <span className="line-clamp-2">{r.explanation}</span>
-            </li>
-          ))}
-        </ul>
-      ) : null}
-      <div className="mt-auto flex items-center justify-between gap-3 pt-4">
-        <div className="text-sm">
-          <span className="text-muted">Raising </span>
-          <span className="font-medium text-ink tabular-nums">{formatMoney(project.funding_required)}</span>
-        </div>
-        <div className="flex items-center gap-2">
-          <Link href={`/investor/projects/${project.id}`} className={buttonClass("ghost")}>
-            Details
-          </Link>
-          {introAction(project)}
-        </div>
-      </div>
-    </Card>
-  );
-
-  const matchedCards = (list: MatchItem[]) =>
-    list
-      .map((m) => {
-        const project = projectById.get(String(m.project_id));
-        return project ? projectCard(project, m) : null;
-      })
-      .filter(Boolean);
-
   const copy = TAB_COPY[activeTab];
-  const criteriaSummary = prefs
-    ? [
-        prefs.preferred_industries?.length ? prefs.preferred_industries.join(", ") : null,
-        prefs.preferred_stages?.length ? prefs.preferred_stages.join(", ") : null,
-        prefs.min_investment || prefs.max_investment
-          ? `${formatMoney(prefs.min_investment)} – ${formatMoney(prefs.max_investment)}`
-          : null,
-      ].filter(Boolean)
-    : [];
+  const counts = flow?.counts ?? {};
+  const t = portfolio?.totals;
 
   return (
     <PortalLayout role="INVESTOR" activeItem={activeTab} title={copy.title}>
@@ -327,217 +179,189 @@ function InvestorDashboardContent() {
               <Check className="w-4 h-4" />
               Mark all as read
             </Button>
-          ) : activeTab === "recommended" ? (
-            <ButtonLink href="/investor/preferences" variant="secondary">
-              <Sliders className="w-4 h-4" />
-              Edit criteria
-            </ButtonLink>
           ) : null
         }
       />
 
-      {notice && (
-        <div
-          role={notice.ok ? "status" : "alert"}
-          className={cx(
-            "mb-6 flex items-center gap-2 rounded-lg px-4 py-3 text-sm",
-            notice.ok ? "bg-positive-soft text-positive" : "bg-danger-soft text-danger"
-          )}
-        >
-          {notice.ok && <CheckCircle2 className="h-4 w-4 shrink-0" />}
-          {notice.text}
-        </div>
-      )}
-
       {/* ---------------- Overview ---------------- */}
       {activeTab === "overview" && (
         <div className="space-y-10">
+          {loadError && (
+            <p role="alert" className="rounded-lg bg-danger-soft px-4 py-3 text-sm text-danger">
+              {loadError}
+            </p>
+          )}
           <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
-            <Stat label="Matches" value={sortedMatches.length} hint={`${sortedMatches.filter((m) => m.match_score >= 85).length} strong fits`} icon={Sparkles} />
-            <Stat label="Published startups" value={projects.length} hint="Open to intro requests" icon={Rocket} />
-            <Stat label="Intros pending" value={pendingCount} hint="Waiting on founders" icon={Heart} />
-            <Stat label="Deal rooms" value={acceptedCount} hint="Founders who accepted" icon={MessagesSquare} />
+            <Stat label="Matches" value={fitCount ?? "—"} hint="Startups that fit your criteria" icon={Sparkles} />
+            <Stat
+              label="In your pipeline"
+              value={flow ? (counts.saved ?? 0) + (counts.requested ?? 0) : "—"}
+              hint={flow ? `${counts.saved ?? 0} saved · ${counts.requested ?? 0} requested` : undefined}
+              icon={Bookmark}
+            />
+            <Stat label="Active deals" value={flow ? counts.active ?? 0 : "—"} hint="Open deal rooms" icon={MessagesSquare} />
+            <Stat
+              label="Portfolio value"
+              value={t ? (t.active_count + t.exited_count + t.written_off_count ? formatCompact(t.current_value) : "—") : "—"}
+              hint={t && t.active_count + t.exited_count + t.written_off_count ? `${formatCompact(t.total_invested)} invested` : "No investments recorded"}
+              icon={Wallet}
+            />
           </div>
 
           <Card className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
             <div className="min-w-0">
-              <div className="text-sm text-muted">Your criteria</div>
-              <div className="mt-1 text-sm font-medium text-ink">
-                {criteriaSummary.length ? criteriaSummary.join(" · ") : "Not set yet"}
+              <div className="text-sm text-muted">Your thesis</div>
+              <div className="mt-1 text-sm text-ink">
+                {thesisLines == null ? "…" : thesisLines.length ? thesisLines.slice(0, 2).join(" ") : "Not set yet"}
               </div>
             </div>
             <ButtonLink href="/investor/preferences" variant="secondary" className="shrink-0">
-              {criteriaSummary.length ? "Edit" : "Set criteria"}
+              {thesisLines?.length ? "Edit criteria" : "Set criteria"}
             </ButtonLink>
           </Card>
 
-          <Section title="Best fits for you" action={sortedMatches.length > 4 && <TabLink tab="recommended">See all</TabLink>}>
-            {!loaded ? (
-              <LoadingRows />
-            ) : sortedMatches.length === 0 ? (
+          <Section
+            title="Best fits for you"
+            action={
+              (fitCount ?? 0) > 4 && (
+                <Link href="/investor/discover" className="inline-flex items-center gap-1 font-medium text-accent hover:underline">
+                  See all {fitCount}
+                  <ArrowRight className="h-3.5 w-3.5" />
+                </Link>
+              )
+            }
+          >
+            {fits == null ? (
+              loadError ? null : <LoadingRows />
+            ) : fits.length === 0 ? (
               <EmptyState
                 icon={Sparkles}
                 title="No matches yet"
-                description="Set your criteria and we'll match you with published startups that fit."
+                description="Set your criteria and we'll rank published startups by how well they fit."
                 action={<ButtonLink href="/investor/preferences">Set criteria</ButtonLink>}
               />
             ) : (
-              <div className="grid gap-4 lg:grid-cols-2">{matchedCards(sortedMatches.slice(0, 4))}</div>
-            )}
-          </Section>
-        </div>
-      )}
-
-      {/* ---------------- Recommended ---------------- */}
-      {activeTab === "recommended" &&
-        (!loaded ? (
-          <LoadingRows />
-        ) : sortedMatches.length === 0 ? (
-          <EmptyState
-            icon={Sparkles}
-            title="No matches yet"
-            description="Matches appear when published startups fit your industries, stages and check size."
-            action={<ButtonLink href="/investor/preferences">Set criteria</ButtonLink>}
-          />
-        ) : (
-          <div className="grid gap-4 lg:grid-cols-2">{matchedCards(sortedMatches)}</div>
-        ))}
-
-      {/* ---------------- Browse ---------------- */}
-      {activeTab === "browse" && (
-        <div className="space-y-5">
-          <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-            <div className="relative w-full sm:max-w-sm">
-              <Search className="pointer-events-none absolute left-3 top-2.5 h-4 w-4 text-faint" />
-              <input
-                type="search"
-                placeholder="Search startups"
-                value={query}
-                onChange={(e) => setQuery(e.target.value)}
-                className={cx(inputClass, "pl-9")}
-              />
-            </div>
-            {industries.length > 2 && (
-              <select
-                aria-label="Filter by industry"
-                value={industry}
-                onChange={(e) => setIndustry(e.target.value)}
-                className={cx(inputClass, "sm:w-56")}
-              >
-                {industries.map((ind) => (
-                  <option key={ind} value={ind}>
-                    {ind === "All" ? "All industries" : ind}
-                  </option>
-                ))}
-              </select>
-            )}
-          </div>
-          {!loaded ? (
-            <LoadingRows />
-          ) : projects.length === 0 ? (
-            <EmptyState icon={Rocket} title="No published startups yet" description="Check back soon." />
-          ) : browseProjects.length === 0 ? (
-            <EmptyState compact title="No startups match that search" />
-          ) : (
-            <div className="grid gap-4 lg:grid-cols-2">
-              {browseProjects.map((p) => projectCard(p, matches.find((m) => String(m.project_id) === String(p.id))))}
-            </div>
-          )}
-        </div>
-      )}
-
-      {/* ---------------- My interests ---------------- */}
-      {activeTab === "interests" && (
-        <div className="space-y-5">
-          {interests.length > 0 && (
-            <Segmented
-              value={interestFilter}
-              onChange={setInterestFilter}
-              options={[
-                { value: "all", label: `All ${interests.length}` },
-                { value: "pending", label: `Pending ${pendingCount}` },
-                { value: "accepted", label: `Accepted ${acceptedCount}` },
-                { value: "declined", label: `Declined ${interests.filter((i) => i.status === "declined").length}` },
-              ]}
-            />
-          )}
-          {!loaded ? (
-            <LoadingRows />
-          ) : interests.length === 0 ? (
-            <EmptyState
-              icon={Heart}
-              title="No intro requests yet"
-              description="Find a startup you like and request an intro. The founder decides whether to connect."
-              action={<TabLink tab="browse" asButton>Browse startups</TabLink>}
-            />
-          ) : visibleInterests.length === 0 ? (
-            <EmptyState compact title="Nothing here" />
-          ) : (
-            <div className="space-y-3">
-              {visibleInterests.map((interest) => {
-                const project = projectById.get(String(interest.project_id));
-                const room = interest.deal_room;
-                return (
-                  <Card key={interest.id} className="space-y-4">
-                    <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+              <div className="grid gap-4 lg:grid-cols-2">
+                {fits.map((f) => (
+                  <Card key={f.id} className="flex flex-col">
+                    <div className="flex items-start justify-between gap-3">
                       <div className="min-w-0">
-                        <Link
-                          href={`/investor/projects/${interest.project_id}`}
-                          className="text-sm font-medium text-ink hover:underline"
-                        >
-                          {interest.project_title || project?.title || `Project #${interest.project_id}`}
+                        <Link href={`/investor/projects/${f.id}`} className="text-sm font-medium text-ink hover:underline">
+                          {f.title}
                         </Link>
                         <div className="text-sm text-muted">
-                          {[project?.stage, interest.project_industry || project?.industry].filter(Boolean).join(" · ")}
-                          {interest.created_at && <> · requested {timeAgo(interest.created_at)}</>}
+                          {f.stage} · {f.industry}
                         </div>
                       </div>
-                      <InterestStatus status={interest.status} />
+                      {f.match_score != null && (
+                        <Tag tone={f.match_score >= 85 ? "positive" : "accent"}>{Math.round(f.match_score)}% fit</Tag>
+                      )}
                     </div>
-
-                    {interest.status === "pending" && (
-                      <div className="flex items-center justify-between gap-3 text-sm text-muted">
-                        The founder hasn&apos;t replied yet.
-                        <Button variant="ghost" onClick={() => withdraw(interest)}>
-                          Withdraw
-                        </Button>
-                      </div>
+                    {f.reasons.length > 0 && (
+                      <ul className="mt-3 space-y-1">
+                        {/* The strongest met criteria first; a fit card never leads with a mismatch. */}
+                        {[...f.reasons]
+                          .sort((a, b) => (b.score ?? 100) - (a.score ?? 100))
+                          .slice(0, 2)
+                          .map((r) => (
+                            <ReasonLine key={r.category} reason={r} />
+                          ))}
+                      </ul>
                     )}
-
-                    {interest.status === "accepted" && (
-                      <div className="space-y-3">
-                        {interest.response_note && (
-                          <p className="rounded-lg bg-canvas px-3.5 py-2.5 text-sm text-ink-2">
-                            <span className="text-muted">Founder&apos;s note: </span>
-                            {interest.response_note}
-                          </p>
-                        )}
-                        <div className="flex flex-wrap gap-2">
-                          <ButtonLink href={room?.room_id ? `/dealroom/${room.room_id}` : "/dealroom?role=INVESTOR"}>
-                            <MessagesSquare className="w-4 h-4" />
-                            Open deal room
-                          </ButtonLink>
-                          {interest.founder_email && (
-                            <a href={`mailto:${interest.founder_email}`} className={buttonClass("secondary")}>
-                              <Mail className="w-4 h-4" />
-                              {interest.founder_email}
-                            </a>
-                          )}
-                          {room?.pitch_deck_url && <ExternalButton href={room.pitch_deck_url} icon={FileText} label="Pitch deck" />}
-                          {room?.founder_linkedin && <ExternalButton href={room.founder_linkedin} icon={User} label="LinkedIn" />}
-                          {room?.founder_website && <ExternalButton href={room.founder_website} icon={Globe} label="Website" />}
-                        </div>
-                      </div>
-                    )}
-
-                    {interest.status === "declined" && (
-                      <p className="text-sm text-muted">The founder decided not to connect this time.</p>
-                    )}
+                    <div className="mt-auto pt-4 text-sm">
+                      <span className="text-muted">Raising </span>
+                      <span className="font-medium tabular-nums text-ink">{formatMoney(f.funding_required)}</span>
+                    </div>
                   </Card>
-                );
-              })}
-            </div>
-          )}
+                ))}
+              </div>
+            )}
+          </Section>
+
+          <div className="grid gap-6 lg:grid-cols-2">
+            <Section
+              title="Recent deal activity"
+              action={
+                <Link href="/investor/deal-flow" className="inline-flex items-center gap-1 font-medium text-accent hover:underline">
+                  Deal Flow
+                  <ArrowRight className="h-3.5 w-3.5" />
+                </Link>
+              }
+            >
+              {flow == null ? (
+                loadError ? null : <LoadingRows />
+              ) : flow.items.length === 0 ? (
+                <EmptyState compact title="No deals yet" description="Save startups or request intros from Discover." />
+              ) : (
+                <Card padded={false} className="divide-y divide-line">
+                  {flow.items.slice(0, 5).map((d) => (
+                    <div key={d.project_id} className="flex items-center justify-between gap-3 px-5 py-3.5">
+                      <div className="min-w-0">
+                        <div className="truncate text-sm font-medium text-ink">{d.title}</div>
+                        <div className="text-xs text-muted">{d.last_activity ? timeAgo(d.last_activity) : ""}</div>
+                      </div>
+                      {d.deal_stage && d.status === "active" ? (
+                        <Tag tone={stageTone(d.deal_stage)}>{stageLabel(d.deal_stage)}</Tag>
+                      ) : (
+                        <Tag tone={d.status === "requested" ? "warning" : d.status === "closed" ? "positive" : "neutral"}>
+                          {{ saved: "Saved", requested: "Requested", active: "In progress", closed: "Closed", declined: "Declined", passed: "Passed" }[d.status]}
+                        </Tag>
+                      )}
+                    </div>
+                  ))}
+                </Card>
+              )}
+            </Section>
+
+            <Section
+              title="Portfolio"
+              action={
+                <Link href="/investor/portfolio" className="inline-flex items-center gap-1 font-medium text-accent hover:underline">
+                  Portfolio & Finances
+                  <ArrowRight className="h-3.5 w-3.5" />
+                </Link>
+              }
+            >
+              {portfolio == null ? (
+                loadError ? null : <LoadingRows />
+              ) : portfolio.holdings.length === 0 ? (
+                <EmptyState
+                  compact
+                  icon={Wallet}
+                  title="No investments recorded"
+                  description="Record the investments you've made to track their value and returns."
+                  action={<ButtonLink href="/investor/portfolio?record=new">Record an investment</ButtonLink>}
+                />
+              ) : (
+                <Card className="grid grid-cols-2 gap-4 text-sm">
+                  <div>
+                    <div className="text-muted">Invested</div>
+                    <div className="mt-0.5 text-lg font-semibold tabular-nums text-ink">{formatCompact(portfolio.totals.total_invested)}</div>
+                  </div>
+                  <div>
+                    <div className="text-muted">Current value</div>
+                    <div className="mt-0.5 text-lg font-semibold tabular-nums text-ink">{formatCompact(portfolio.totals.current_value)}</div>
+                  </div>
+                  <div>
+                    <div className="text-muted">Cash returned</div>
+                    <div className="mt-0.5 text-lg font-semibold tabular-nums text-ink">{formatCompact(portfolio.totals.cash_returned)}</div>
+                  </div>
+                  <div>
+                    <div className="text-muted">Net gain</div>
+                    <div
+                      className={cx(
+                        "mt-0.5 text-lg font-semibold tabular-nums",
+                        gainTone(portfolio.totals.net_gain) === "positive" ? "text-positive" : gainTone(portfolio.totals.net_gain) === "danger" ? "text-danger" : "text-ink"
+                      )}
+                    >
+                      {formatSigned(portfolio.totals.net_gain)}
+                    </div>
+                  </div>
+                  <p className="col-span-2 text-xs text-muted">From your own records. Values without a recorded valuation are held at cost.</p>
+                </Card>
+              )}
+            </Section>
+          </div>
         </div>
       )}
 
@@ -602,10 +426,10 @@ function InvestorDashboardContent() {
             </Field>
             <div className="grid gap-5 sm:grid-cols-2">
               <Field label="Smallest check" htmlFor="ip-min">
-                <input id="ip-min" placeholder="$50,000" className={inputClass} value={profile.minCheck} onChange={(e) => setProfile({ ...profile, minCheck: e.target.value })} />
+                <input id="ip-min" placeholder="₹5,00,000" className={inputClass} value={profile.minCheck} onChange={(e) => setProfile({ ...profile, minCheck: e.target.value })} />
               </Field>
               <Field label="Largest check" htmlFor="ip-max">
-                <input id="ip-max" placeholder="$500,000" className={inputClass} value={profile.maxCheck} onChange={(e) => setProfile({ ...profile, maxCheck: e.target.value })} />
+                <input id="ip-max" placeholder="₹50,00,000" className={inputClass} value={profile.maxCheck} onChange={(e) => setProfile({ ...profile, maxCheck: e.target.value })} />
               </Field>
             </div>
             <FormFooter saved={profileSaved} label="Save profile" />
@@ -642,42 +466,6 @@ function InvestorDashboardContent() {
         </Card>
       )}
     </PortalLayout>
-  );
-}
-
-function TabLink({ tab, children, asButton = false }: { tab: Tab; children: React.ReactNode; asButton?: boolean }) {
-  return (
-    <Link
-      href={`/investor/dashboard?tab=${tab}`}
-      className={asButton ? buttonClass("primary") : "inline-flex items-center gap-1 font-medium text-accent hover:underline"}
-    >
-      {children}
-      {!asButton && <ArrowRight className="w-3.5 h-3.5" />}
-    </Link>
-  );
-}
-
-function InterestStatus({ status }: { status: ProjectInterest["status"] }) {
-  if (status === "accepted") return <Tag tone="positive">Accepted</Tag>;
-  if (status === "declined") return <Tag>Declined</Tag>;
-  return <Tag tone="warning">Waiting on founder</Tag>;
-}
-
-function ExternalButton({
-  href,
-  icon: Icon,
-  label,
-}: {
-  href: string;
-  icon: React.ComponentType<{ className?: string }>;
-  label: string;
-}) {
-  return (
-    <a href={href} target="_blank" rel="noopener noreferrer" className={buttonClass("secondary")}>
-      <Icon className="w-4 h-4" />
-      {label}
-      <ExternalLink className="w-3.5 h-3.5 text-faint" />
-    </a>
   );
 }
 

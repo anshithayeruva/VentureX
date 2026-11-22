@@ -28,6 +28,7 @@ from pydantic import BaseModel, Field, ValidationError
 
 from app.core.config import settings
 from app.database import postgres as pg
+from app.utils.money import inr
 from app.services import github_service
 from app.services.document_service import DocumentService
 
@@ -152,7 +153,7 @@ def _project_profile(project: Dict[str, Any]) -> str:
         ("Tagline", project.get("tagline")),
         ("Domain / industry", project.get("industry")),
         ("Stage", project.get("stage")),
-        ("Raising", f"${funding:,.0f}"),
+        ("Raising", f"{inr(funding, compact=False)} (Indian rupees)"),
         ("Business model", project.get("business_model")),
         ("Target market", project.get("target_market")),
         ("Description", project.get("description")),

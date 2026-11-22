@@ -321,7 +321,7 @@ function DealRoomContent({ params }: PageProps) {
 
   if (loading || !room) {
     return (
-      <PortalLayout role={role} activeItem="dealrooms" title="Deal room">
+      <PortalLayout role={role} activeItem={role === "INVESTOR" ? "dealflow" : "dealrooms"} title="Deal room">
         {loading ? (
           <LoadingRows />
         ) : (
@@ -329,7 +329,7 @@ function DealRoomContent({ params }: PageProps) {
             icon={FileQuestion}
             title="Deal room not found"
             description="It may not exist, or you're not one of its members."
-            action={<ButtonLink href="/dealroom">Back to deal rooms</ButtonLink>}
+            action={<ButtonLink href={role === "INVESTOR" ? "/investor/deal-flow" : "/dealroom"}>{role === "INVESTOR" ? "Back to deal flow" : "Back to deal rooms"}</ButtonLink>}
           />
         )}
       </PortalLayout>
@@ -343,13 +343,13 @@ function DealRoomContent({ params }: PageProps) {
   const documents = room.shared_documents || [];
 
   return (
-    <PortalLayout role={role} activeItem="dealrooms" title={room.project_title}>
+    <PortalLayout role={role} activeItem={role === "INVESTOR" ? "dealflow" : "dealrooms"} title={room.project_title}>
       <div className="space-y-6">
         {/* Header */}
         <div>
-          <Link href="/dealroom" className="inline-flex items-center gap-1.5 text-sm text-muted hover:text-ink">
+          <Link href={role === "INVESTOR" ? "/investor/deal-flow" : "/dealroom"} className="inline-flex items-center gap-1.5 text-sm text-muted hover:text-ink">
             <ArrowLeft className="h-4 w-4" />
-            Deal rooms
+            {role === "INVESTOR" ? "Deal Flow" : "Deal rooms"}
           </Link>
           <div className="mt-4 flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
             <div className="min-w-0">

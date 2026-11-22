@@ -3,6 +3,9 @@ import re
 from datetime import datetime, timezone
 from typing import List, Dict, Any, Optional, Union
 from app.database import postgres as pg
+from app.utils.money import inr
+from app.schemas.thesis import INVESTOR_STAGES
+from app.services.criteria import canonical_stage, regions_for_country, thesis_from_row
 
 logger = logging.getLogger(__name__)
 
@@ -17,8 +20,8 @@ DEMO_INVESTORS = [
         "bio": "Investing in Healthcare AI, MedTech diagnostics, and clinical automation infrastructure.",
         "location": "New York & Boston",
         "thesis": "Leading Seed and Series A rounds for high-defensibility technical founders solving critical clinical bottleneck problems.",
-        "min_check": "$500,000",
-        "max_check": "$1,500,000",
+        "min_check": "₹5,00,000",
+        "max_check": "₹15,00,000",
         "preferences": {
             "preferred_industries": ["Healthcare & AI", "MedTech", "BioTech", "Digital Health", "Life Sciences"],
             "preferred_stages": ["Seed", "Pre-seed", "Series A"],
@@ -38,8 +41,8 @@ DEMO_INVESTORS = [
         "bio": "Backing technical teams applying deep learning and robotics to physical industry bottlenecks.",
         "location": "San Francisco & Austin",
         "thesis": "Focusing on AI-native industrial automation, neural hardware acceleration, and edge intelligence.",
-        "min_check": "$750,000",
-        "max_check": "$2,500,000",
+        "min_check": "₹7,50,000",
+        "max_check": "₹25,00,000",
         "preferences": {
             "preferred_industries": ["AI/ML", "DeepTech", "Edge Computing", "Robotics & Logistics", "Infrastructure"],
             "preferred_stages": ["Seed", "Series A", "Early Traction"],
@@ -59,8 +62,8 @@ DEMO_INVESTORS = [
         "bio": "Decarbonizing industrial supply chains through satellite telemetry and automated climate verification.",
         "location": "London & Zurich",
         "thesis": "Deploying dedicated climate capital into high-integrity carbon measurement and energy transition software.",
-        "min_check": "$800,000",
-        "max_check": "$2,000,000",
+        "min_check": "₹8,00,000",
+        "max_check": "₹20,00,000",
         "preferences": {
             "preferred_industries": ["ClimateTech", "CleanTech", "AgTech", "Supply Chain", "Sustainability"],
             "preferred_stages": ["MVP / Beta", "Seed", "Series A"],
@@ -80,8 +83,8 @@ DEMO_INVESTORS = [
         "bio": "Exclusively funding critical infrastructure protection, dual-use national security, and cryptographic resilience.",
         "location": "Washington D.C. & Tel Aviv",
         "thesis": "Securing national energy grids, SCADA networks, and industrial systems against post-quantum vector threats.",
-        "min_check": "$1,000,000",
-        "max_check": "$3,000,000",
+        "min_check": "₹10,00,000",
+        "max_check": "₹30,00,000",
         "preferences": {
             "preferred_industries": ["Cybersecurity", "DefenseTech", "Industrial IoT", "Quantum Computing", "DeepTech"],
             "preferred_stages": ["Seed", "Pre-seed", "Series A"],
@@ -93,6 +96,15 @@ DEMO_INVESTORS = [
         }
     },
 ]
+
+
+_PRIORITY_WEIGHT = {"high": 3.0, "medium": 2.0, "low": 1.0, "ignore": 0.0}
+_STOP_WORDS = {"and", "the", "of", "for", "to", "a", "as", "ai", "b2b", "b2c", "tech"}
+
+
+def _usd(amount: float) -> str:
+    """Compact rupees for match explanations (name kept for the call sites)."""
+    return inr(amount)
 
 
 class MatchService:
@@ -152,117 +164,79 @@ class MatchService:
         investor_profile: Dict[str, Any],
         preference: Dict[str, Any],
     ) -> Optional[Dict[str, Any]]:
-        """Calculate dynamic explainable match score between a startup and an investor."""
+        """Score how well a published startup fits an investor's thesis, with the reasons.
+
+        Each criterion gives a 0-100 score; the investor's priorities (high/medium/low/ignore)
+        weight them. Hard exclusions (excluded industries or countries, an unmet *required*
+        traction bar) drop the startup entirely.
+        """
         firm_name = investor_profile.get("firm") or investor_profile.get("name") or "Investor"
         project_title = project.get("title", "Project")
-        industry = project.get("industry", "")
-        stage = project.get("stage", "")
-        funding = float(project.get("funding_required", 0))
-        business_model = project.get("business_model", "")
-        tech_context = f"{project.get('title', '')} {project.get('description', '')} {project.get('problem', '')} {project.get('solution', '')}"
+        thesis = thesis_from_row(preference or {})
+        sectors, geo, traction = thesis["sectors"], thesis["geography"], thesis["traction"]
+        priorities = thesis["priorities"]
 
-        pref_industries = preference.get("preferred_industries") or []
-        pref_stages = preference.get("preferred_stages") or []
-        min_check = float(preference.get("min_investment", 250000.0))
-        max_check = float(preference.get("max_investment", 3000000.0))
-        pref_models = preference.get("preferred_business_models") or []
-        tech_prefs = preference.get("tech_preferences") or []
+        industry = project.get("industry", "") or ""
+        country = (project.get("country") or "").strip()
+        city = (project.get("city") or "").strip()
 
-        # 1. Industry / Sector Fit (Weight: 0.40)
-        proj_ind_lower = industry.lower().strip()
-        pref_ind_lower = [i.lower().strip() for i in pref_industries]
-        proj_tokens = cls._tokenize(industry)
-        all_pref_tokens = set().union(*[cls._tokenize(i) for i in pref_industries]) if pref_industries else set()
-        tech_tokens = cls._tokenize(tech_context)
-        all_tech_pref_tokens = set().union(*[cls._tokenize(t) for t in tech_prefs]) if tech_prefs else set()
+        # ---- hard exclusions ----
+        if industry.lower().strip() in {i.lower() for i in sectors["excluded_industries"]}:
+            return None
+        if country and country.lower() in {c.lower() for c in geo["excluded_countries"]}:
+            return None
 
-        if proj_ind_lower in pref_ind_lower:
-            sector_score = 98.0
-            matched_name = next(i for i in pref_industries if i.lower().strip() == proj_ind_lower)
-            sector_reason = f"{firm_name} prioritizes {matched_name} startups as a central pillar in its fund thesis."
-        elif proj_tokens.intersection(all_pref_tokens):
-            overlap = ", ".join(proj_tokens.intersection(all_pref_tokens)).title()
-            sector_score = 88.0
-            sector_reason = f"{firm_name} thesis overlaps with {industry} ({overlap} focus area)."
-        elif tech_tokens.intersection(all_tech_pref_tokens):
-            sector_score = 83.0
-            sector_reason = f"Proprietary technology stack aligns with {firm_name}'s technical mandate."
-        else:
-            sector_score = 42.0
-            sector_reason = f"{industry} is outside {firm_name}'s primary sector mandate, considered opportunistically."
+        factors: List[Dict[str, Any]] = []
 
-        # 2. Stage Alignment (Weight: 0.30)
-        proj_stage_lower = stage.lower().strip()
-        pref_stages_lower = [s.lower().strip() for s in pref_stages]
-        stage_tokens = cls._tokenize(stage)
-        all_stage_tokens = set().union(*[cls._tokenize(s) for s in pref_stages]) if pref_stages else set()
+        def add(key: str, category: str, score: float, explanation: str) -> None:
+            factors.append({"key": key, "category": category, "score": score, "explanation": explanation})
 
-        if proj_stage_lower in pref_stages_lower:
-            stage_score = 96.0
-            stage_reason = f"Founder is raising at {stage} stage, matching {firm_name}'s primary deployment entry window."
-        elif stage_tokens.intersection(all_stage_tokens):
-            stage_score = 86.0
-            stage_reason = f"Stage ({stage}) aligns with fund's active follow-on and syndicate horizon."
-        elif any(adj in proj_stage_lower for adj in ["mvp", "seed", "pre-seed", "prototype"]):
-            stage_score = 78.0
-            stage_reason = f"Early-stage trajectory ({stage}) qualifies for fund's acceleration pipeline."
-        else:
-            stage_score = 48.0
-            stage_reason = f"{stage} stage differs from fund's stated target investment stage."
+        add("industry", "Industry Focus", *cls._industry_fit(project, sectors, firm_name))
+        add("stage", "Stage Alignment", *cls._stage_fit(project.get("stage", ""), thesis["stages"], firm_name))
+        add("check_size", "Target Check Size", *cls._check_fit(project, thesis["check_size"], firm_name))
+        add("business_model", "Business Model", *cls._model_fit(project.get("business_model", ""), sectors["business_models"], firm_name))
 
-        # 3. Capital Mandate & Check Size (Weight: 0.20)
-        if min_check <= funding <= max_check:
-            check_score = 96.0
-            check_reason = f"Target raise (${funding:,.0f}) fits squarely inside fund's check bracket (${min_check:,.0f} - ${max_check:,.0f})."
-        elif (funding >= min_check * 0.7) and (funding <= max_check * 1.35):
-            check_score = 82.0
-            check_reason = f"Target raise (${funding:,.0f}) is within co-investment syndication margin of fund's check size."
-        else:
-            check_score = 45.0
-            check_reason = f"Target raise (${funding:,.0f}) deviates from fund's typical check range (${min_check:,.0f} - ${max_check:,.0f})."
+        # Geography counts only when the investor narrowed it.
+        if not geo["is_global"] and (geo["regions"] or geo["countries"] or geo["cities"]):
+            add("geography", "Geography", *cls._geo_fit(country, city, geo, firm_name))
 
-        # 4. Business Model & Operations (Weight: 0.10)
-        proj_model_lower = business_model.lower().strip()
-        pref_models_lower = [m.lower().strip() for m in pref_models]
-        model_tokens = cls._tokenize(business_model)
-        all_model_tokens = set().union(*[cls._tokenize(m) for m in pref_models]) if pref_models else set()
+        # Traction counts only when the investor set a requirement.
+        t = cls._traction_fit(project, traction)
+        if t == "excluded":
+            return None
+        if t is not None:
+            add("traction", "Traction", *t)
 
-        if proj_model_lower in pref_models_lower or any(m in proj_model_lower for m in pref_models_lower):
-            model_score = 95.0
-            model_reason = f"{business_model} model matches {firm_name}'s commercialization playbook."
-        elif model_tokens.intersection(all_model_tokens):
-            model_score = 85.0
-            model_reason = f"Monetization mechanics ({business_model}) synergize with portfolio network."
-        else:
-            model_score = 60.0
-            model_reason = f"{business_model} evaluated against fund's operating margin benchmarks."
+        weights = {f["key"]: _PRIORITY_WEIGHT[priorities.get(f["key"], "medium")] for f in factors}
+        total_weight = sum(weights.values())
+        if total_weight == 0:
+            # Every criterion set to "ignore": fall back to equal weights.
+            weights = {k: 1.0 for k in weights}
+            total_weight = float(len(weights))
 
-        # Composite Weighted Percentage
-        match_score = round(
-            (sector_score * 0.40) +
-            (stage_score * 0.30) +
-            (check_score * 0.20) +
-            (model_score * 0.10),
-            1
-        )
+        match_score = round(sum(f["score"] * weights[f["key"]] for f in factors) / total_weight, 1)
         match_score = max(40.0, min(98.8, match_score))
 
         # Only recommend matches with decent synergy
         if match_score < 45.0:
             return None
 
+        reasons = [
+            {
+                "category": f["category"],
+                "explanation": f["explanation"],
+                "weight": round(weights[f["key"]] / total_weight, 2),
+                "score": round(f["score"]),  # >= 75 means this criterion is met
+            }
+            for f in sorted(factors, key=lambda f: -weights[f["key"]])
+            if weights[f["key"]] > 0
+        ]
+
         inv_user_id = investor_profile.get("user_id") or preference.get("investor_id") or "investor-001"
         # Determine numeric id if available for compatibility
         inv_id_val = investor_profile.get("id_num") or investor_profile.get("id") or inv_user_id
 
         proj_id_val = project.get("id")
-
-        reasons = [
-            {"category": "Industry Focus", "explanation": sector_reason, "weight": 0.40},
-            {"category": "Stage Alignment", "explanation": stage_reason, "weight": 0.30},
-            {"category": "Target Check Size", "explanation": check_reason, "weight": 0.20},
-            {"category": "Business Model", "explanation": model_reason, "weight": 0.10},
-        ]
 
         now = datetime.now(timezone.utc)
         return {
@@ -280,6 +254,130 @@ class MatchService:
             "created_at": now,
             "updated_at": now,
         }
+
+    # ------------------------------------------------------------------ factors
+
+    @classmethod
+    def _industry_fit(cls, project: Dict[str, Any], sectors: Dict[str, Any], firm: str):
+        industry = project.get("industry", "") or ""
+        focus = sectors["industries"] + sectors["sub_industries"] + sectors["sectors"]
+        if not focus and not sectors["technologies"]:
+            return 75.0, f"{firm} is open to any industry."
+        if industry.lower().strip() in [i.lower().strip() for i in focus]:
+            return 98.0, f"{industry} is one of {firm}'s focus industries."
+        focus_tokens = set().union(*[cls._tokenize(i) for i in focus]) if focus else set()
+        overlap = (cls._tokenize(industry) & focus_tokens) - _STOP_WORDS
+        if overlap:
+            return 88.0, f"{industry} overlaps with {firm}'s focus ({', '.join(sorted(overlap)).title()})."
+        context = " ".join(str(project.get(k, "")) for k in ("title", "tagline", "description", "problem", "solution"))
+        tech_tokens = set().union(*[cls._tokenize(t) for t in sectors["technologies"]]) if sectors["technologies"] else set()
+        if (tech_tokens - _STOP_WORDS) & cls._tokenize(context):
+            return 83.0, f"The product uses technology {firm} looks for."
+        return 42.0, f"{industry or 'This industry'} is outside {firm}'s focus industries."
+
+    @staticmethod
+    def _stage_fit(stage: str, wanted: List[str], firm: str):
+        if not wanted:
+            return 75.0, f"{firm} is open to any stage."
+        canon = canonical_stage(stage)
+        if canon in wanted:
+            return 96.0, f"Raising at {stage}, a stage {firm} invests in."
+        if canon:
+            ladder = INVESTOR_STAGES.index(canon)
+            if any(abs(ladder - INVESTOR_STAGES.index(w)) == 1 for w in wanted):
+                return 78.0, f"{stage} is one step from the stages {firm} prefers."
+        return 45.0, f"{stage or 'This stage'} is outside the stages {firm} invests in."
+
+    @staticmethod
+    def _check_fit(project: Dict[str, Any], check: Dict[str, Any], firm: str):
+        funding = float(project.get("funding_required") or 0)
+        lo = float(check["min_check"]) if check.get("min_check") is not None else None
+        hi = float(check["max_check"]) if check.get("max_check") is not None else None
+        if lo is None and hi is None:
+            return 75.0, f"{firm} hasn't set a check size."
+        lo_v = lo or 0.0
+        hi_v = hi if hi is not None else float("inf")
+        rng = f"{_usd(lo) if lo is not None else 'any'} - {_usd(hi) if hi is not None else 'any'}"
+        if lo_v <= funding <= hi_v:
+            return 96.0, f"The {_usd(funding)} raise is within {firm}'s check range ({rng})."
+        if funding >= lo_v * 0.7 and funding <= hi_v * 1.35:
+            return 82.0, f"The {_usd(funding)} raise is close to {firm}'s check range ({rng}); a co-investment could fit."
+        return 45.0, f"The {_usd(funding)} raise is outside {firm}'s check range ({rng})."
+
+    @classmethod
+    def _model_fit(cls, model: str, wanted: List[str], firm: str):
+        if not wanted:
+            return 75.0, f"{firm} is open to any business model."
+        m = (model or "").lower().strip()
+        wanted_l = [w.lower().strip() for w in wanted]
+        if m in wanted_l or any(w and w in m for w in wanted_l):
+            return 95.0, f"{model} is a business model {firm} prefers."
+        tokens = (cls._tokenize(model) & set().union(*[cls._tokenize(w) for w in wanted])) - _STOP_WORDS
+        if tokens:
+            return 85.0, f"{model} is similar to the business models {firm} prefers."
+        return 60.0, f"{model or 'This business model'} isn't one {firm} listed."
+
+    @staticmethod
+    def _geo_fit(country: str, city: str, geo: Dict[str, Any], firm: str):
+        if not country:
+            return 55.0, "The startup hasn't said where it's based."
+        where = f"{city}, {country}" if city else country
+        if city and city.lower() in {c.lower() for c in geo["cities"]}:
+            return 98.0, f"Based in {where}, a city {firm} focuses on."
+        if country.lower() in {c.lower() for c in geo["countries"]}:
+            return 95.0, f"Based in {where}, a country {firm} invests in."
+        shared = set(regions_for_country(country)) & set(geo["regions"])
+        if shared:
+            return 90.0, f"Based in {where}, inside {firm}'s {sorted(shared)[0]} focus."
+        return 35.0, f"Based in {where}, outside {firm}'s geographic focus."
+
+    @staticmethod
+    def _traction_fit(project: Dict[str, Any], t: Dict[str, Any]):
+        """Average of the traction checks the investor cares about; 'excluded' on an unmet requirement."""
+        parts: List[float] = []
+        notes: List[str] = []
+
+        def check(level, value, threshold, label, fmt):
+            if level == "not_relevant":
+                return None
+            if value is None:
+                parts.append(50.0)
+                notes.append(f"{label} not reported")
+                return None
+            ok = value >= threshold if threshold else value > 0
+            if ok:
+                parts.append(95.0)
+                notes.append(f"{label} {fmt(value)}")
+                return None
+            if level == "required":
+                return "excluded"
+            parts.append(40.0)
+            notes.append(f"{label} {fmt(value)}, below the preferred level")
+            return None
+
+        rev = project.get("monthly_revenue")
+        min_rev = float(t["min_monthly_revenue"]) if t.get("min_monthly_revenue") is not None else 0
+        if check(t["revenue"], float(rev) if rev is not None else None, min_rev, "monthly revenue", _usd) == "excluded":
+            return "excluded"
+        cust = project.get("customer_count")
+        if check(t["customers"], cust, t.get("min_customers") or 0, "customers", lambda v: f"{int(v):,}") == "excluded":
+            return "excluded"
+        if t["live_product"] != "not_relevant":
+            status = (project.get("product_status") or "").lower()
+            if not status:
+                parts.append(50.0)
+                notes.append("product status not reported")
+            elif status in ("launched", "scaling"):
+                parts.append(95.0)
+                notes.append("product is live")
+            elif t["live_product"] == "required":
+                return "excluded"
+            else:
+                parts.append(45.0)
+                notes.append("product isn't live yet")
+        if not parts:
+            return None
+        return sum(parts) / len(parts), "Traction: " + "; ".join(notes) + " (as reported by the founder)."
 
     @classmethod
     async def compute_matches_for_project(cls, project_id: Union[int, str]) -> List[Dict[str, Any]]:
@@ -339,15 +437,21 @@ class MatchService:
                             await NotificationService.create_notification(
                                 target_role="INVESTOR",
                                 user_id=user_id,
-                                title=f"High-Fit Mandate Match: {p_title} ({score}%)",
-                                desc=f"'{p_title}' in {p_ind} aligns strongly with your target sector, stage, and check size ({score}% match).",
+                                title=f"Strong fit: {p_title} ({score}%)",
+                                desc=f"{p_title} ({p_ind}) closely fits your investment criteria.",
                                 badge="Match",
                                 badge_variant="success",
-                                link="/investor/dashboard?tab=recommended",
+                                link="/investor/discover",
                             )
                     except Exception as e:
                         logger.warning("Failed to emit high-match notification: %s", e)
 
+        # Investors whose criteria no longer fit (or now exclude it) lose the match.
+        keep = [str(m["investor_id"]) for m in results]
+        await pg.execute(
+            "DELETE FROM matches WHERE project_id = %s AND NOT (investor_id = ANY(%s::text[]))",
+            [project["id"], "{" + ",".join('"' + k.replace('"', '') + '"' for k in keep) + "}"],
+        )
         logger.info("Computed and stored %d dynamic matches for project %s", len(results), project_id)
         return results
 
@@ -392,15 +496,20 @@ class MatchService:
                             await NotificationService.create_notification(
                                 target_role="INVESTOR",
                                 user_id=investor_id,
-                                title=f"High-Fit Mandate Match: {p_title} ({score}%)",
-                                desc=f"'{p_title}' in {p_ind} aligns strongly with your target sector, stage, and check size ({score}% match).",
+                                title=f"Strong fit: {p_title} ({score}%)",
+                                desc=f"{p_title} ({p_ind}) closely fits your investment criteria.",
                                 badge="Match",
                                 badge_variant="success",
-                                link="/investor/dashboard?tab=recommended",
+                                link="/investor/discover",
                             )
                     except Exception as e:
                         logger.warning("Failed to emit high-match notification: %s", e)
 
+        keep_ids = [int(m["project_id"]) for m in results]
+        await pg.execute(
+            "DELETE FROM matches WHERE investor_id = %s AND NOT (project_id = ANY(%s::bigint[]))",
+            [investor_id, "{" + ",".join(str(i) for i in keep_ids) + "}"],
+        )
         logger.info("Computed and stored %d dynamic matches for investor %s", len(results), investor_id)
         return results
 

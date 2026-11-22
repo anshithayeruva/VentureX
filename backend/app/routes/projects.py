@@ -50,6 +50,17 @@ async def _readable_project(project_id: str, user: Optional[CurrentUser]):
     return project
 
 
+# Readiness scores and AI feedback are private to the founder who owns the project.
+_PRIVATE_FIELDS = ("readiness_score", "ai_readiness_breakdown", "ai_feedback_summary", "strengths", "recommendations")
+
+
+def _public_view(project: dict, user: Optional[CurrentUser]) -> dict:
+    """A project as someone other than its founder may see it."""
+    if user is not None and project.get("founder_id") == user.id:
+        return project
+    return {**project, **{k: None for k in _PRIVATE_FIELDS}}
+
+
 async def _private_report_project(project_id: str, user: Optional[CurrentUser]):
     """Readiness reports are private to the project's founder (404 for everyone else)."""
     project = await ProjectService.get_by_id(project_id)
@@ -94,13 +105,13 @@ async def list_projects(
         skip=skip,
         limit=limit,
     )
-    return projects
+    return [_public_view(p, user) for p in projects]
 
 
 @router.get("/{project_id}", response_model=ProjectResponse)
 async def get_project(project_id: str, user: Optional[CurrentUser] = Depends(get_current_user)):
     """Retrieve details of a specific startup project by ID."""
-    return await _readable_project(project_id, user)
+    return _public_view(await _readable_project(project_id, user), user)
 
 
 @router.put("/{project_id}", response_model=ProjectResponse)

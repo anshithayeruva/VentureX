@@ -7,7 +7,6 @@ import {
   Bell,
   Briefcase,
   ChevronDown,
-  Heart,
   LayoutGrid,
   LogOut,
   Menu,
@@ -20,6 +19,7 @@ import {
   Sparkles,
   User,
   Users,
+  Wallet,
   X,
 } from "lucide-react";
 import { api, MeResponse } from "@/lib/api";
@@ -87,10 +87,9 @@ export function PortalLayout({ role, children, activeItem, onSelectItem, title }
       ]
     : [
         { id: "overview", label: "Overview", href: base, icon: LayoutGrid },
-        { id: "recommended", label: "Recommended", href: `${base}?tab=recommended`, icon: Sparkles },
-        { id: "browse", label: "Browse", href: `${base}?tab=browse`, icon: Search },
-        { id: "interests", label: "My interests", href: `${base}?tab=interests`, icon: Heart },
-        { id: "dealrooms", label: "Deal rooms", href: "/dealroom?role=INVESTOR", icon: MessagesSquare },
+        { id: "discover", label: "Discover", href: "/investor/discover", icon: Search },
+        { id: "dealflow", label: "Deal Flow", href: "/investor/deal-flow", icon: MessagesSquare },
+        { id: "portfolio", label: "Portfolio & Finances", href: "/investor/portfolio", icon: Wallet },
         { id: "preferences", label: "Criteria", href: "/investor/preferences", icon: Sliders },
       ];
 

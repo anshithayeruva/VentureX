@@ -2,8 +2,9 @@
 
 import React, { use, useEffect, useState } from "react";
 import Link from "next/link";
-import { ArrowLeft, CheckCircle2, ExternalLink, FileQuestion, MessagesSquare } from "lucide-react";
+import { ArrowLeft, Bookmark, BookmarkCheck, ExternalLink, FileQuestion, MessagesSquare } from "lucide-react";
 import { PortalLayout } from "@/components/PortalLayout";
+import { ReasonLine } from "@/components/forms";
 import { Button, ButtonLink, Card, EmptyState, LoadingRows, Stat, Tag, inputClass } from "@/components/ui";
 import { api } from "@/lib/api";
 import { formatMoney } from "@/lib/format";
@@ -19,6 +20,8 @@ export default function InvestorProjectPage({ params }: { params: Promise<{ id: 
   const [note, setNote] = useState("");
   const [sending, setSending] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [saved, setSaved] = useState(false);
+  const [savingBookmark, setSavingBookmark] = useState(false);
 
   useEffect(() => {
     let mounted = true;
@@ -35,6 +38,10 @@ export default function InvestorProjectPage({ params }: { params: Promise<{ id: 
       if (!mounted || !Array.isArray(all)) return;
       setInterest(all.find((i: ProjectInterest) => String(i.project_id) === String(projectId)) || null);
     });
+    api
+      .getDealFlow()
+      .then((flow) => mounted && setSaved(flow.items.some((i) => String(i.project_id) === String(projectId) && i.saved)))
+      .catch(() => undefined);
     return () => {
       mounted = false;
     };
@@ -42,13 +49,13 @@ export default function InvestorProjectPage({ params }: { params: Promise<{ id: 
 
   if (notFound || !project) {
     return (
-      <PortalLayout role="INVESTOR" activeItem="browse" title="Startup">
+      <PortalLayout role="INVESTOR" activeItem="discover" title="Startup">
         {notFound ? (
           <EmptyState
             icon={FileQuestion}
             title="Startup not found"
             description="The founder may have made it private."
-            action={<ButtonLink href="/investor/dashboard?tab=browse">Browse startups</ButtonLink>}
+            action={<ButtonLink href="/investor/discover">Browse startups</ButtonLink>}
           />
         ) : (
           <LoadingRows />
@@ -75,6 +82,31 @@ export default function InvestorProjectPage({ params }: { params: Promise<{ id: 
     }
   };
 
+  const toggleSaved = async () => {
+    setSavingBookmark(true);
+    setError(null);
+    try {
+      await api.setSaved(project.id, !saved);
+      setSaved(!saved);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Couldn't update saved startups.");
+    } finally {
+      setSavingBookmark(false);
+    }
+  };
+
+  const location = [project.city, project.country].filter(Boolean).join(", ");
+  const facts = [
+    { label: "Based in", value: location },
+    { label: "Business model", value: project.business_model },
+    {
+      label: "Monthly revenue",
+      value: project.monthly_revenue != null ? formatMoney(project.monthly_revenue) : "",
+    },
+    { label: "Customers", value: project.customer_count != null ? project.customer_count.toLocaleString() : "" },
+    { label: "Product", value: PRODUCT_STATUS[project.product_status || ""] || "" },
+  ].filter((f) => f.value);
+
   const links = [
     { label: "Website", href: project.website },
     { label: "Demo", href: project.demo_url },
@@ -82,16 +114,22 @@ export default function InvestorProjectPage({ params }: { params: Promise<{ id: 
   ].filter((l): l is { label: string; href: string } => Boolean(l.href));
 
   return (
-    <PortalLayout role="INVESTOR" activeItem="browse" title={project.title}>
+    <PortalLayout role="INVESTOR" activeItem="discover" title={project.title}>
       <div className="space-y-8">
         <div>
-          <Link href="/investor/dashboard?tab=browse" className="inline-flex items-center gap-1.5 text-sm text-muted hover:text-ink">
+          <Link href="/investor/discover" className="inline-flex items-center gap-1.5 text-sm text-muted hover:text-ink">
             <ArrowLeft className="h-4 w-4" />
-            Browse
+            Discover
           </Link>
-          <div className="mt-4 flex flex-wrap items-center gap-2">
-            <h1 className="text-2xl font-semibold text-ink">{project.title}</h1>
-            {match && <Tag tone={match.match_score >= 85 ? "positive" : "accent"}>{Math.round(match.match_score)}% fit</Tag>}
+          <div className="mt-4 flex flex-wrap items-start justify-between gap-3">
+            <div className="flex flex-wrap items-center gap-2">
+              <h1 className="text-2xl font-semibold text-ink">{project.title}</h1>
+              {match && <Tag tone={match.match_score >= 85 ? "positive" : "accent"}>{Math.round(match.match_score)}% fit</Tag>}
+            </div>
+            <Button variant="secondary" onClick={toggleSaved} disabled={savingBookmark} aria-pressed={saved}>
+              {saved ? <BookmarkCheck className="h-4 w-4 text-accent" /> : <Bookmark className="h-4 w-4" />}
+              {saved ? "Saved" : "Save"}
+            </Button>
           </div>
           {project.tagline && <p className="mt-1 text-muted">{project.tagline}</p>}
           <p className="mt-1 text-sm text-muted">
@@ -109,19 +147,27 @@ export default function InvestorProjectPage({ params }: { params: Promise<{ id: 
           <div className="space-y-6 lg:col-span-2">
             {match?.reasons?.length ? (
               <Card>
-                <h2 className="text-base font-semibold text-ink">Why it fits your criteria</h2>
+                <h2 className="text-base font-semibold text-ink">How it matches your criteria</h2>
                 <ul className="mt-3 space-y-2">
                   {match.reasons.map((r) => (
-                    <li key={r.category} className="flex gap-2 text-sm text-ink-2">
-                      <CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0 text-positive" />
-                      <span>
-                        <span className="font-medium">{r.category}:</span> {r.explanation}
-                      </span>
-                    </li>
+                    <ReasonLine key={r.category} reason={{ ...r, explanation: `${r.category}: ${r.explanation}` }} />
                   ))}
                 </ul>
               </Card>
             ) : null}
+            {facts.length > 0 && (
+              <Card>
+                <dl className="grid gap-4 text-sm sm:grid-cols-3">
+                  {facts.map((f) => (
+                    <div key={f.label}>
+                      <dt className="text-muted">{f.label}</dt>
+                      <dd className="mt-0.5 font-medium text-ink">{f.value}</dd>
+                    </div>
+                  ))}
+                </dl>
+                <p className="mt-4 text-xs text-muted">Location and traction are reported by the founder and not verified by VentureX.</p>
+              </Card>
+            )}
             <Card className="space-y-6">
               <TextBlock title="Summary" body={project.description} />
               <TextBlock title="Problem" body={project.problem} />
@@ -154,7 +200,7 @@ export default function InvestorProjectPage({ params }: { params: Promise<{ id: 
                   <Tag tone="positive">Founder accepted</Tag>
                   <ButtonLink
                     className="w-full"
-                    href={interest.deal_room?.room_id ? `/dealroom/${interest.deal_room.room_id}` : "/dealroom?role=INVESTOR"}
+                    href={interest.deal_room?.room_id ? `/dealroom/${interest.deal_room.room_id}` : "/investor/deal-flow"}
                   >
                     <MessagesSquare className="h-4 w-4" />
                     Open deal room
@@ -202,3 +248,11 @@ function TextBlock({ title, body }: { title: string; body?: string }) {
     </div>
   );
 }
+
+const PRODUCT_STATUS: Record<string, string> = {
+  idea: "Idea",
+  prototype: "Prototype",
+  beta: "In beta",
+  launched: "Launched",
+  scaling: "Scaling",
+};
