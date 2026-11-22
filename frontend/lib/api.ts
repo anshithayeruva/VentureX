@@ -13,6 +13,19 @@ import {
   ProjectDocument,
   ReadinessReport,
   AnalysisHistoryItem,
+  CriteriaOptions,
+  DealFlow,
+  DiscoverPage,
+  DiscoverQuery,
+  InvestmentDetail,
+  InvestmentInput,
+  InvestmentPatch,
+  InvestmentThesis,
+  PortfolioSummary,
+  TransactionInput,
+  TransactionPage,
+  TransactionType,
+  ValuationInput,
 } from "@/types";
 import { clearApiToken, getApiToken } from "@/lib/auth/client";
 
@@ -55,7 +68,28 @@ async function throwForStatus(res: Response, fallback: string): Promise<void> {
   if (res.ok) return;
   const body = await res.json().catch(() => null);
   const detail = body?.detail;
-  throw new Error(typeof detail === "string" ? detail : `${fallback} (HTTP ${res.status})`);
+  if (typeof detail === "string") throw new Error(detail);
+  if (Array.isArray(detail) && detail[0]?.msg) {
+    const msg = String(detail[0].msg).replace(/^Value error, /, "");
+    throw new Error(msg.charAt(0).toUpperCase() + msg.slice(1));
+  }
+  throw new Error(`${fallback} (HTTP ${res.status})`);
+}
+
+/** GET a JSON resource; throws a readable error on failure. */
+async function getJson<T>(url: string, fallback: string): Promise<T> {
+  const res = await networkSafe(() => apiFetch(url, { cache: "no-store" }));
+  await throwForStatus(res, fallback);
+  return res.json();
+}
+
+/** Send JSON with a method; throws a readable error (the API's validation message) on failure. */
+async function sendJson<T>(method: string, url: string, body: unknown, fallback: string): Promise<T> {
+  const res = await networkSafe(() =>
+    apiFetch(url, { method, headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) })
+  );
+  await throwForStatus(res, fallback);
+  return res.json();
 }
 
 export type MeResponse = {
@@ -72,7 +106,7 @@ export type MeResponse = {
 export const api = {
   /** The signed-in user and their VentureX role (null role = not onboarded). */
   async getMe(): Promise<MeResponse | null> {
-    const res = await apiFetch(`${API_BASE_URL}/me`, { cache: "no-store" });
+    const res = await networkSafe(() => apiFetch(`${API_BASE_URL}/me`, { cache: "no-store" }));
     if (res.status === 401) return null;
     if (!res.ok) throw new Error(`Could not load your account (HTTP ${res.status})`);
     return res.json();
@@ -84,11 +118,11 @@ export const api = {
     name?: string;
     organization?: string;
   }): Promise<MeResponse> {
-    const res = await apiFetch(`${API_BASE_URL}/me`, {
+    const res = await networkSafe(() => apiFetch(`${API_BASE_URL}/me`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(data),
-    });
+    }));
     if (!res.ok) {
       const detail = await res.json().catch(() => null);
       throw new Error(detail?.detail || `Could not finish setting up your account (HTTP ${res.status})`);
@@ -295,6 +329,86 @@ export const api = {
     );
     await throwForStatus(res, "Could not save your criteria");
     return res.json();
+  },
+
+  /* ---------------------------------------------------------- investor portal */
+  // These throw on failure so pages can show a real error state instead of empty data.
+
+  async getCriteriaOptions(): Promise<CriteriaOptions> {
+    return getJson(`${API_BASE_URL}/investors/criteria-options`, "Could not load criteria options");
+  },
+
+  async saveThesis(thesis: InvestmentThesis): Promise<InvestorPreference> {
+    return sendJson("PUT", `${API_BASE_URL}/investors/preferences`, { thesis }, "Could not save your criteria");
+  },
+
+  async discover(query: DiscoverQuery): Promise<DiscoverPage> {
+    const url = new URL(`${API_BASE_URL}/investors/discover`);
+    for (const [key, value] of Object.entries(query)) {
+      if (value === undefined || value === null || value === "" || value === false) continue;
+      if (Array.isArray(value)) value.forEach((v) => url.searchParams.append(key, String(v)));
+      else url.searchParams.set(key, String(value));
+    }
+    return getJson(url.toString(), "Could not load startups");
+  },
+
+  async setSaved(projectId: number | string, saved: boolean): Promise<void> {
+    const res = await networkSafe(() =>
+      apiFetch(`${API_BASE_URL}/investors/saved/${projectId}`, { method: saved ? "PUT" : "DELETE" })
+    );
+    await throwForStatus(res, saved ? "Could not save this startup" : "Could not remove it from saved");
+  },
+
+  async getDealFlow(): Promise<DealFlow> {
+    return getJson(`${API_BASE_URL}/investors/deal-flow`, "Could not load your deal flow");
+  },
+
+  async getPortfolioSummary(): Promise<PortfolioSummary> {
+    return getJson(`${API_BASE_URL}/portfolio/summary`, "Could not load your portfolio");
+  },
+
+  async getTransactions(params: { type?: TransactionType; investment_id?: number; page?: number; page_size?: number } = {}): Promise<TransactionPage> {
+    const url = new URL(`${API_BASE_URL}/portfolio/transactions`);
+    for (const [k, v] of Object.entries(params)) if (v !== undefined) url.searchParams.set(k, String(v));
+    return getJson(url.toString(), "Could not load transactions");
+  },
+
+  async getInvestment(id: number | string): Promise<InvestmentDetail | null> {
+    const res = await networkSafe(() => apiFetch(`${API_BASE_URL}/portfolio/investments/${id}`, { cache: "no-store" }));
+    if (res.status === 404) return null;
+    await throwForStatus(res, "Could not load this investment");
+    return res.json();
+  },
+
+  async createInvestment(data: InvestmentInput): Promise<InvestmentDetail> {
+    return sendJson("POST", `${API_BASE_URL}/portfolio/investments`, data, "Could not record the investment");
+  },
+
+  async updateInvestment(id: number, data: InvestmentPatch): Promise<InvestmentDetail> {
+    return sendJson("PUT", `${API_BASE_URL}/portfolio/investments/${id}`, data, "Could not update the investment");
+  },
+
+  async deleteInvestment(id: number): Promise<void> {
+    const res = await networkSafe(() => apiFetch(`${API_BASE_URL}/portfolio/investments/${id}`, { method: "DELETE" }));
+    await throwForStatus(res, "Could not delete the investment");
+  },
+
+  async addTransaction(investmentId: number, data: TransactionInput): Promise<InvestmentDetail> {
+    return sendJson("POST", `${API_BASE_URL}/portfolio/investments/${investmentId}/transactions`, data, "Could not add the transaction");
+  },
+
+  async deleteTransaction(id: number): Promise<void> {
+    const res = await networkSafe(() => apiFetch(`${API_BASE_URL}/portfolio/transactions/${id}`, { method: "DELETE" }));
+    await throwForStatus(res, "Could not delete the transaction");
+  },
+
+  async addValuation(investmentId: number, data: ValuationInput): Promise<InvestmentDetail> {
+    return sendJson("POST", `${API_BASE_URL}/portfolio/investments/${investmentId}/valuations`, data, "Could not add the valuation");
+  },
+
+  async deleteValuation(id: number): Promise<void> {
+    const res = await networkSafe(() => apiFetch(`${API_BASE_URL}/portfolio/valuations/${id}`, { method: "DELETE" }));
+    await throwForStatus(res, "Could not delete the valuation");
   },
 
   async getFounderProfile(): Promise<any> {

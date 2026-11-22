@@ -2,6 +2,7 @@ import logging
 from datetime import datetime, timezone
 from typing import Dict, Any, Optional, List
 from app.database import postgres as pg
+from app.services.criteria import legacy_columns, thesis_from_row
 from app.schemas.investor import (
     InvestorProfileUpdate,
     InvestorPreferenceUpdate,
@@ -70,8 +71,8 @@ class InvestorService:
                     "bio": "Investing in Healthcare AI, MedTech diagnostics, and clinical automation infrastructure.",
                     "location": "New York & Boston",
                     "thesis": "Leading Seed and Series A rounds for high-defensibility technical founders solving critical clinical bottleneck problems.",
-                    "min_check": "$500,000",
-                    "max_check": "$1,500,000",
+                    "min_check": "₹5,00,000",
+                    "max_check": "₹15,00,000",
                 }
             else:
                 # A real signed-in investor starts with an empty profile.
@@ -103,11 +104,11 @@ class InvestorService:
     @classmethod
     async def get_or_create_preferences(cls, investor_id: str = DEFAULT_INVESTOR_USER_ID) -> Dict[str, Any]:
         pref = await pg.fetch_one("SELECT * FROM investor_preferences WHERE investor_id = %s", [investor_id])
-        if pref:
-            return pref
-        now = datetime.now(timezone.utc)
-        doc = {"investor_id": investor_id, **DEFAULT_PREFERENCES, "created_at": now, "updated_at": now}
-        return await pg.upsert("investor_preferences", doc, ["investor_id"], update=["updated_at"])
+        if not pref:
+            now = datetime.now(timezone.utc)
+            doc = {"investor_id": investor_id, **DEFAULT_PREFERENCES, "created_at": now, "updated_at": now}
+            pref = await pg.upsert("investor_preferences", doc, ["investor_id"], update=["updated_at"])
+        return {**pref, "thesis": thesis_from_row(pref)}
 
     @classmethod
     async def update_preferences(
@@ -119,11 +120,18 @@ class InvestorService:
         # Matching runs over investor profiles, so make sure this investor has one
         # (normally created at onboarding) before recomputing their matches.
         await cls.get_or_create_profile(investor_id)
-        fields = {
-            k: v
-            for k, v in data.model_dump(exclude_unset=True).items()
-            if v is not None and k in _PREFERENCE_COLUMNS
-        }
+        if data.thesis is not None:
+            # The structured thesis is the source of truth; flat columns mirror it.
+            fields = {"thesis": data.thesis.model_dump(mode="json"), **legacy_columns(data.thesis)}
+        else:
+            fields = {
+                k: v
+                for k, v in data.model_dump(exclude_unset=True).items()
+                if v is not None and k in _PREFERENCE_COLUMNS
+            }
+            # Older clients edit the flat columns: drop the stored thesis so it is rebuilt from them.
+            if fields:
+                fields["thesis"] = {}
         fields["updated_at"] = datetime.now(timezone.utc)
         await pg.update_where("investor_preferences", fields, "investor_id = %s", [investor_id])
 

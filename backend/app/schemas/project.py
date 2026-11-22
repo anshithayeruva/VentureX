@@ -1,5 +1,5 @@
 from datetime import datetime
-from typing import Optional, Dict, Any, List, Union
+from typing import Optional, Dict, Any, List, Literal, Union
 from pydantic import BaseModel, Field
 
 
@@ -18,6 +18,12 @@ class ProjectBase(BaseModel):
     pitch_deck_url: Optional[str] = None
     github_url: Optional[str] = Field(None, max_length=300)
     demo_url: Optional[str] = Field(None, max_length=500)
+    # Optional, self-reported facts investors can filter on.
+    country: Optional[str] = Field(None, max_length=80)
+    city: Optional[str] = Field(None, max_length=80)
+    monthly_revenue: Optional[float] = Field(None, ge=0, le=1e12)
+    customer_count: Optional[int] = Field(None, ge=0, le=1_000_000_000)
+    product_status: Optional[Literal["", "idea", "prototype", "beta", "launched", "scaling"]] = None
 
 
 class ProjectCreate(ProjectBase):
@@ -39,6 +45,11 @@ class ProjectUpdate(BaseModel):
     pitch_deck_url: Optional[str] = None
     github_url: Optional[str] = Field(None, max_length=300)
     demo_url: Optional[str] = Field(None, max_length=500)
+    country: Optional[str] = Field(None, max_length=80)
+    city: Optional[str] = Field(None, max_length=80)
+    monthly_revenue: Optional[float] = Field(None, ge=0, le=1e12)
+    customer_count: Optional[int] = Field(None, ge=0, le=1_000_000_000)
+    product_status: Optional[Literal["", "idea", "prototype", "beta", "launched", "scaling"]] = None
     is_published: Optional[bool] = None
 
 

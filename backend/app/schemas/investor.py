@@ -1,6 +1,8 @@
 from datetime import datetime
 from typing import Optional, List, Union, Dict, Any
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
+
+from app.schemas.thesis import InvestmentThesis
 
 
 class InvestorPreferenceBase(BaseModel):
@@ -21,6 +23,9 @@ class InvestorPreferenceUpdate(BaseModel):
     preferred_business_models: Optional[List[str]] = None
     geography: Optional[str] = None
     tech_preferences: Optional[List[str]] = None
+    # The structured thesis (criteria page). When given, it is the source of truth and
+    # the flat fields above are derived from it.
+    thesis: Optional[InvestmentThesis] = None
 
 
 class InvestorPreferenceCreate(InvestorPreferenceBase):
@@ -30,6 +35,7 @@ class InvestorPreferenceCreate(InvestorPreferenceBase):
 class InvestorPreferenceResponse(InvestorPreferenceBase):
     id: Optional[Union[int, str]] = None
     investor_id: Optional[Union[int, str]] = None
+    thesis: Optional[Dict[str, Any]] = None
     created_at: Optional[Union[datetime, str]] = None
     updated_at: Optional[Union[datetime, str]] = None
 
@@ -75,3 +81,88 @@ class InvestorProfileResponse(InvestorProfileBase):
 
     class Config:
         populate_by_name = True
+
+
+# ---------------------------------------------------------------- discovery & deal flow
+
+
+class DiscoverItem(BaseModel):
+    """A published startup as an investor sees it in Discover: public facts plus their own fit."""
+    id: int
+    title: str
+    tagline: Optional[str] = None
+    description: str
+    industry: str
+    stage: str
+    funding_required: float
+    business_model: str
+    target_market: str
+    website: Optional[str] = None
+    country: Optional[str] = None
+    city: Optional[str] = None
+    monthly_revenue: Optional[float] = None
+    customer_count: Optional[int] = None
+    product_status: Optional[str] = None
+    created_at: Optional[datetime] = None
+    match_score: Optional[float] = None
+    reasons: List[Dict[str, Any]] = Field(default_factory=list)
+    saved: bool = False
+    interest_id: Optional[str] = None
+    interest_status: Optional[str] = None
+    room_id: Optional[str] = None
+    deal_stage: Optional[str] = None
+
+    @field_validator("reasons", mode="before")
+    @classmethod
+    def _reasons(cls, v):  # no match row -> NULL
+        return v or []
+
+
+class DiscoverFacets(BaseModel):
+    industries: List[str] = Field(default_factory=list)
+    business_models: List[str] = Field(default_factory=list)
+    countries: List[str] = Field(default_factory=list)
+
+
+class DiscoverPage(BaseModel):
+    items: List[DiscoverItem]
+    total: int
+    page: int
+    page_size: int
+    facets: DiscoverFacets
+
+
+class DealFlowItem(BaseModel):
+    project_id: int
+    title: str
+    industry: Optional[str] = None
+    stage: Optional[str] = None
+    funding_required: Optional[float] = None
+    tagline: Optional[str] = None
+    status: str  # saved | requested | active | closed | declined | passed
+    saved: bool = False
+    interest_id: Optional[str] = None
+    interest_status: Optional[str] = None
+    response_note: Optional[str] = None
+    founder_email: Optional[str] = None
+    requested_at: Optional[datetime] = None
+    room_id: Optional[str] = None
+    deal_stage: Optional[str] = None
+    founder_name: Optional[str] = None
+    founder_company: Optional[str] = None
+    last_message: Optional[str] = None
+    messages_count: Optional[int] = None
+    last_activity: Optional[datetime] = None
+    investment_id: Optional[int] = None
+
+
+class DealFlow(BaseModel):
+    items: List[DealFlowItem]
+    counts: Dict[str, int]
+
+
+class CriteriaOptions(BaseModel):
+    stages: List[str]
+    regions: List[str]
+    countries: List[str]
+    instruments: List[str]

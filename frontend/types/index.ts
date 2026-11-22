@@ -1,3 +1,7 @@
+import type { InvestmentThesis } from "./portal";
+
+export * from "./portal";
+
 export type Role = "FOUNDER" | "INVESTOR" | "ADMIN";
 
 export interface User {
@@ -30,6 +34,7 @@ export interface InvestorPreference {
   preferred_business_models: string[];
   geography: string;
   tech_preferences: string[];
+  thesis?: InvestmentThesis;
 }
 
 export interface InvestorProfile {
@@ -63,7 +68,13 @@ export interface Project {
   pitch_deck_url?: string;
   github_url?: string;
   demo_url?: string;
+  country?: string;
+  city?: string;
+  monthly_revenue?: number | null;
+  customer_count?: number | null;
+  product_status?: string;
   is_published?: boolean;
+  /** Private to the founder: null whenever someone else loads the project. */
   readiness_score?: number;
   ai_readiness_breakdown?: {
     problem_solution_fit?: number;
@@ -94,6 +105,11 @@ export interface ProjectCreateInput {
   pitch_deck_url?: string;
   github_url?: string;
   demo_url?: string;
+  country?: string;
+  city?: string;
+  monthly_revenue?: number | null;
+  customer_count?: number | null;
+  product_status?: string;
   is_published?: boolean;
 }
 
@@ -162,6 +178,8 @@ export interface MatchReason {
   category: string;
   explanation: string;
   weight: number;
+  /** 0-100 for this criterion; 75+ means it is met. Older matches may not have it. */
+  score?: number;
 }
 
 export interface MatchItem {

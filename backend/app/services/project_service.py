@@ -35,6 +35,11 @@ class ProjectService:
             "pitch_deck_url": data.pitch_deck_url or "",
             "github_url": data.github_url or "",
             "demo_url": data.demo_url or "",
+            "country": (data.country or "").strip(),
+            "city": (data.city or "").strip(),
+            "monthly_revenue": data.monthly_revenue,
+            "customer_count": data.customer_count,
+            "product_status": data.product_status or "",
             "is_published": data.is_published,
             "created_at": now,
             "updated_at": now,
@@ -111,7 +116,11 @@ class ProjectService:
         if pid is None:
             return None
 
-        update_fields = {k: v for k, v in data.model_dump(exclude_unset=True).items() if v is not None}
+        # Optional traction figures can be cleared back to "not reported".
+        clearable = {"monthly_revenue", "customer_count"}
+        update_fields = {
+            k: v for k, v in data.model_dump(exclude_unset=True).items() if v is not None or k in clearable
+        }
         if not update_fields:
             return await cls.get_by_id(project_id)
 
@@ -120,7 +129,8 @@ class ProjectService:
             return None
 
         # Recalculate matches if thesis-critical fields changed
-        thesis_keys = {"industry", "stage", "funding_required", "business_model", "target_market", "description"}
+        thesis_keys = {"industry", "stage", "funding_required", "business_model", "target_market", "description",
+                       "country", "city", "monthly_revenue", "customer_count", "product_status"}
         if any(k in update_fields for k in thesis_keys):
             try:
                 from app.services.match_service import MatchService

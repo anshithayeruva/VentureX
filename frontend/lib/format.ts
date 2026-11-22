@@ -1,12 +1,12 @@
-/** "$750K", "$1.5M", "$12,000" — compact money for amounts people skim. */
+/** "₹75,000", "₹7.5 L", "₹1.2 Cr" — compact rupees (Indian lakh / crore) for amounts people skim. */
 export function formatMoney(amount: number | null | undefined): string {
   if (amount == null || Number.isNaN(amount)) return "—";
   const abs = Math.abs(amount);
-  const trim = (n: number) => (Number.isInteger(n) ? String(n) : n.toFixed(1).replace(/\.0$/, ""));
-  if (abs >= 1_000_000_000) return `$${trim(amount / 1_000_000_000)}B`;
-  if (abs >= 1_000_000) return `$${trim(amount / 1_000_000)}M`;
-  if (abs >= 100_000) return `$${trim(amount / 1_000)}K`;
-  return `$${amount.toLocaleString("en-US")}`;
+  const sign = amount < 0 ? "-" : "";
+  const trim = (n: number) => (Number.isInteger(n) ? String(n) : n.toFixed(2).replace(/0+$/, "").replace(/\.$/, ""));
+  if (abs >= 10_000_000) return `${sign}₹${trim(abs / 10_000_000)} Cr`;
+  if (abs >= 100_000) return `${sign}₹${trim(abs / 100_000)} L`;
+  return `${sign}₹${abs.toLocaleString("en-IN", { maximumFractionDigits: 2 })}`;
 }
 
 /** "just now", "5m ago", "3h ago", "2d ago", then a short date. */

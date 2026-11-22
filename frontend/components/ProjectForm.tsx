@@ -45,6 +45,11 @@ export const EMPTY_PROJECT: ProjectCreateInput = {
   pitch_deck_url: "",
   github_url: "",
   demo_url: "",
+  country: "",
+  city: "",
+  monthly_revenue: null,
+  customer_count: null,
+  product_status: "",
 };
 
 const MAX_DECK_BYTES = 25 * 1024 * 1024;
@@ -141,9 +146,9 @@ export function ProjectForm({
               ))}
             </select>
           </Field>
-          <Field label="Raising (USD)" htmlFor="pf-funding">
+          <Field label="Raising (₹)" htmlFor="pf-funding">
             <div className="relative">
-              <span className="pointer-events-none absolute left-3 top-2 text-sm text-faint">$</span>
+              <span className="pointer-events-none absolute left-3 top-2 text-sm text-faint">₹</span>
               <input
                 id="pf-funding"
                 type="number"
@@ -167,6 +172,54 @@ export function ProjectForm({
           </Field>
           <Field label="Target customer" htmlFor="pf-market">
             <input id="pf-market" required className={inputClass} placeholder="e.g. Independent US pharmacies" {...text("target_market")} />
+          </Field>
+        </div>
+      </FormSection>
+
+      <FormSection
+        title="Location and traction"
+        description="Optional. Investors can filter on these. Leave blank anything you'd rather not share yet."
+      >
+        <div className="grid gap-5 sm:grid-cols-2">
+          <Field label="Country" htmlFor="pf-country">
+            <input id="pf-country" maxLength={80} className={inputClass} placeholder="e.g. Germany" {...text("country")} />
+          </Field>
+          <Field label="City" htmlFor="pf-city">
+            <input id="pf-city" maxLength={80} className={inputClass} placeholder="e.g. Berlin" {...text("city")} />
+          </Field>
+        </div>
+        <div className="grid gap-5 sm:grid-cols-3">
+          <Field label="Monthly revenue (₹)" htmlFor="pf-revenue">
+            <input
+              id="pf-revenue"
+              type="number"
+              min={0}
+              step="any"
+              className={inputClass}
+              value={data.monthly_revenue ?? ""}
+              onChange={(e) => set("monthly_revenue", e.target.value === "" ? null : Math.max(0, Number(e.target.value)))}
+            />
+          </Field>
+          <Field label="Paying customers" htmlFor="pf-customers">
+            <input
+              id="pf-customers"
+              type="number"
+              min={0}
+              step={1}
+              className={inputClass}
+              value={data.customer_count ?? ""}
+              onChange={(e) => set("customer_count", e.target.value === "" ? null : Math.max(0, Math.floor(Number(e.target.value))))}
+            />
+          </Field>
+          <Field label="Product status" htmlFor="pf-status">
+            <select id="pf-status" className={inputClass} value={data.product_status ?? ""} onChange={(e) => set("product_status", e.target.value)}>
+              <option value="">Not specified</option>
+              <option value="idea">Idea</option>
+              <option value="prototype">Prototype</option>
+              <option value="beta">In beta</option>
+              <option value="launched">Launched</option>
+              <option value="scaling">Scaling</option>
+            </select>
           </Field>
         </div>
       </FormSection>

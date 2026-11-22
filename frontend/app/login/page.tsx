@@ -133,8 +133,8 @@ function LoginForm() {
           </div>
 
           <div>
-            <label className="block text-xs font-semibold text-[#0F172A] mb-1">Email Address</label>
-            <input
+            <label htmlFor="login-email" className="block text-xs font-semibold text-[#0F172A] mb-1">Email Address</label>
+            <input id="login-email"
               type="email"
               required
               placeholder="you@domain.com"
@@ -146,7 +146,7 @@ function LoginForm() {
 
           <div>
             <div className="flex items-center justify-between mb-1">
-              <label className="block text-xs font-semibold text-[#0F172A]">Password</label>
+              <label htmlFor="login-password" className="block text-xs font-semibold text-[#0F172A]">Password</label>
               <Link
                 href="/forgot-password"
                 className="text-[11px] text-[#1B3B6F] hover:underline"
@@ -154,7 +154,7 @@ function LoginForm() {
                 Forgot password?
               </Link>
             </div>
-            <input
+            <input id="login-password"
               type="password"
               required
               placeholder="••••••••"

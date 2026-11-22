@@ -2,7 +2,7 @@
 
 import React, { Suspense, useEffect, useState } from "react";
 import Link from "next/link";
-import { useSearchParams } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { ChevronRight, FileCheck, Lock, MessagesSquare, Search } from "lucide-react";
 import { PortalLayout } from "@/components/PortalLayout";
 import { Avatar, ButtonLink, Card, EmptyState, LoadingRows, PageHeader, Segmented, Tag, cx, inputClass } from "@/components/ui";
@@ -15,6 +15,7 @@ type StageFilter = "ALL" | "INTRO_ACCEPTED" | "DUE_DILIGENCE" | "TERM_SHEET" | "
 
 function DealRoomsContent() {
   const searchParams = useSearchParams();
+  const router = useRouter();
   const [role, setRole] = useState<"FOUNDER" | "INVESTOR">(searchParams.get("role") === "INVESTOR" ? "INVESTOR" : "FOUNDER");
   const [rooms, setRooms] = useState<DealRoom[]>([]);
   const [loading, setLoading] = useState(true);
@@ -26,6 +27,11 @@ function DealRoomsContent() {
     // The backend returns only the signed-in user's rooms; the account's role sets the view.
     Promise.all([api.getMe().catch(() => null), api.getDealRooms()]).then(([me, data]) => {
       if (!mounted) return;
+      // Investors manage deal rooms inside Deal Flow, next to saved startups and intro requests.
+      if (me?.role === "INVESTOR") {
+        router.replace("/investor/deal-flow");
+        return;
+      }
       if (me?.role) setRole(me.role);
       setRooms(data);
       setLoading(false);
@@ -33,7 +39,7 @@ function DealRoomsContent() {
     return () => {
       mounted = false;
     };
-  }, []);
+  }, [router]);
 
   const q = query.trim().toLowerCase();
   const visible = rooms.filter(
