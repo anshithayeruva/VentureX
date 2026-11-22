@@ -3,7 +3,7 @@
 import React, { Suspense, useCallback, useEffect, useState } from "react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
-import { Info, Plus, Wallet, X } from "lucide-react";
+import { Download, FileUp, Info, Plus, Upload, Wallet, X } from "lucide-react";
 import { PortalLayout } from "@/components/PortalLayout";
 import { CompanyComparison, LabelledBars, SERIES, ValueOverTimeChart } from "@/components/PortfolioCharts";
 import { ErrorState, MoneyInput, Pagination } from "@/components/forms";
@@ -13,7 +13,7 @@ import { api } from "@/lib/api";
 import { cleanMoneyInput, formatCompact, formatCurrency, formatDate, formatSigned, gainTone, toNumber, todayISO } from "@/lib/money";
 import { INSTRUMENT_LABEL } from "@/lib/thesis";
 import { STATUS_TAG, TXN_LABEL } from "@/lib/portfolio";
-import type { Holding, Instrument, PortfolioSummary, TransactionPage, TransactionType } from "@/types";
+import type { Holding, Instrument, PortfolioImportResult, PortfolioSummary, TransactionPage, TransactionType } from "@/types";
 
 type View = "overview" | "investments" | "transactions";
 
@@ -27,6 +27,8 @@ function PortfolioContent() {
   const [summary, setSummary] = useState<PortfolioSummary | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [showForm, setShowForm] = useState(Boolean(recordParam));
+  const [showImport, setShowImport] = useState(false);
+  const [notice, setNotice] = useState<string | null>(null);
 
   const load = useCallback(() => {
     api
@@ -45,11 +47,18 @@ function PortfolioContent() {
         title="Portfolio & Finances"
         description="The investments you've made, what they're worth and what they've returned, from the records you keep here."
         actions={
-          !showForm && (
-            <Button onClick={() => setShowForm(true)}>
-              <Plus className="h-4 w-4" />
-              Record investment
-            </Button>
+          !showForm &&
+          !showImport && (
+            <>
+              <Button variant="secondary" onClick={() => setShowImport(true)}>
+                <Upload className="h-4 w-4" />
+                Import CSV
+              </Button>
+              <Button onClick={() => setShowForm(true)}>
+                <Plus className="h-4 w-4" />
+                Record investment
+              </Button>
+            </>
           )
         }
       />
@@ -61,6 +70,24 @@ function PortfolioContent() {
           room is never counted as an investment.
         </span>
       </p>
+
+      {notice && (
+        <p role="status" className="mb-6 rounded-lg bg-positive-soft px-4 py-3 text-sm text-positive">
+          {notice}
+        </p>
+      )}
+
+      {showImport && (
+        <ImportPanel
+          onClose={() => setShowImport(false)}
+          onImported={(count) => {
+            setShowImport(false);
+            setNotice(`Imported ${count} investment${count === 1 ? "" : "s"}.`);
+            setTimeout(() => setNotice(null), 6000);
+            load();
+          }}
+        />
+      )}
 
       {showForm && (
         <RecordInvestmentForm
@@ -85,16 +112,23 @@ function PortfolioContent() {
       ) : !summary || !t ? (
         <LoadingRows />
       ) : empty ? (
-        !showForm && (
+        !showForm &&
+        !showImport && (
           <EmptyState
             icon={Wallet}
             title="No investments recorded yet"
-            description="Record an investment you've made to track its value, cash returned and overall return. Nothing is filled in for you."
+            description="Record an investment you've made, or import your history from a spreadsheet, to track value, cash returned and overall return. Nothing is filled in for you."
             action={
-              <Button onClick={() => setShowForm(true)}>
-                <Plus className="h-4 w-4" />
-                Record investment
-              </Button>
+              <div className="flex flex-wrap justify-center gap-2">
+                <Button variant="secondary" onClick={() => setShowImport(true)}>
+                  <Upload className="h-4 w-4" />
+                  Import CSV
+                </Button>
+                <Button onClick={() => setShowForm(true)}>
+                  <Plus className="h-4 w-4" />
+                  Record investment
+                </Button>
+              </div>
             }
           />
         )
@@ -179,7 +213,14 @@ function PortfolioContent() {
             </div>
           )}
 
-          {view === "investments" && <HoldingsTable holdings={summary.holdings} />}
+          {view === "investments" && (
+            <div className="space-y-4">
+              <div className="flex justify-end">
+                <ExportButton kind="holdings" label="Export holdings CSV" />
+              </div>
+              <HoldingsTable holdings={summary.holdings} />
+            </div>
+          )}
           {view === "transactions" && <TransactionsView />}
         </div>
       )}
@@ -278,6 +319,7 @@ function TransactionsView() {
 
   return (
     <div className="space-y-4">
+      <div className="flex flex-wrap items-center justify-between gap-3">
       <select
         aria-label="Transaction type"
         className={cx(inputClass, "sm:w-56")}
@@ -294,6 +336,8 @@ function TransactionsView() {
           </option>
         ))}
       </select>
+        <ExportButton kind="transactions" label="Export transactions CSV" />
+      </div>
       {error ? (
         <ErrorState message={error} />
       ) : !data ? (
@@ -459,6 +503,160 @@ function RecordInvestmentForm({
           </button>
         </div>
       </form>
+    </Card>
+  );
+}
+
+function ExportButton({ kind, label }: { kind: "holdings" | "transactions"; label: string }) {
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  return (
+    <div className="flex items-center gap-3">
+      {error && <span className="text-sm text-danger">{error}</span>}
+      <Button
+        variant="secondary"
+        disabled={busy}
+        onClick={async () => {
+          setBusy(true);
+          setError(null);
+          try {
+            await api.downloadPortfolioCsv(kind);
+          } catch (err) {
+            setError(err instanceof Error ? err.message : "Couldn't download the file.");
+          } finally {
+            setBusy(false);
+          }
+        }}
+      >
+        <Download className="h-4 w-4" />
+        {busy ? "Preparing…" : label}
+      </Button>
+    </div>
+  );
+}
+
+/** Upload a CSV, see every problem by row, then import all rows at once (or none). */
+function ImportPanel({ onClose, onImported }: { onClose: () => void; onImported: (count: number) => void }) {
+  const [file, setFile] = useState<File | null>(null);
+  const [check, setCheck] = useState<PortfolioImportResult | null>(null);
+  const [busy, setBusy] = useState<"check" | "import" | "template" | null>(null);
+  const [error, setError] = useState<string | null>(null);
+
+  const choose = async (f: File | null) => {
+    setFile(f);
+    setCheck(null);
+    setError(null);
+    if (!f) return;
+    setBusy("check");
+    try {
+      setCheck(await api.importPortfolioCsv(f, true));
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Couldn't read the file.");
+    } finally {
+      setBusy(null);
+    }
+  };
+
+  const runImport = async () => {
+    if (!file) return;
+    setBusy("import");
+    setError(null);
+    try {
+      const res = await api.importPortfolioCsv(file, false);
+      if (res.errors.length || !res.imported) {
+        setCheck(res);
+        return;
+      }
+      onImported(res.imported);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Couldn't import the file.");
+    } finally {
+      setBusy(null);
+    }
+  };
+
+  return (
+    <Card className="mb-8 space-y-5">
+      <div className="flex items-start justify-between gap-3">
+        <div>
+          <h2 className="text-lg font-medium text-ink">Import investments from CSV</h2>
+          <p className="text-sm text-muted">
+            One investment per row. Amounts in rupees (25,00,000 or 2500000), dates as DD/MM/YYYY. If any row has a problem, nothing is
+            imported until it&apos;s fixed.
+          </p>
+        </div>
+        <button type="button" onClick={onClose} aria-label="Close" className="rounded-md p-1 text-muted hover:bg-subtle hover:text-ink">
+          <X className="h-4 w-4" />
+        </button>
+      </div>
+
+      <div className="flex flex-wrap items-center gap-3">
+        <Button
+          variant="secondary"
+          disabled={busy === "template"}
+          onClick={async () => {
+            setBusy("template");
+            try {
+              await api.downloadPortfolioCsv("template");
+            } catch (err) {
+              setError(err instanceof Error ? err.message : "Couldn't download the template.");
+            } finally {
+              setBusy(null);
+            }
+          }}
+        >
+          <Download className="h-4 w-4" />
+          Download template
+        </Button>
+        <label className="inline-flex cursor-pointer items-center gap-1.5 rounded-lg border border-dashed border-line-strong bg-surface px-3.5 py-2 text-sm font-medium text-ink-2 hover:bg-subtle">
+          <FileUp className="h-4 w-4" />
+          {file ? file.name : "Choose CSV file"}
+          <input
+            type="file"
+            accept=".csv,text/csv"
+            className="sr-only"
+            onChange={(e) => choose(e.target.files?.[0] ?? null)}
+          />
+        </label>
+        {busy === "check" && <span className="text-sm text-muted">Checking…</span>}
+      </div>
+      <p className="text-xs text-muted">
+        Columns: company_name, investment_date, amount (required); instrument, industry, stage, ownership_pct, notes, current_value,
+        valuation_date (optional). A current value becomes a valuation marked as your estimate.
+      </p>
+
+      {error && (
+        <p role="alert" className="rounded-lg bg-danger-soft px-4 py-3 text-sm text-danger">
+          {error}
+        </p>
+      )}
+
+      {check && check.errors.length > 0 && (
+        <div role="alert" className="space-y-2 rounded-lg bg-danger-soft px-4 py-3 text-sm text-danger">
+          <p className="font-medium">
+            {check.errors.length} row{check.errors.length === 1 ? " needs" : "s need"} fixing before anything is imported:
+          </p>
+          <ul className="max-h-48 space-y-1 overflow-auto">
+            {check.errors.map((e, i) => (
+              <li key={`${e.row}-${i}`}>
+                {e.row > 0 ? `Row ${e.row}: ` : ""}
+                {e.message}
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
+
+      {check && check.errors.length === 0 && check.valid_rows > 0 && (
+        <div className="flex flex-wrap items-center justify-between gap-3 rounded-lg bg-positive-soft px-4 py-3">
+          <span className="text-sm text-positive">
+            {check.valid_rows} investment{check.valid_rows === 1 ? "" : "s"} ready to import.
+          </span>
+          <Button onClick={runImport} disabled={busy === "import"}>
+            {busy === "import" ? "Importing…" : `Import ${check.valid_rows}`}
+          </Button>
+        </div>
+      )}
     </Card>
   );
 }

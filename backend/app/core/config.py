@@ -44,6 +44,17 @@ class Settings(BaseSettings):
     NEON_AUTH_BASE_URL: str = ""
     NEON_AUTH_JWKS_URL: str = ""
 
+    # Public address of the web app, used for links in emails.
+    PUBLIC_APP_URL: str = "http://localhost:3000"
+
+    # Outgoing email (SMTP). Without SMTP_HOST and SMTP_USER, emails are only written to
+    # logs/emails.log, which is fine for development.
+    SMTP_HOST: Optional[str] = None
+    SMTP_PORT: int = 587
+    SMTP_USER: Optional[str] = None
+    SMTP_PASSWORD: Optional[str] = None
+    SMTP_FROM: str = "notifications@venturex.io"
+
     # CORS Configuration
     CORS_ORIGINS: str = "http://localhost:3000"
     ALLOWED_ORIGINS: Optional[str] = None  # Backward-compatibility alias

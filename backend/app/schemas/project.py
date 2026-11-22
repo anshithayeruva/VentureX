@@ -24,6 +24,12 @@ class ProjectBase(BaseModel):
     monthly_revenue: Optional[float] = Field(None, ge=0, le=1e12)
     customer_count: Optional[int] = Field(None, ge=0, le=1_000_000_000)
     product_status: Optional[Literal["", "idea", "prototype", "beta", "launched", "scaling"]] = None
+    team_size: Optional[int] = Field(None, ge=1, le=100_000)
+    technical_founder: Optional[bool] = None
+    repeat_founder: Optional[bool] = None
+    domain_expertise: Optional[bool] = None
+    full_time_team: Optional[bool] = None
+    ip_protected: Optional[bool] = None
 
 
 class ProjectCreate(ProjectBase):
@@ -50,6 +56,12 @@ class ProjectUpdate(BaseModel):
     monthly_revenue: Optional[float] = Field(None, ge=0, le=1e12)
     customer_count: Optional[int] = Field(None, ge=0, le=1_000_000_000)
     product_status: Optional[Literal["", "idea", "prototype", "beta", "launched", "scaling"]] = None
+    team_size: Optional[int] = Field(None, ge=1, le=100_000)
+    technical_founder: Optional[bool] = None
+    repeat_founder: Optional[bool] = None
+    domain_expertise: Optional[bool] = None
+    full_time_team: Optional[bool] = None
+    ip_protected: Optional[bool] = None
     is_published: Optional[bool] = None
 
 

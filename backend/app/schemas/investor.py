@@ -103,6 +103,12 @@ class DiscoverItem(BaseModel):
     monthly_revenue: Optional[float] = None
     customer_count: Optional[int] = None
     product_status: Optional[str] = None
+    team_size: Optional[int] = None
+    technical_founder: Optional[bool] = None
+    repeat_founder: Optional[bool] = None
+    domain_expertise: Optional[bool] = None
+    full_time_team: Optional[bool] = None
+    ip_protected: Optional[bool] = None
     created_at: Optional[datetime] = None
     match_score: Optional[float] = None
     reasons: List[Dict[str, Any]] = Field(default_factory=list)
@@ -130,6 +136,7 @@ class DiscoverPage(BaseModel):
     page: int
     page_size: int
     facets: DiscoverFacets
+    criteria_set: bool = True
 
 
 class DealFlowItem(BaseModel):

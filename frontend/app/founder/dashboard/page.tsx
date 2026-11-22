@@ -8,7 +8,6 @@ import {
   Bell,
   Briefcase,
   Check,
-  CheckCircle2,
   Download,
   Eye,
   Lock,
@@ -21,6 +20,7 @@ import {
   Users,
 } from "lucide-react";
 import { PortalLayout } from "@/components/PortalLayout";
+import { ReasonLine } from "@/components/forms";
 import { ProjectIntelligence } from "@/components/ProjectIntelligence";
 import {
   Avatar,
@@ -337,12 +337,7 @@ function FounderDashboardContent() {
       {m.reasons?.length > 0 && (
         <ul className="mt-4 space-y-1.5">
           {m.reasons.slice(0, 4).map((r) => (
-            <li key={r.category} className="flex gap-2 text-sm">
-              <CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0 text-positive" />
-              <span className="text-ink-2">
-                <span className="font-medium">{r.category}:</span> {r.explanation}
-              </span>
-            </li>
+            <ReasonLine key={r.category} reason={{ ...r, explanation: `${r.category}: ${r.explanation}` }} />
           ))}
         </ul>
       )}
@@ -680,7 +675,7 @@ function FounderDashboardContent() {
             <div className="divide-y divide-line">
               <Toggle
                 label="Keep new projects private"
-                description="New projects stay hidden from investors until you publish them."
+                description="New projects start private. Turn off to have the publish switch on by default."
                 checked={settings.defaultPrivate}
                 onChange={(v) => setSettings({ ...settings, defaultPrivate: v })}
               />
@@ -692,15 +687,9 @@ function FounderDashboardContent() {
               />
               <Toggle
                 label="Email me about strong matches"
-                description="When an investor's criteria closely fit one of your projects."
+                description="When an investor's criteria fit a published project at 90% or more. You'll always see these in Notifications."
                 checked={settings.emailAlerts}
                 onChange={(v) => setSettings({ ...settings, emailAlerts: v })}
-              />
-              <Toggle
-                label="Weekly summary"
-                description="A short weekly email about investor activity."
-                checked={settings.weeklyDigest}
-                onChange={(v) => setSettings({ ...settings, weeklyDigest: v })}
               />
             </div>
             <FormFooter saved={settingsSaved} label="Save settings" />

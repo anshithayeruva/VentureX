@@ -106,6 +106,19 @@ export default function InvestorProjectPage({ params }: { params: Promise<{ id: 
     },
     { label: "Customers", value: project.customer_count != null ? project.customer_count.toLocaleString() : "" },
     { label: "Product", value: PRODUCT_STATUS[project.product_status || ""] || "" },
+    { label: "Team size", value: project.team_size != null ? String(project.team_size) : "" },
+    {
+      label: "Team",
+      value: [
+        project.technical_founder ? "Technical founder" : null,
+        project.repeat_founder ? "Repeat founder" : null,
+        project.domain_expertise ? "Industry experience" : null,
+        project.full_time_team ? "Full-time" : null,
+      ]
+        .filter(Boolean)
+        .join(", "),
+    },
+    { label: "IP", value: project.ip_protected == null ? "" : project.ip_protected ? "Filed or granted" : "None yet" },
   ].filter((f) => f.value);
 
   const links = [
@@ -170,7 +183,7 @@ export default function InvestorProjectPage({ params }: { params: Promise<{ id: 
                     </div>
                   ))}
                 </dl>
-                <p className="mt-4 text-xs text-muted">Location and traction are reported by the founder and not verified by VentureX.</p>
+                <p className="mt-4 text-xs text-muted">These details are reported by the founder and not verified by VentureX.</p>
               </Card>
             )}
             <Card className="space-y-6">

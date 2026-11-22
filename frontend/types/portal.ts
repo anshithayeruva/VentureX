@@ -68,6 +68,7 @@ export interface InvestmentThesis {
     geography: Priority;
     business_model: Priority;
     traction: Priority;
+    team: Priority;
   };
 }
 
@@ -94,6 +95,12 @@ export interface DiscoverItem {
   monthly_revenue?: number | null;
   customer_count?: number | null;
   product_status?: string | null;
+  team_size?: number | null;
+  technical_founder?: boolean | null;
+  repeat_founder?: boolean | null;
+  domain_expertise?: boolean | null;
+  full_time_team?: boolean | null;
+  ip_protected?: boolean | null;
   created_at?: string | null;
   match_score?: number | null;
   reasons: MatchReason[];
@@ -110,6 +117,8 @@ export interface DiscoverPage {
   page: number;
   page_size: number;
   facets: { industries: string[]; business_models: string[]; countries: string[] };
+  /** False until the investor sets criteria; then no fit scores exist yet. */
+  criteria_set: boolean;
 }
 
 export interface DiscoverQuery {
@@ -297,4 +306,10 @@ export interface ValuationInput {
   value: MoneyString;
   source?: ValuationSource;
   note?: string;
+}
+
+export interface PortfolioImportResult {
+  valid_rows: number;
+  errors: { row: number; message: string }[];
+  imported: number;
 }

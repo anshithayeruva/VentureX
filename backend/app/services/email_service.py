@@ -8,6 +8,12 @@ from typing import Dict, Any, Optional
 
 logger = logging.getLogger(__name__)
 
+
+def _app_url() -> str:
+    """Base URL for links in emails (PUBLIC_APP_URL), without a trailing slash."""
+    from app.core.config import settings
+    return (settings.PUBLIC_APP_URL or "http://localhost:3000").rstrip("/")
+
 BACKEND_DIR = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 LOGS_DIR = os.path.join(BACKEND_DIR, "logs")
 os.makedirs(LOGS_DIR, exist_ok=True)
@@ -17,11 +23,17 @@ EMAIL_LOG_FILE = os.path.join(LOGS_DIR, "emails.log")
 class EmailService:
     """Handles transactional emails for VentureX, supporting SMTP and development logging."""
 
+    @staticmethod
+    def _smtp():
+        # Read through app settings so values in backend/.env are honoured (os.getenv alone
+        # never saw them: nothing loads .env into the process environment).
+        from app.core.config import settings
+        return settings
+
     @classmethod
     def _is_smtp_configured(cls) -> bool:
-        host = os.getenv("SMTP_HOST")
-        user = os.getenv("SMTP_USER")
-        return bool(host and user)
+        s = cls._smtp()
+        return bool(s.SMTP_HOST and s.SMTP_USER)
 
     @classmethod
     def _send_email_raw(
@@ -32,7 +44,7 @@ class EmailService:
         text_content: Optional[str] = None,
     ) -> Dict[str, Any]:
         """Dispatches an email via SMTP or writes to audit log in development."""
-        from_email = os.getenv("SMTP_FROM", "notifications@venturex.io")
+        from_email = cls._smtp().SMTP_FROM or "notifications@venturex.io"
         now = datetime.now(timezone.utc).isoformat()
 
         record = {
@@ -45,10 +57,11 @@ class EmailService:
 
         if cls._is_smtp_configured():
             try:
-                host = os.getenv("SMTP_HOST", "localhost")
-                port = int(os.getenv("SMTP_PORT", 587))
-                user = os.getenv("SMTP_USER", "")
-                password = os.getenv("SMTP_PASSWORD", "")
+                s = cls._smtp()
+                host = s.SMTP_HOST or "localhost"
+                port = int(s.SMTP_PORT or 587)
+                user = s.SMTP_USER or ""
+                password = s.SMTP_PASSWORD or ""
 
                 msg = MIMEMultipart("alternative")
                 msg["Subject"] = subject
@@ -88,6 +101,36 @@ class EmailService:
         return record
 
     @classmethod
+    def send_strong_match_email(
+        cls,
+        founder_email: str,
+        founder_name: str,
+        investor_label: str,
+        project_title: str,
+        score: float,
+    ) -> Dict[str, Any]:
+        """Tell a founder that an investor's criteria closely fit one of their published projects."""
+        link = f"{_app_url()}/founder/dashboard?tab=investors"
+        subject = f"Strong investor fit for {project_title}: {investor_label} ({round(score)}%)"
+        body_text = (
+            f"Hi {founder_name},\n\n"
+            f"{investor_label}'s investment criteria closely fit {project_title} ({round(score)}% fit).\n\n"
+            f"See why they match: {link}\n\n"
+            "You're getting this because 'Email me about strong matches' is on in your VentureX settings.\n"
+        )
+        html = f"""
+        <div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 24px; border: 1px solid #E7E0D3; border-radius: 12px; background: #FFFDF9;">
+          <h2 style="color: #111C32; margin: 0 0 12px; font-family: Georgia, serif; font-weight: 500;">A strong investor fit</h2>
+          <p style="color: #33405A; font-size: 14px; line-height: 1.6;">
+            <strong>{investor_label}</strong>'s criteria closely fit <strong>{project_title}</strong> ({round(score)}% fit).
+          </p>
+          <a href="{link}" style="display: inline-block; margin-top: 12px; background: #20477F; color: #FFFFFF; padding: 10px 20px; border-radius: 6px; text-decoration: none; font-size: 13px; font-weight: 600;">See why they match</a>
+          <p style="color: #6B6457; font-size: 12px; margin-top: 20px;">You can turn these emails off in Settings.</p>
+        </div>
+        """
+        return cls._send_email_raw(founder_email, subject, html, body_text)
+
+    @classmethod
     def send_intro_request_email(
         cls,
         founder_email: str,
@@ -104,7 +147,7 @@ class EmailService:
             f"{investor_name} from {investor_firm} has reviewed your syndicate teaser for '{project_title}' "
             f"and requested an introduction to enter your confidential deal room.\n\n"
             f"Investor Note: \"{message or 'Interested in reviewing confidential materials.'}\"\n\n"
-            f"Log in to your founder workspace to accept or decline: http://localhost:3000/founder/dashboard?tab=intros\n"
+            f"Log in to your founder workspace to accept or decline: {_app_url()}/founder/dashboard?tab=intros\n"
         )
         html = f"""
         <div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 24px; border: 1px solid #E2E8F0; border-radius: 12px; background: #FFFFFF;">
@@ -122,7 +165,7 @@ class EmailService:
             Your AI diagnostic scores and confidential weaknesses remain private. Approving this request unlocks your Deal Room and verified data room.
           </p>
           <div style="margin-top: 24px;">
-            <a href="http://localhost:3000/founder/dashboard?tab=intros" style="display: inline-block; background: #1B3B6F; color: #FFFFFF; padding: 10px 20px; border-radius: 6px; text-decoration: none; font-size: 13px; font-weight: 600;">Review & Approve Introduction</a>
+            <a href="{_app_url()}/founder/dashboard?tab=intros" style="display: inline-block; background: #1B3B6F; color: #FFFFFF; padding: 10px 20px; border-radius: 6px; text-decoration: none; font-size: 13px; font-weight: 600;">Review & Approve Introduction</a>
           </div>
         </div>
         """
@@ -139,7 +182,7 @@ class EmailService:
     ) -> Dict[str, Any]:
         """Notify investor that founder approved deal room access."""
         subject = f"Deal Room Unlocked: {project_title} with {founder_name}"
-        dealroom_url = f"http://localhost:3000/dealroom/{room_id}?role=INVESTOR"
+        dealroom_url = f"{_app_url()}/dealroom/{room_id}?role=INVESTOR"
         body_text = (
             f"Hi {investor_name},\n\n"
             f"{founder_name} has accepted your introduction request for '{project_title}'.\n"
@@ -182,7 +225,7 @@ class EmailService:
     ) -> Dict[str, Any]:
         """Alert participant of a new cryptographic message in the Deal Room."""
         subject = f"New Deal Room Message: {sender_name} ({project_title})"
-        dealroom_url = f"http://localhost:3000/dealroom/{room_id}?role={recipient_role}"
+        dealroom_url = f"{_app_url()}/dealroom/{room_id}?role={recipient_role}"
         body_text = (
             f"Hi {recipient_name},\n\n"
             f"{sender_name} posted a new message in the '{project_title}' Deal Room:\n\n"

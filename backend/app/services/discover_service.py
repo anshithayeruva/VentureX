@@ -5,12 +5,13 @@ from typing import Any, Dict, List, Optional
 from fastapi import HTTPException
 
 from app.database import postgres as pg
-from app.services.criteria import REGIONS, _STAGE_ALIASES
+from app.services.criteria import REGIONS, _STAGE_ALIASES, has_criteria, thesis_from_row
 
 # Only public facts leave this service: never readiness scores, AI feedback or contact details.
 _PUBLIC = (
     "p.id, p.title, p.tagline, p.description, p.industry, p.stage, p.funding_required, p.business_model, "
     "p.target_market, p.website, p.country, p.city, p.monthly_revenue, p.customer_count, p.product_status, "
+    "p.team_size, p.technical_founder, p.repeat_founder, p.domain_expertise, p.full_time_team, p.ip_protected, "
     "p.created_at"
 )
 
@@ -142,7 +143,12 @@ class DiscoverService:
             ) or 0)
         for r in rows:
             r.pop("total", None)
-        return {"items": rows, "total": total, "page": page, "page_size": page_size, "facets": await cls.facets()}
+        pref = await pg.fetch_one("SELECT * FROM investor_preferences WHERE investor_id = %s", [investor_id])
+        criteria_set = has_criteria(thesis_from_row(pref)) if pref else False
+        return {
+            "items": rows, "total": total, "page": page, "page_size": page_size,
+            "facets": await cls.facets(), "criteria_set": criteria_set,
+        }
 
     @staticmethod
     async def facets() -> Dict[str, List[str]]:

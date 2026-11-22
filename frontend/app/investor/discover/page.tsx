@@ -279,6 +279,18 @@ export default function DiscoverPage() {
         </div>
       )}
 
+      {data && !data.criteria_set && (
+        <Card className="mb-5 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+          <div>
+            <div className="text-sm font-medium text-ink">Set your criteria to see how startups fit</div>
+            <p className="text-sm text-muted">Fit scores and reasons appear once you choose what you invest in.</p>
+          </div>
+          <ButtonLink href="/investor/preferences" className="shrink-0">
+            Set criteria
+          </ButtonLink>
+        </Card>
+      )}
+
       <div className="grid gap-6 lg:grid-cols-[260px_minmax(0,1fr)]">
         <aside className={cx("lg:block", showFilters ? "block" : "hidden")}>
           <Card>{filterPanel}</Card>
@@ -315,6 +327,7 @@ export default function DiscoverPage() {
                   <StartupCard
                     key={item.id}
                     item={item}
+                    criteriaSet={data.criteria_set}
                     busy={busy === item.id}
                     onSave={() => toggleSave(item)}
                     onRequest={() => requestIntro(item)}
@@ -332,11 +345,13 @@ export default function DiscoverPage() {
 
 function StartupCard({
   item,
+  criteriaSet,
   busy,
   onSave,
   onRequest,
 }: {
   item: DiscoverItem;
+  criteriaSet: boolean;
   busy: boolean;
   onSave: () => void;
   onRequest: () => void;
@@ -359,9 +374,9 @@ function StartupCard({
         <div className="flex shrink-0 items-center gap-1">
           {item.match_score != null ? (
             <Tag tone={item.match_score >= 85 ? "positive" : "accent"}>{Math.round(item.match_score)}% fit</Tag>
-          ) : (
+          ) : criteriaSet ? (
             <Tag>Outside criteria</Tag>
-          )}
+          ) : null}
           <button
             type="button"
             onClick={onSave}

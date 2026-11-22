@@ -113,3 +113,15 @@ def legacy_columns(thesis: InvestmentThesis) -> Dict[str, Any]:
     if thesis.check_size.max_check is not None:
         cols["max_investment"] = float(thesis.check_size.max_check)
     return cols
+
+
+def has_criteria(thesis: Dict[str, Any]) -> bool:
+    """True once the investor has chosen anything that could rank a startup."""
+    sec, geo, tr, cs = thesis["sectors"], thesis["geography"], thesis["traction"], thesis["check_size"]
+    return bool(
+        any(sec[k] for k in ("industries", "sub_industries", "sectors", "technologies", "excluded_industries", "business_models"))
+        or thesis["stages"]
+        or cs.get("min_check") not in (None, "0", "0.00") or cs.get("max_check") not in (None, "0", "0.00")
+        or geo["is_global"] or geo["regions"] or geo["countries"] or geo["cities"] or geo["excluded_countries"]
+        or any(tr[k] != "not_relevant" for k in ("revenue", "customers", "live_product"))
+    )

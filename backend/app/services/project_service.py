@@ -40,6 +40,12 @@ class ProjectService:
             "monthly_revenue": data.monthly_revenue,
             "customer_count": data.customer_count,
             "product_status": data.product_status or "",
+            "team_size": data.team_size,
+            "technical_founder": data.technical_founder,
+            "repeat_founder": data.repeat_founder,
+            "domain_expertise": data.domain_expertise,
+            "full_time_team": data.full_time_team,
+            "ip_protected": data.ip_protected,
             "is_published": data.is_published,
             "created_at": now,
             "updated_at": now,
@@ -117,7 +123,8 @@ class ProjectService:
             return None
 
         # Optional traction figures can be cleared back to "not reported".
-        clearable = {"monthly_revenue", "customer_count"}
+        clearable = {"monthly_revenue", "customer_count", "team_size", "technical_founder", "repeat_founder",
+                     "domain_expertise", "full_time_team", "ip_protected"}
         update_fields = {
             k: v for k, v in data.model_dump(exclude_unset=True).items() if v is not None or k in clearable
         }
@@ -130,7 +137,9 @@ class ProjectService:
 
         # Recalculate matches if thesis-critical fields changed
         thesis_keys = {"industry", "stage", "funding_required", "business_model", "target_market", "description",
-                       "country", "city", "monthly_revenue", "customer_count", "product_status"}
+                       "country", "city", "monthly_revenue", "customer_count", "product_status",
+                       "team_size", "technical_founder", "repeat_founder", "domain_expertise",
+                       "full_time_team", "ip_protected"}
         if any(k in update_fields for k in thesis_keys):
             try:
                 from app.services.match_service import MatchService

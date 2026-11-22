@@ -457,6 +457,11 @@ function DealRoomContent({ params }: PageProps) {
               <div ref={chatEndRef} />
             </div>
             {typingUser && <div className="px-5 pb-1 text-xs text-muted">{typingUser} is typing…</div>}
+            {role === "FOUNDER" && room.founder_messaging_open === false ? (
+              <p className="border-t border-line px-5 py-4 text-sm text-muted">
+                This investor has turned off messages from founders. You can still share documents and see updates here.
+              </p>
+            ) : (
             <form onSubmit={sendMessage} className="flex items-end gap-2 border-t border-line p-3">
               <textarea
                 rows={1}
@@ -475,6 +480,7 @@ function DealRoomContent({ params }: PageProps) {
                 <Send className="h-4 w-4" />
               </button>
             </form>
+            )}
           </Card>
 
           {/* Side panel */}

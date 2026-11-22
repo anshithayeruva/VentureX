@@ -18,7 +18,7 @@ from app.schemas.dealroom import (
 from app.core.auth import CurrentUser, require_user, user_from_token
 from app.core.rate_limit import rate_limit
 from app.services import dealroom_files
-from app.services.deal_room_service import DealRoomService
+from app.services.deal_room_service import DealRoomService, MessagingClosed
 from app.utils.pdf_generator import PDFGenerator
 
 logger = logging.getLogger(__name__)
@@ -110,7 +110,8 @@ async def create_deal_room(room_in: DealRoomCreateInput, user: CurrentUser = Dep
 @router.get("/{room_id}", response_model=DealRoom)
 async def get_deal_room(room_id: str, user: CurrentUser = Depends(require_user)):
     """Retrieve metadata, NDA state, and data room parameters for one of your deal rooms."""
-    return await _require_participant(room_id, user)
+    room = await _require_participant(room_id, user)
+    return {**room, "founder_messaging_open": await DealRoomService.founder_messaging_open(room["investor_id"])}
 
 
 @router.get("/{room_id}/messages", response_model=List[DealMessage])
@@ -142,6 +143,8 @@ async def send_message(
         except Exception as ws_err:
             logger.warning("Could not broadcast message to WebSocket: %s", ws_err)
         return msg
+    except MessagingClosed as e:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(e))
     except ValueError as e:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e))
     except Exception as e:

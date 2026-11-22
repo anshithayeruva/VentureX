@@ -19,7 +19,7 @@ export const EMPTY_THESIS: InvestmentThesis = {
     exit_paths: [],
     notes: "",
   },
-  priorities: { industry: "high", stage: "high", check_size: "medium", geography: "medium", business_model: "low", traction: "medium" },
+  priorities: { industry: "high", stage: "high", check_size: "medium", geography: "medium", business_model: "low", traction: "medium", team: "medium" },
 };
 
 /** Fill any missing section so older saved theses still render every control. */

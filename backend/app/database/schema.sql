@@ -314,3 +314,11 @@ CREATE INDEX IF NOT EXISTS investment_valuations_investment_idx ON investment_va
 -- VentureX works in Indian rupees.
 ALTER TABLE investments ALTER COLUMN currency SET DEFAULT 'INR';
 UPDATE investments SET currency = 'INR' WHERE currency <> 'INR';
+
+-- Optional, founder-reported team and IP facts (NULL = not said), scored against investor criteria.
+ALTER TABLE projects ADD COLUMN IF NOT EXISTS team_size INTEGER;
+ALTER TABLE projects ADD COLUMN IF NOT EXISTS technical_founder BOOLEAN;
+ALTER TABLE projects ADD COLUMN IF NOT EXISTS repeat_founder BOOLEAN;
+ALTER TABLE projects ADD COLUMN IF NOT EXISTS domain_expertise BOOLEAN;
+ALTER TABLE projects ADD COLUMN IF NOT EXISTS full_time_team BOOLEAN;
+ALTER TABLE projects ADD COLUMN IF NOT EXISTS ip_protected BOOLEAN;
