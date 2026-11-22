@@ -19,7 +19,7 @@ export function StatCard({ label, value, change, icon: Icon, subtext }: StatCard
         <Icon className="w-4 h-4 text-faint" />
       </div>
       <div className="mt-2 flex items-baseline gap-2">
-        <span className="text-2xl font-semibold text-ink tabular-nums">{value}</span>
+        <span className="figure text-[28px] leading-none font-medium text-ink">{value}</span>
         {change && <span className="text-xs text-muted">{change}</span>}
       </div>
       {subtext && <p className="mt-1 text-xs text-muted">{subtext}</p>}

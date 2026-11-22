@@ -14,9 +14,9 @@ import { authClient } from "@/lib/auth/client";
 
 const MIN_PASSWORD = 8;
 const inputClass =
-  "w-full px-3.5 py-2.5 bg-[#F8FAFC] border border-[#E2E8F0] rounded-lg text-[#0F172A] placeholder-[#94A3B8] focus:outline-none focus:border-[#1B3B6F]";
+  "w-full px-3.5 py-2.5 bg-surface border border-line rounded-lg text-ink placeholder-faint focus:outline-none focus:border-accent";
 const buttonClass =
-  "w-full mt-2 py-2.5 rounded-lg text-xs sm:text-sm font-medium text-white bg-[#1B3B6F] hover:bg-[#142C54] transition-all shadow-sm flex items-center justify-center gap-1.5 disabled:opacity-60 disabled:cursor-wait";
+  "w-full mt-2 py-2.5 rounded-lg text-xs sm:text-sm font-medium text-white bg-accent hover:bg-accent-hover transition-all shadow-sm flex items-center justify-center gap-1.5 disabled:opacity-60 disabled:cursor-wait";
 
 type AuthError = { status?: number; code?: string; message?: string } | null | undefined;
 
@@ -100,11 +100,11 @@ export default function ForgotPasswordPage() {
   };
 
   return (
-    <div className="min-h-[80vh] flex items-center justify-center px-4 py-12 bg-[#F8FAFC]">
-      <div className="w-full max-w-md rounded-2xl border border-[#E2E8F0] bg-white p-7 sm:p-9 shadow-elevated">
+    <div className="min-h-[80vh] flex items-center justify-center px-4 py-12 bg-surface">
+      <div className="w-full max-w-md rounded-2xl border border-line bg-white p-7 sm:p-9 shadow-elevated">
         <Link
           href="/login"
-          className="inline-flex items-center gap-1.5 text-xs font-semibold text-[#64748B] hover:text-[#0F172A] transition-colors mb-6"
+          className="inline-flex items-center gap-1.5 text-xs font-semibold text-muted hover:text-ink transition-colors mb-6"
         >
           <ArrowLeft className="w-3.5 h-3.5" />
           Back to Sign In
@@ -112,8 +112,8 @@ export default function ForgotPasswordPage() {
 
         <div className="text-center mb-6">
           <BrandMark size={48} className="mb-3 rounded-xl" />
-          <h1 className="text-2xl font-bold text-[#0F172A] tracking-tight font-display">Reset Password</h1>
-          <p className="text-xs text-[#64748B] mt-1">
+          <h1 className="text-3xl font-medium text-ink tracking-tight font-display">Reset Password</h1>
+          <p className="text-xs text-muted mt-1">
             {step === "email"
               ? "Enter your account email and we'll send you a 6-digit code."
               : "Enter the code from the email and choose a new password."}
@@ -121,7 +121,7 @@ export default function ForgotPasswordPage() {
         </div>
 
         {notice && (
-          <p className="mb-4 text-xs text-[#2E7D52] bg-[#E8F5E9] border border-[#C8E6C9] rounded-lg px-3 py-2">
+          <p className="mb-4 text-xs text-positive bg-positive-soft border border-positive/20 rounded-lg px-3 py-2">
             {notice}
           </p>
         )}
@@ -129,7 +129,7 @@ export default function ForgotPasswordPage() {
         {step === "email" ? (
           <form onSubmit={sendCode} className="space-y-4 text-xs sm:text-sm">
             <div>
-              <label htmlFor="email" className="block text-xs font-semibold text-[#0F172A] mb-1">
+              <label htmlFor="email" className="block text-xs font-semibold text-ink mb-1">
                 Account Email Address
               </label>
               <input
@@ -145,7 +145,7 @@ export default function ForgotPasswordPage() {
             </div>
 
             {error && (
-              <p role="alert" className="text-xs text-[#B91C1C] bg-[#FEF2F2] border border-[#FECACA] rounded-lg px-3 py-2">
+              <p role="alert" className="text-xs text-danger bg-danger-soft border border-danger/20 rounded-lg px-3 py-2">
                 {error}
               </p>
             )}
@@ -158,7 +158,7 @@ export default function ForgotPasswordPage() {
         ) : (
           <form onSubmit={resetPassword} className="space-y-4 text-xs sm:text-sm">
             <div>
-              <label htmlFor="otp" className="block text-xs font-semibold text-[#0F172A] mb-1">
+              <label htmlFor="otp" className="block text-xs font-semibold text-ink mb-1">
                 6-Digit Code
               </label>
               <input
@@ -176,7 +176,7 @@ export default function ForgotPasswordPage() {
               />
             </div>
             <div>
-              <label htmlFor="new-password" className="block text-xs font-semibold text-[#0F172A] mb-1">
+              <label htmlFor="new-password" className="block text-xs font-semibold text-ink mb-1">
                 New Password
               </label>
               <input
@@ -192,7 +192,7 @@ export default function ForgotPasswordPage() {
               />
             </div>
             <div>
-              <label htmlFor="confirm-password" className="block text-xs font-semibold text-[#0F172A] mb-1">
+              <label htmlFor="confirm-password" className="block text-xs font-semibold text-ink mb-1">
                 Confirm New Password
               </label>
               <input
@@ -208,7 +208,7 @@ export default function ForgotPasswordPage() {
             </div>
 
             {error && (
-              <p role="alert" className="text-xs text-[#B91C1C] bg-[#FEF2F2] border border-[#FECACA] rounded-lg px-3 py-2">
+              <p role="alert" className="text-xs text-danger bg-danger-soft border border-danger/20 rounded-lg px-3 py-2">
                 {error}
               </p>
             )}
@@ -226,7 +226,7 @@ export default function ForgotPasswordPage() {
                   setError(null);
                   setNotice(null);
                 }}
-                className="font-semibold text-[#64748B] hover:text-[#0F172A]"
+                className="font-semibold text-muted hover:text-ink"
               >
                 Use a different email
               </button>
@@ -234,7 +234,7 @@ export default function ForgotPasswordPage() {
                 type="button"
                 disabled={pending}
                 onClick={() => sendCode()}
-                className="font-semibold text-[#1B3B6F] hover:underline disabled:opacity-60"
+                className="font-semibold text-accent hover:underline disabled:opacity-60"
               >
                 Resend code
               </button>

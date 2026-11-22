@@ -367,6 +367,11 @@ function FounderDashboardContent() {
               <Check className="w-4 h-4" />
               Mark all as read
             </Button>
+          ) : (activeTab === "overview" || activeTab === "projects") && projects.length > 0 ? (
+            <ButtonLink href="/founder/projects/new">
+              <Plus className="w-4 h-4" />
+              New project
+            </ButtonLink>
           ) : null
         }
       />

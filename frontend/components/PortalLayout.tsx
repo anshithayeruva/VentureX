@@ -11,7 +11,6 @@ import {
   LogOut,
   Menu,
   MessagesSquare,
-  Plus,
   Rocket,
   Search,
   Settings,
@@ -25,7 +24,7 @@ import {
 import { api, MeResponse } from "@/lib/api";
 import { authClient, clearApiToken } from "@/lib/auth/client";
 import { BrandMark } from "@/components/BrandMark";
-import { buttonClass, cx } from "@/components/ui";
+import { cx } from "@/components/ui";
 
 interface PortalLayoutProps {
   role: "FOUNDER" | "INVESTOR";
@@ -121,11 +120,13 @@ export function PortalLayout({ role, children, activeItem, onSelectItem, title }
         }}
         aria-current={current ? "page" : undefined}
         className={cx(
-          "flex items-center gap-2.5 rounded-lg px-2.5 py-1.5 text-sm transition-colors",
-          current ? "bg-surface text-ink font-medium shadow-subtle ring-1 ring-line" : "text-muted hover:text-ink hover:bg-subtle"
+          "flex items-center gap-2.5 rounded-lg px-2.5 py-2 text-sm transition-colors",
+          current
+            ? "bg-sidebar-active text-white font-medium shadow-[inset_2px_0_0_var(--color-sidebar-icon)]"
+            : "text-sidebar-text hover:bg-sidebar-hover hover:text-white"
         )}
       >
-        <Icon className={cx("w-4 h-4", current ? "text-accent" : "text-faint")} />
+        <Icon className={cx("w-4 h-4", current ? "text-sidebar-icon" : "text-sidebar-faint")} />
         {item.label}
       </Link>
     );
@@ -136,12 +137,12 @@ export function PortalLayout({ role, children, activeItem, onSelectItem, title }
       <div className="flex h-14 items-center justify-between px-4">
         <Link href="/" className="flex items-center gap-2">
           <BrandMark size={28} className="border-transparent" />
-          <span className="text-[15px] font-semibold text-ink">VentureX</span>
+          <span className="font-serif text-[17px] font-medium tracking-tight text-white">VentureX</span>
         </Link>
         <button
           type="button"
           onClick={() => setDrawerOpen(false)}
-          className="md:hidden p-1 text-muted hover:text-ink"
+          className="md:hidden p-1 text-sidebar-text hover:text-white"
           aria-label="Close navigation"
         >
           <X className="w-5 h-5" />
@@ -149,13 +150,9 @@ export function PortalLayout({ role, children, activeItem, onSelectItem, title }
       </div>
 
       <div className="px-3 pb-3">
-        <div className="px-2.5 pb-2 text-xs text-faint">{isFounder ? "Founder workspace" : "Investor workspace"}</div>
-        {isFounder && (
-          <Link href="/founder/projects/new" className={buttonClass("primary", "w-full")} onClick={() => setDrawerOpen(false)}>
-            <Plus className="w-4 h-4" />
-            New project
-          </Link>
-        )}
+        <div className="px-2.5 pb-2 text-xs uppercase tracking-[0.08em] text-sidebar-faint">
+          {isFounder ? "Founder workspace" : "Investor workspace"}
+        </div>
       </div>
 
       <nav className="flex-1 overflow-y-auto px-3 space-y-0.5" aria-label="Workspace">
@@ -171,7 +168,7 @@ export function PortalLayout({ role, children, activeItem, onSelectItem, title }
       {/* Sidebar: sticky on desktop, drawer on mobile */}
       <aside
         className={cx(
-          "fixed inset-y-0 left-0 z-50 w-60 border-r border-line bg-canvas transition-transform duration-200",
+          "fixed inset-y-0 left-0 z-50 w-60 border-r border-sidebar-line bg-sidebar transition-transform duration-200",
           "md:sticky md:top-0 md:h-screen md:translate-x-0",
           drawerOpen ? "translate-x-0" : "-translate-x-full"
         )}
@@ -179,12 +176,12 @@ export function PortalLayout({ role, children, activeItem, onSelectItem, title }
         {sidebar}
       </aside>
       {drawerOpen && (
-        <div className="fixed inset-0 z-40 bg-ink/30 md:hidden" onClick={() => setDrawerOpen(false)} aria-hidden="true" />
+        <div className="fixed inset-0 z-40 bg-ink/40 md:hidden" onClick={() => setDrawerOpen(false)} aria-hidden="true" />
       )}
 
-      <div className="flex min-w-0 flex-1 flex-col bg-surface md:min-h-screen">
+      <div className="flex min-w-0 flex-1 flex-col bg-canvas md:min-h-screen">
         {/* Top bar */}
-        <header className="sticky top-0 z-30 flex h-14 items-center justify-between gap-3 border-b border-line bg-surface/95 px-4 backdrop-blur sm:px-8">
+        <header className="sticky top-0 z-30 flex h-14 items-center justify-between gap-3 border-b border-line bg-canvas/90 px-4 backdrop-blur sm:px-8">
           <div className="flex items-center gap-2 md:hidden">
             <button
               type="button"
@@ -196,7 +193,7 @@ export function PortalLayout({ role, children, activeItem, onSelectItem, title }
             </button>
             <Link href="/" className="flex items-center gap-2">
               <BrandMark size={24} className="border-transparent" />
-              <span className="text-sm font-semibold">VentureX</span>
+              <span className="font-serif text-base font-medium">VentureX</span>
             </Link>
           </div>
           <div className="hidden md:block" />
@@ -214,7 +211,7 @@ export function PortalLayout({ role, children, activeItem, onSelectItem, title }
             >
               <Bell className="w-5 h-5" />
               {unread > 0 && (
-                <span className="absolute -right-0.5 -top-0.5 min-w-[18px] rounded-full bg-accent px-1 text-center text-[10px] font-semibold leading-[18px] text-white ring-2 ring-surface">
+                <span className="absolute -right-0.5 -top-0.5 min-w-[18px] rounded-full bg-accent px-1 text-center text-[10px] font-semibold leading-[18px] text-white ring-2 ring-canvas">
                   {unread > 99 ? "99+" : unread}
                 </span>
               )}

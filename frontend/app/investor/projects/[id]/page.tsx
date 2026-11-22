@@ -97,6 +97,7 @@ export default function InvestorProjectPage({ params }: { params: Promise<{ id: 
 
   const location = [project.city, project.country].filter(Boolean).join(", ");
   const facts = [
+    { label: "Target customer", value: project.target_market },
     { label: "Based in", value: location },
     { label: "Business model", value: project.business_model },
     {
@@ -123,7 +124,7 @@ export default function InvestorProjectPage({ params }: { params: Promise<{ id: 
           </Link>
           <div className="mt-4 flex flex-wrap items-start justify-between gap-3">
             <div className="flex flex-wrap items-center gap-2">
-              <h1 className="text-2xl font-semibold text-ink">{project.title}</h1>
+              <h1 className="text-[28px] leading-tight font-medium text-ink">{project.title}</h1>
               {match && <Tag tone={match.match_score >= 85 ? "positive" : "accent"}>{Math.round(match.match_score)}% fit</Tag>}
             </div>
             <Button variant="secondary" onClick={toggleSaved} disabled={savingBookmark} aria-pressed={saved}>
@@ -140,14 +141,18 @@ export default function InvestorProjectPage({ params }: { params: Promise<{ id: 
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
           <Stat label="Raising" value={formatMoney(project.funding_required)} />
           <Stat label="Stage" value={project.stage} />
-          <Stat label="Target customer" value={<span className="text-base font-medium">{project.target_market || "—"}</span>} />
+          <Stat
+            label="Fit with your criteria"
+            value={match ? `${Math.round(match.match_score)}%` : "—"}
+            hint={match ? undefined : "Outside your criteria"}
+          />
         </div>
 
         <div className="grid gap-6 lg:grid-cols-3">
           <div className="space-y-6 lg:col-span-2">
             {match?.reasons?.length ? (
               <Card>
-                <h2 className="text-base font-semibold text-ink">How it matches your criteria</h2>
+                <h2 className="text-lg font-medium text-ink">How it matches your criteria</h2>
                 <ul className="mt-3 space-y-2">
                   {match.reasons.map((r) => (
                     <ReasonLine key={r.category} reason={{ ...r, explanation: `${r.category}: ${r.explanation}` }} />
@@ -177,7 +182,7 @@ export default function InvestorProjectPage({ params }: { params: Promise<{ id: 
 
           <div className="space-y-6">
             <Card className="space-y-4">
-              <h2 className="text-base font-semibold text-ink">Connect with the founder</h2>
+              <h2 className="text-lg font-medium text-ink">Connect with the founder</h2>
               {!interest ? (
                 <>
                   <p className="text-sm text-muted">
@@ -243,7 +248,7 @@ function TextBlock({ title, body }: { title: string; body?: string }) {
   if (!body) return null;
   return (
     <div>
-      <h2 className="text-sm font-medium text-muted">{title}</h2>
+      <h2 className="font-sans text-sm font-medium text-muted">{title}</h2>
       <p className="mt-1.5 whitespace-pre-line leading-relaxed text-ink-2">{body}</p>
     </div>
   );

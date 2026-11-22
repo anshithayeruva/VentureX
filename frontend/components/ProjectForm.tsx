@@ -162,7 +162,7 @@ export function ProjectForm({
             </div>
           </Field>
         </div>
-        <div className="grid gap-5 sm:grid-cols-2">
+        <div className="grid gap-5 sm:grid-cols-3">
           <Field label="Business model" htmlFor="pf-model">
             <select id="pf-model" className={inputClass} value={data.business_model} onChange={(e) => set("business_model", e.target.value)}>
               {withCurrent(BUSINESS_MODELS, data.business_model).map((v) => (
@@ -170,9 +170,11 @@ export function ProjectForm({
               ))}
             </select>
           </Field>
-          <Field label="Target customer" htmlFor="pf-market">
-            <input id="pf-market" required className={inputClass} placeholder="e.g. Independent US pharmacies" {...text("target_market")} />
-          </Field>
+          <div className="sm:col-span-2">
+            <Field label="Target customer" htmlFor="pf-market">
+              <input id="pf-market" required className={inputClass} placeholder="e.g. Independent pharmacies in tier-2 cities" {...text("target_market")} />
+            </Field>
+          </div>
         </div>
       </FormSection>
 
@@ -180,12 +182,12 @@ export function ProjectForm({
         title="Location and traction"
         description="Optional. Investors can filter on these. Leave blank anything you'd rather not share yet."
       >
-        <div className="grid gap-5 sm:grid-cols-2">
+        <div className="grid gap-5 sm:grid-cols-3">
           <Field label="Country" htmlFor="pf-country">
-            <input id="pf-country" maxLength={80} className={inputClass} placeholder="e.g. Germany" {...text("country")} />
+            <input id="pf-country" maxLength={80} className={inputClass} placeholder="e.g. India" {...text("country")} />
           </Field>
           <Field label="City" htmlFor="pf-city">
-            <input id="pf-city" maxLength={80} className={inputClass} placeholder="e.g. Berlin" {...text("city")} />
+            <input id="pf-city" maxLength={80} className={inputClass} placeholder="e.g. Bengaluru" {...text("city")} />
           </Field>
         </div>
         <div className="grid gap-5 sm:grid-cols-3">
@@ -308,7 +310,7 @@ function FormSection({ title, description, children }: { title: string; descript
   return (
     <Card className="space-y-5">
       <div>
-        <h2 className="text-base font-semibold text-ink">{title}</h2>
+        <h2 className="text-lg font-medium text-ink">{title}</h2>
         {description && <p className="mt-0.5 text-sm text-muted">{description}</p>}
       </div>
       {children}

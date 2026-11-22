@@ -78,26 +78,26 @@ function LoginForm() {
   };
 
   return (
-    <div className="min-h-[82vh] flex items-center justify-center px-4 py-12 bg-[#F8FAFC]">
-      <div className="w-full max-w-md rounded-2xl border border-[#E2E8F0] bg-white p-7 sm:p-9 shadow-elevated">
+    <div className="min-h-[82vh] flex items-center justify-center px-4 py-12 bg-surface">
+      <div className="w-full max-w-md rounded-2xl border border-line bg-white p-7 sm:p-9 shadow-elevated">
         <div className="text-center mb-7">
           <BrandMark size={48} className="mb-3 rounded-xl" />
-          <h1 className="text-2xl font-bold text-[#0F172A] tracking-tight font-display">
+          <h1 className="text-3xl font-medium text-ink tracking-tight font-display">
             Sign in to VentureX
           </h1>
-          <p className="text-xs text-[#64748B] mt-1">
+          <p className="text-xs text-muted mt-1">
             Welcome back.
           </p>
         </div>
 
         {originWarning && (
-          <p role="alert" className="mb-5 text-xs text-[#9A3412] bg-[#FFF7ED] border border-[#FED7AA] rounded-lg px-3 py-2">
+          <p role="alert" className="mb-5 text-xs text-warning bg-warning-soft border border-warning/20 rounded-lg px-3 py-2">
             {originWarning}
           </p>
         )}
 
         {searchParams.get("reset") === "1" && !error && (
-          <p role="status" className="mb-5 text-xs text-[#2E7D52] bg-[#E8F5E9] border border-[#C8E6C9] rounded-lg px-3 py-2">
+          <p role="status" className="mb-5 text-xs text-positive bg-positive-soft border border-positive/20 rounded-lg px-3 py-2">
             Your password was updated. Sign in with the new one.
           </p>
         )}
@@ -105,15 +105,15 @@ function LoginForm() {
         <form onSubmit={handleLogin} className="space-y-4 text-xs sm:text-sm">
           {/* Role selector */}
           <div>
-            <label className="block text-xs font-semibold text-[#0F172A] mb-1.5">Sign In As</label>
+            <label className="block text-xs font-semibold text-ink mb-1.5">Sign In As</label>
             <div className="grid grid-cols-2 gap-2">
               <button
                 type="button"
                 onClick={() => setRole("FOUNDER")}
                 className={`py-2 text-xs font-medium rounded-lg border transition-all ${
                   role === "FOUNDER"
-                    ? "bg-[#1B3B6F] text-white border-[#1B3B6F] shadow-sm"
-                    : "bg-[#F8FAFC] text-[#64748B] border-[#E2E8F0] hover:text-[#0F172A]"
+                    ? "bg-accent text-white border-accent shadow-sm"
+                    : "bg-surface text-muted border-line hover:text-ink"
                 }`}
               >
                 Founder
@@ -123,8 +123,8 @@ function LoginForm() {
                 onClick={() => setRole("INVESTOR")}
                 className={`py-2 text-xs font-medium rounded-lg border transition-all ${
                   role === "INVESTOR"
-                    ? "bg-[#0F1E36] text-white border-[#0F1E36] shadow-sm"
-                    : "bg-[#F8FAFC] text-[#64748B] border-[#E2E8F0] hover:text-[#0F172A]"
+                    ? "bg-sidebar text-white border-sidebar shadow-sm"
+                    : "bg-surface text-muted border-line hover:text-ink"
                 }`}
               >
                 Investor
@@ -133,23 +133,23 @@ function LoginForm() {
           </div>
 
           <div>
-            <label htmlFor="login-email" className="block text-xs font-semibold text-[#0F172A] mb-1">Email Address</label>
+            <label htmlFor="login-email" className="block text-xs font-semibold text-ink mb-1">Email Address</label>
             <input id="login-email"
               type="email"
               required
               placeholder="you@domain.com"
               value={email}
               onChange={(e) => setEmail(e.target.value)}
-              className="w-full px-3.5 py-2.5 bg-[#F8FAFC] border border-[#E2E8F0] rounded-lg text-[#0F172A] placeholder-[#94A3B8] focus:outline-none focus:border-[#1B3B6F] text-xs sm:text-sm"
+              className="w-full px-3.5 py-2.5 bg-surface border border-line rounded-lg text-ink placeholder-faint focus:outline-none focus:border-accent text-xs sm:text-sm"
             />
           </div>
 
           <div>
             <div className="flex items-center justify-between mb-1">
-              <label htmlFor="login-password" className="block text-xs font-semibold text-[#0F172A]">Password</label>
+              <label htmlFor="login-password" className="block text-xs font-semibold text-ink">Password</label>
               <Link
                 href="/forgot-password"
-                className="text-[11px] text-[#1B3B6F] hover:underline"
+                className="text-[11px] text-accent hover:underline"
               >
                 Forgot password?
               </Link>
@@ -160,12 +160,12 @@ function LoginForm() {
               placeholder="••••••••"
               value={password}
               onChange={(e) => setPassword(e.target.value)}
-              className="w-full px-3.5 py-2.5 bg-[#F8FAFC] border border-[#E2E8F0] rounded-lg text-[#0F172A] placeholder-[#94A3B8] focus:outline-none focus:border-[#1B3B6F] text-xs sm:text-sm"
+              className="w-full px-3.5 py-2.5 bg-surface border border-line rounded-lg text-ink placeholder-faint focus:outline-none focus:border-accent text-xs sm:text-sm"
             />
           </div>
 
           {error && (
-            <p role="alert" className="text-xs text-[#B91C1C] bg-[#FEF2F2] border border-[#FECACA] rounded-lg px-3 py-2">
+            <p role="alert" className="text-xs text-danger bg-danger-soft border border-danger/20 rounded-lg px-3 py-2">
               {error}
             </p>
           )}
@@ -173,15 +173,15 @@ function LoginForm() {
           <button
             type="submit"
             disabled={pending}
-            className="w-full mt-2 py-2.5 rounded-lg text-xs sm:text-sm font-medium text-white bg-[#1B3B6F] hover:bg-[#142C54] transition-all shadow-sm disabled:opacity-60 disabled:cursor-wait"
+            className="w-full mt-2 py-2.5 rounded-lg text-xs sm:text-sm font-medium text-white bg-accent hover:bg-accent-hover transition-all shadow-sm disabled:opacity-60 disabled:cursor-wait"
           >
             {pending ? "Signing in…" : "Sign in"}
           </button>
         </form>
 
-        <p className="mt-6 text-center text-xs text-[#64748B]">
+        <p className="mt-6 text-center text-xs text-muted">
           Don&apos;t have an account yet?{" "}
-          <Link href="/register" className="text-[#1B3B6F] hover:text-[#142C54] font-semibold underline underline-offset-4">
+          <Link href="/register" className="text-accent hover:text-accent-hover font-semibold underline underline-offset-4">
             Sign up now
           </Link>
         </p>

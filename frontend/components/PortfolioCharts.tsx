@@ -118,7 +118,7 @@ export function ValueOverTimeChart({ points }: { points: SeriesPoint[] }) {
             </g>
           ))}
           {rows.map((r, i) =>
-            i % labelEvery === 0 || i === rows.length - 1 ? (
+            (i % labelEvery === 0 && rows.length - 1 - i >= labelEvery / 2) || i === rows.length - 1 ? (
               <text key={r.date} x={x(i)} y={height - 6} textAnchor="middle" className="fill-[var(--color-muted)] text-[11px]">
                 {new Date(r.date + "T00:00:00").toLocaleDateString("en-US", { month: "short", year: "2-digit" })}
               </text>

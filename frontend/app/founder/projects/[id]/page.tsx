@@ -86,7 +86,7 @@ export default function FounderProjectPage({ params }: { params: Promise<{ id: s
           <div className="mt-4 flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
             <div className="min-w-0">
               <div className="flex flex-wrap items-center gap-2">
-                <h1 className="text-2xl font-semibold text-ink">{project.title}</h1>
+                <h1 className="text-[28px] leading-tight font-medium text-ink">{project.title}</h1>
                 {published ? (
                   <Tag tone="positive">
                     <Eye className="h-3.5 w-3.5" />
@@ -167,7 +167,7 @@ function TextBlock({ title, body }: { title: string; body?: string }) {
   if (!body) return null;
   return (
     <div>
-      <h2 className="text-sm font-medium text-muted">{title}</h2>
+      <h2 className="font-sans text-sm font-medium text-muted">{title}</h2>
       <p className="mt-1.5 whitespace-pre-line text-ink-2 leading-relaxed">{body}</p>
     </div>
   );

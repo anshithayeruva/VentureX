@@ -96,7 +96,7 @@ export default function InvestmentPage({ params }: { params: Promise<{ id: strin
           <div className="mt-4 flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
             <div className="min-w-0">
               <div className="flex flex-wrap items-center gap-2">
-                <h1 className="text-2xl font-semibold text-ink">{h.company_name}</h1>
+                <h1 className="text-[28px] leading-tight font-medium text-ink">{h.company_name}</h1>
                 <Tag tone={status.tone}>{status.label}</Tag>
               </div>
               <p className="mt-1 text-sm text-muted">
@@ -170,7 +170,7 @@ export default function InvestmentPage({ params }: { params: Promise<{ id: strin
 
         <div className="grid gap-6 lg:grid-cols-2">
           <Card className="space-y-4">
-            <h2 className="text-base font-semibold text-ink">Transactions</h2>
+            <h2 className="text-lg font-medium text-ink">Transactions</h2>
             <TransactionForm
               onAdd={(data) => mutate(() => api.addTransaction(h.id, data), `${TXN_LABEL[data.type]} added.`)}
               minDate={h.investment_date}
@@ -215,7 +215,7 @@ export default function InvestmentPage({ params }: { params: Promise<{ id: strin
 
           <Card className="space-y-4">
             <div>
-              <h2 className="text-base font-semibold text-ink">Valuations</h2>
+              <h2 className="text-lg font-medium text-ink">Valuations</h2>
               <p className="text-sm text-muted">What your stake is worth on a date. The latest one sets the current value; until you add one, the holding is held at cost.</p>
             </div>
             {h.status === "active" ? (
@@ -258,7 +258,7 @@ export default function InvestmentPage({ params }: { params: Promise<{ id: strin
 
         {h.notes && (
           <Card>
-            <h2 className="text-sm font-medium text-muted">Notes</h2>
+            <h2 className="font-sans text-sm font-medium text-muted">Notes</h2>
             <p className="mt-1.5 whitespace-pre-line text-sm text-ink-2">{h.notes}</p>
           </Card>
         )}
@@ -271,7 +271,7 @@ function Figure({ label, value, hint, tone = "neutral" }: { label: string; value
   return (
     <Card>
       <div className="text-sm text-muted">{label}</div>
-      <div className={cx("mt-2 text-xl font-semibold tabular-nums", tone === "positive" ? "text-positive" : tone === "danger" ? "text-danger" : "text-ink")}>
+      <div className={cx("figure mt-2 text-2xl leading-none font-medium", tone === "positive" ? "text-positive" : tone === "danger" ? "text-danger" : "text-ink")}>
         {value}
       </div>
       {hint && <div className="mt-1 text-xs text-muted">{hint}</div>}
