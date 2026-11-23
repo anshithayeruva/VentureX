@@ -131,6 +131,40 @@ class EmailService:
         return cls._send_email_raw(founder_email, subject, html, body_text)
 
     @classmethod
+    def send_company_update_email(cls, to_email: str, investor_name: str, project_title: str, period: str,
+                                  teaser: str, update_id: int) -> Dict[str, Any]:
+        """A portfolio company sent its periodic update."""
+        link = f"{_app_url()}/investor/updates?update={update_id}"
+        subject = f"{project_title}: {period} investor update"
+        body_text = f"Hi {investor_name},\n\n{project_title} sent its {period} update.\n\n{teaser}\n\nRead it: {link}\n"
+        html = f"""
+        <div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 24px; border: 1px solid #E7E0D3; border-radius: 12px; background: #FFFDF9;">
+          <h2 style="color: #111C32; margin: 0 0 12px; font-family: Georgia, serif; font-weight: 500;">{project_title}: {period} update</h2>
+          <p style="color: #33405A; font-size: 14px; line-height: 1.6;">{teaser}</p>
+          <a href="{link}" style="display: inline-block; margin-top: 12px; background: #20477F; color: #FFFFFF; padding: 10px 20px; border-radius: 6px; text-decoration: none; font-size: 13px; font-weight: 600;">Read the update</a>
+        </div>
+        """
+        return cls._send_email_raw(to_email, subject, html, body_text)
+
+    @classmethod
+    def send_update_reply_email(cls, to_email: str, investor_name: str, investor_firm: str, project_title: str,
+                                about: str, message: str, update_id: int) -> Dict[str, Any]:
+        """An investor replied to a founder's update or offered help with an ask."""
+        link = f"{_app_url()}/founder/updates?update={update_id}"
+        who = f"{investor_name} ({investor_firm})" if investor_firm else investor_name
+        subject = f"{investor_name} replied to {about}"[:150]
+        body_text = f"{who} replied to {about} for {project_title}:\n\n\"{message}\"\n\nSee it: {link}\n"
+        html = f"""
+        <div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 24px; border: 1px solid #E7E0D3; border-radius: 12px; background: #FFFDF9;">
+          <h2 style="color: #111C32; margin: 0 0 12px; font-family: Georgia, serif; font-weight: 500;">A reply from {who}</h2>
+          <p style="color: #6B6457; font-size: 13px;">About {about} ({project_title})</p>
+          <p style="color: #33405A; font-size: 14px; font-style: italic; border-left: 3px solid #20477F; padding-left: 12px;">"{message}"</p>
+          <a href="{link}" style="display: inline-block; margin-top: 12px; background: #20477F; color: #FFFFFF; padding: 10px 20px; border-radius: 6px; text-decoration: none; font-size: 13px; font-weight: 600;">Open your update</a>
+        </div>
+        """
+        return cls._send_email_raw(to_email, subject, html, body_text)
+
+    @classmethod
     def send_verification_code_email(cls, to_email: str, project_title: str, code: str, minutes: int) -> Dict[str, Any]:
         """The code that proves the founder can receive email on the startup's domain."""
         subject = f"Your VentureX verification code: {code}"

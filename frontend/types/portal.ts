@@ -526,3 +526,100 @@ export interface AdminCompanyRow {
 }
 
 export type ReviewDecision = "approve" | "reject" | "revoke";
+
+
+/* ---------- investor updates ---------- */
+
+export interface UpdateMetrics {
+  monthly_revenue?: string | number | null;
+  customers?: number | null;
+  cash_in_bank?: string | number | null;
+  monthly_burn?: string | number | null;
+  headcount?: number | null;
+  post_money_valuation?: string | number | null;
+  custom?: { label: string; value: string }[];
+  /** Worked out from cash and burn. */
+  runway_months?: number | null;
+}
+
+export type UpdateAudience = "investors" | "investors_and_connected";
+
+export interface UpdateInput {
+  period_type: "month" | "quarter";
+  period_end: string;
+  period_label?: string | null;
+  metrics: UpdateMetrics;
+  highlights: string;
+  challenges: string;
+  asks: string[];
+  audience: UpdateAudience;
+}
+
+export interface UpdateRecipient {
+  investor_id: string;
+  name: string;
+  firm: string;
+  reason: "investor" | "connected";
+  read_at?: string | null;
+}
+
+export interface UpdateResponse {
+  id: number;
+  ask_index?: number | null;
+  message: string;
+  created_at: string;
+  investor_id?: string;
+  name?: string;
+  firm?: string;
+}
+
+export interface CompanyUpdate {
+  id: number;
+  project_id: number;
+  period_type: "month" | "quarter";
+  period_label: string;
+  period_end: string;
+  status: "draft" | "sent";
+  metrics: UpdateMetrics;
+  highlights: string;
+  challenges: string;
+  asks: string[];
+  audience: UpdateAudience;
+  recipients_count: number;
+  sent_at?: string | null;
+  created_at?: string;
+  read_count?: number;
+  responses_count?: number;
+}
+
+export interface FounderUpdateDetail extends CompanyUpdate {
+  project: { id: number; title: string };
+  recipients: UpdateRecipient[];
+  responses: UpdateResponse[];
+  previous: { period_label: string; metrics: UpdateMetrics } | null;
+}
+
+export interface ProjectUpdates {
+  project: { id: number; title: string };
+  updates: CompanyUpdate[];
+  last_sent_at: string | null;
+  next_due: string | null;
+  audience_counts: Record<UpdateAudience, number>;
+}
+
+export interface InvestorUpdateItem extends CompanyUpdate {
+  project_title: string;
+  project_industry?: string | null;
+  read_at?: string | null;
+  my_responses: UpdateResponse[];
+  previous: { period_label: string; metrics: UpdateMetrics } | null;
+  holding: { investment_id: number; ownership_pct: number | null; suggested_value: number | null } | null;
+}
+
+export interface InvestorUpdatesPage {
+  items: InvestorUpdateItem[];
+  total: number;
+  page: number;
+  page_size: number;
+  unread: number;
+}
