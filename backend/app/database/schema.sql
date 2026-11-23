@@ -333,3 +333,38 @@ CREATE INDEX IF NOT EXISTS project_interests_inbound_idx ON project_interests (i
 ALTER TABLE investor_profiles ADD COLUMN IF NOT EXISTS value_add TEXT NOT NULL DEFAULT '';
 ALTER TABLE investor_profiles ADD COLUMN IF NOT EXISTS portfolio JSONB NOT NULL DEFAULT '[]';
 ALTER TABLE investor_profiles ADD COLUMN IF NOT EXISTS listed_for_founders BOOLEAN NOT NULL DEFAULT TRUE;
+
+-- Verification: an admin flag, investor evidence and review, company verification.
+ALTER TABLE app_users ADD COLUMN IF NOT EXISTS is_admin BOOLEAN NOT NULL DEFAULT FALSE;
+ALTER TABLE investor_profiles ADD COLUMN IF NOT EXISTS linkedin_url TEXT NOT NULL DEFAULT '';
+ALTER TABLE investor_profiles ADD COLUMN IF NOT EXISTS website TEXT NOT NULL DEFAULT '';
+ALTER TABLE investor_profiles ADD COLUMN IF NOT EXISTS verification_status TEXT NOT NULL DEFAULT 'unverified';
+ALTER TABLE investor_profiles ADD COLUMN IF NOT EXISTS verification_note TEXT;
+ALTER TABLE investor_profiles ADD COLUMN IF NOT EXISTS verification_submitted_at TIMESTAMPTZ;
+ALTER TABLE investor_profiles ADD COLUMN IF NOT EXISTS verification_reviewed_at TIMESTAMPTZ;
+ALTER TABLE investor_profiles ADD COLUMN IF NOT EXISTS verification_reviewed_by TEXT;
+CREATE INDEX IF NOT EXISTS investor_profiles_verification_idx ON investor_profiles (verification_status);
+
+CREATE TABLE IF NOT EXISTS company_verifications (
+    project_id           BIGINT PRIMARY KEY REFERENCES projects (id) ON DELETE CASCADE,
+    founder_id           TEXT NOT NULL,
+    status               TEXT NOT NULL DEFAULT 'unverified',
+    method               TEXT,
+    email                TEXT,
+    domain               TEXT,
+    code_hash            TEXT,
+    code_expires_at      TIMESTAMPTZ,
+    code_attempts        INTEGER NOT NULL DEFAULT 0,
+    code_sent_at         TIMESTAMPTZ,
+    registration_type    TEXT,
+    registration_number  TEXT,
+    evidence_note        TEXT,
+    review_note          TEXT,
+    reviewed_by          TEXT,
+    reviewed_at          TIMESTAMPTZ,
+    submitted_at         TIMESTAMPTZ,
+    verified_at          TIMESTAMPTZ,
+    created_at           TIMESTAMPTZ NOT NULL DEFAULT now(),
+    updated_at           TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS company_verifications_status_idx ON company_verifications (status, submitted_at);

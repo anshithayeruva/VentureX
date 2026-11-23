@@ -59,6 +59,7 @@ async def find_investors(
     max_check: Optional[float] = Query(None, ge=0),
     location: Optional[str] = Query(None, max_length=80),
     role: Optional[Literal["lead", "co_invest"]] = None,
+    verified_only: bool = False,
     sort: Literal["fit", "name"] = "fit",
     page: int = Query(1, ge=1, le=500),
     page_size: int = Query(20, ge=1, le=50),
@@ -68,7 +69,8 @@ async def find_investors(
     try:
         return await FounderOutreachService.directory(
             user.id, project_id=project_id, q=q, stage=stage, sector=sector, min_check=min_check,
-            max_check=max_check, location=location, role=role, sort=sort, page=page, page_size=page_size,
+            max_check=max_check, location=location, role=role, verified_only=verified_only, sort=sort,
+            page=page, page_size=page_size,
         )
     except OutreachError as e:
         raise _outreach_error(e)

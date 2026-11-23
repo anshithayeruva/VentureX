@@ -131,6 +131,7 @@ class DiscoverItem(BaseModel):
     interest_id: Optional[str] = None
     interest_status: Optional[str] = None
     interest_initiated_by: Optional[str] = None
+    company_verified: bool = False
     room_id: Optional[str] = None
     deal_stage: Optional[str] = None
 

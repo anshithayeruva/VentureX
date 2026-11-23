@@ -4,7 +4,9 @@ import React, { use, useEffect, useState } from "react";
 import Link from "next/link";
 import { ArrowLeft, ExternalLink, Eye, FileQuestion, Lock, Pencil } from "lucide-react";
 import { PortalLayout } from "@/components/PortalLayout";
+import { CompanyVerificationCard } from "@/components/CompanyVerificationCard";
 import { ProjectIntelligence } from "@/components/ProjectIntelligence";
+import { VerifiedBadge } from "@/components/verification";
 import { Button, ButtonLink, Card, EmptyState, LoadingRows, Stat, Tag } from "@/components/ui";
 import { api } from "@/lib/api";
 import { formatMoney } from "@/lib/format";
@@ -98,6 +100,7 @@ export default function FounderProjectPage({ params }: { params: Promise<{ id: s
                     Private
                   </Tag>
                 )}
+                {project.company_verified && <VerifiedBadge kind="company" />}
               </div>
               {project.tagline && <p className="mt-1 text-muted">{project.tagline}</p>}
               <p className="mt-1 text-sm text-muted">
@@ -129,6 +132,11 @@ export default function FounderProjectPage({ params }: { params: Promise<{ id: s
             hint={!published ? "Publish to get matched" : "Investors whose criteria fit"}
           />
         </div>
+
+        <CompanyVerificationCard
+          projectId={project.id}
+          onVerified={() => setProject((prev) => (prev ? { ...prev, company_verified: true } : prev))}
+        />
 
         <div className="grid gap-6 lg:grid-cols-3">
           <Card className="space-y-6 lg:col-span-2">

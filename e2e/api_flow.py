@@ -20,7 +20,7 @@ from pathlib import Path
 import httpx
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
-from _common import API, BACKEND_DIR, ENV, WEB as NEXT  # noqa: E402
+from _common import API, BACKEND_DIR, ENV, WEB as NEXT, set_test_investor_verification  # noqa: E402
 
 sys.path.insert(0, str(BACKEND_DIR))
 
@@ -262,6 +262,15 @@ f_matches = founder.api("GET", "/matches").json()
 own_ids = {p["id"] for p in founder.api("GET", "/projects", params={"founder_only": "true"}).json()}
 check("founder sees only matches for their own projects",
       f_matches and all(m["project_id"] in own_ids for m in f_matches), (len(f_matches), own_ids))
+
+# Investors must be verified by an admin before they can contact founders.
+set_test_investor_verification("unverified")
+r = investor.api("POST", "/interests", json={"project_id": pid, "message": "Keen to learn more."})
+check("unverified investor can't request an intro (403)", r.status_code == 403, r.status_code)
+r = investor.api("GET", f"/projects/{pid}")
+check("unverified investor doesn't see the founder's links", r.is_success and not r.json().get("website") and not r.json().get("github_url"),
+      r.is_success and r.json().get("github_url"))
+check("test investor marked verified for the rest of the run", set_test_investor_verification("verified"))
 
 r = investor.api("POST", "/interests", json={"project_id": pid, "investor_id": "investor-001", "message": "Keen to learn more."})
 ok = check("investor requests an intro (201)", r.status_code == 201, r.text[:200])

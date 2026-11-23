@@ -7,6 +7,7 @@ import { PortalLayout } from "@/components/PortalLayout";
 import { ErrorState, Notice } from "@/components/forms";
 import { Button, ButtonLink, Card, EmptyState, LoadingRows, PageHeader, Segmented, Tag, buttonClass, cx, inputClass } from "@/components/ui";
 import type { Tone } from "@/components/ui";
+import { useInvestorCanContact } from "@/components/verification";
 import { api } from "@/lib/api";
 import { stageLabel, stageTone } from "@/lib/dealroom";
 import { formatMoney, timeAgo } from "@/lib/format";
@@ -206,6 +207,7 @@ function DealRow({
   onPass: (reason: PassReason, note?: string) => void;
 }) {
   const status = STATUS[item.status];
+  const canContact = useInvestorCanContact() !== false;
   const [passing, setPassing] = useState(false);
   const [reason, setReason] = useState<PassReason | "">("");
   const [note, setNote] = useState("");
@@ -320,9 +322,13 @@ function DealRow({
             </>
           ) : (
             <>
-              <Button onClick={onInterested} disabled={busy}>
-                {busy ? "Opening…" : "Interested"}
-              </Button>
+              {canContact ? (
+                <Button onClick={onInterested} disabled={busy}>
+                  {busy ? "Opening…" : "Interested"}
+                </Button>
+              ) : (
+                <ButtonLink href="/investor/verification">Get verified to accept</ButtonLink>
+              )}
               <Button variant="secondary" onClick={() => setPassing(true)} disabled={busy}>
                 Pass
               </Button>

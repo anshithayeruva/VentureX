@@ -6,6 +6,7 @@ import { ArrowLeft, Bookmark, BookmarkCheck, ExternalLink, FileQuestion, Message
 import { PortalLayout } from "@/components/PortalLayout";
 import { ReasonLine } from "@/components/forms";
 import { Button, ButtonLink, Card, EmptyState, LoadingRows, Stat, Tag, inputClass } from "@/components/ui";
+import { VerifiedBadge, useInvestorCanContact } from "@/components/verification";
 import { api } from "@/lib/api";
 import { formatMoney } from "@/lib/format";
 import { MatchItem, PASS_REASON_LABEL, PassReason, Project, ProjectInterest } from "@/types";
@@ -24,6 +25,7 @@ export default function InvestorProjectPage({ params }: { params: Promise<{ id: 
   const [savingBookmark, setSavingBookmark] = useState(false);
   const [passing, setPassing] = useState(false);
   const [passReason, setPassReason] = useState<PassReason | "">("");
+  const canContact = useInvestorCanContact() !== false;
 
   useEffect(() => {
     let mounted = true;
@@ -156,6 +158,7 @@ export default function InvestorProjectPage({ params }: { params: Promise<{ id: 
             <div className="flex flex-wrap items-center gap-2">
               <h1 className="text-[28px] leading-tight font-medium text-ink">{project.title}</h1>
               {match && <Tag tone={match.match_score >= 85 ? "positive" : "accent"}>{Math.round(match.match_score)}% fit</Tag>}
+              {project.company_verified && <VerifiedBadge kind="company" />}
             </div>
             <Button variant="secondary" onClick={toggleSaved} disabled={savingBookmark} aria-pressed={saved}>
               {saved ? <BookmarkCheck className="h-4 w-4 text-accent" /> : <Bookmark className="h-4 w-4" />}
@@ -226,9 +229,15 @@ export default function InvestorProjectPage({ params }: { params: Promise<{ id: 
                     onChange={(e) => setNote(e.target.value)}
                   />
                   {error && <p className="text-sm text-danger">{error}</p>}
-                  <Button className="w-full" onClick={requestIntro} disabled={sending}>
-                    {sending ? "Sending…" : "Request intro"}
-                  </Button>
+                  {canContact ? (
+                    <Button className="w-full" onClick={requestIntro} disabled={sending}>
+                      {sending ? "Sending…" : "Request intro"}
+                    </Button>
+                  ) : (
+                    <ButtonLink className="w-full" href="/investor/verification">
+                      Get verified to request an intro
+                    </ButtonLink>
+                  )}
                 </>
               ) : interest.initiated_by === "founder" && interest.status === "pending" ? (
                 <>
@@ -266,7 +275,8 @@ export default function InvestorProjectPage({ params }: { params: Promise<{ id: 
                     </div>
                   ) : (
                     <div className="flex gap-2">
-                      <Button className="flex-1" onClick={() => respond("interested")} disabled={sending}>
+                      <Button className="flex-1" onClick={() => respond("interested")} disabled={sending || !canContact}
+                        title={canContact ? undefined : "Get verified to accept founders' requests"}>
                         {sending ? "Opening…" : "Interested"}
                       </Button>
                       <Button variant="secondary" onClick={() => setPassing(true)} disabled={sending}>

@@ -15,32 +15,13 @@ from pathlib import Path
 from playwright.sync_api import sync_playwright
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
-from _common import API, BACKEND_DIR, ENV as env, WEB as B  # noqa: E402
+from _common import API, ENV as env, WEB as B, db, set_test_investor_verification  # noqa: E402
 
 OUT = Path(sys.argv[1] if len(sys.argv) > 1 else "e2e-screenshots")
 OUT.mkdir(exist_ok=True)
 CHANNEL = os.environ.get("VX_BROWSER_CHANNEL") or None
 TITLE = "E2E Outreach ClinicPay"
 results = []
-
-
-def db(statements):
-    """Run SQL statements with the backend's own database helper (setup tweaks and cleanup)."""
-    code = "\n".join([
-        "import asyncio, json, sys; sys.path.insert(0, '.')",
-        "if sys.platform == 'win32': asyncio.set_event_loop_policy(asyncio.WindowsSelectorEventLoopPolicy())",
-        "from app.database import postgres as pg",
-        "async def main():",
-        "    await pg.open_pool()",
-        "    await pg.run_batch([(sql, params) for sql, params in json.loads(sys.argv[1])])",
-        "    await pg.close_pool()",
-        "asyncio.run(main())",
-    ])
-    r = subprocess.run([str(BACKEND_DIR / ".venv/Scripts/python"), "-c", code, json.dumps(statements)],
-                       cwd=str(BACKEND_DIR), capture_output=True, text=True)
-    if r.returncode:
-        print("DB step failed:", r.stderr.strip().splitlines()[-1:])
-    return r.returncode == 0
 
 
 def ok(name, cond, detail=""):
@@ -81,6 +62,7 @@ with sync_playwright() as p:
     inv_name = prof.get("full_name") or "Investor"
     r = ictx.request.put(API + "/investors/preferences", headers=ih, data={"thesis": THESIS})
     ok("investor criteria set for the test", r.ok, r.status)
+    ok("test investor verified (needed to contact founders)", set_test_investor_verification("verified"))
     r = ictx.request.put(API + "/investors/profile", headers=ih, data={
         "value_add": "Bank partnerships and first 10 enterprise customers.",
         "portfolio": [{"company": "E2E PayCo", "stage": "Seed", "year": 2024}],

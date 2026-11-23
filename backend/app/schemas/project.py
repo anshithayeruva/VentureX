@@ -67,6 +67,7 @@ class ProjectUpdate(BaseModel):
 
 class ProjectResponse(ProjectBase):
     id: Union[int, str]
+    company_verified: Optional[bool] = None
     founder_id: Optional[Union[int, str]] = None
     is_published: bool = False
     readiness_score: Optional[float] = None

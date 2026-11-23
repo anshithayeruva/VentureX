@@ -51,6 +51,22 @@ class Settings(BaseSettings):
     # and each founder can send at most FOUNDER_INTRO_DAILY_LIMIT per day.
     FOUNDER_INTRO_MIN_READINESS: float = 50.0
     FOUNDER_INTRO_DAILY_LIMIT: int = 5
+    # A founder whose company is verified may send more requests a day.
+    FOUNDER_INTRO_DAILY_LIMIT_VERIFIED: int = 10
+
+    # Verification. Investors need an admin-approved account before they can request intros,
+    # accept founders' requests or see founders' links and documents.
+    REQUIRE_INVESTOR_VERIFICATION: bool = True
+    # Comma-separated sign-in emails of VentureX admins (they review investors and companies).
+    # The email must be verified by Neon Auth. app_users.is_admin can also grant access.
+    ADMIN_EMAILS: str = ""
+    # Company domain-email codes: how long a code is valid and how many wrong tries are allowed.
+    VERIFICATION_CODE_TTL_MINUTES: int = 15
+    VERIFICATION_CODE_MAX_ATTEMPTS: int = 5
+
+    @property
+    def admin_emails(self) -> set:
+        return {e.strip().lower() for e in (self.ADMIN_EMAILS or "").split(",") if e.strip()}
 
     # Shared rate limiting across server instances (Upstash Redis REST). Unset = per-process memory.
     UPSTASH_REDIS_REST_URL: Optional[str] = None

@@ -14,7 +14,7 @@ from pathlib import Path
 from playwright.sync_api import sync_playwright
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
-from _common import API, ENV as env, WEB as B  # noqa: E402
+from _common import API, ENV as env, WEB as B, set_test_investor_verification  # noqa: E402
 
 OUT = Path(sys.argv[1] if len(sys.argv) > 1 else "e2e-screenshots")
 OUT.mkdir(exist_ok=True)
@@ -33,6 +33,7 @@ with sync_playwright() as p:
     r = c.request.post(B + "/api/auth/sign-in/email", headers={"Origin": B},
                        data={"email": env["E2E_INVESTOR_EMAIL"], "password": env["E2E_INVESTOR_PASSWORD"]})
     ok("investor signs in", r.ok, r.status)
+    ok("test investor verified (needed to request intros)", set_test_investor_verification("verified"))
     q = c.new_page()
     errors = []
     q.on("console", lambda m: errors.append(m.text) if m.type == "error" else None)

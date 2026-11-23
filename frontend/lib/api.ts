@@ -15,6 +15,14 @@ import {
   AnalysisHistoryItem,
   CriteriaOptions,
   DealFlow,
+  AdminCompanyRow,
+  AdminInvestorRow,
+  CompanyVerification,
+  InvestorVerification,
+  InvestorVerificationStatus,
+  PortfolioEntry,
+  RegistrationType,
+  ReviewDecision,
   DirectoryQuery,
   InvestorDirectory,
   PassReason,
@@ -104,6 +112,9 @@ export type MeResponse = {
   name?: string | null;
   role?: "FOUNDER" | "INVESTOR" | null;
   organization?: string | null;
+  is_admin?: boolean;
+  verification_status?: InvestorVerificationStatus | null;
+  verification_required?: boolean;
 };
 
 
@@ -363,6 +374,61 @@ export const api = {
       apiFetch(`${API_BASE_URL}/investors/saved/${projectId}`, { method: saved ? "PUT" : "DELETE" })
     );
     await throwForStatus(res, saved ? "Could not save this startup" : "Could not remove it from saved");
+  },
+
+  /* ---------- verification ---------- */
+
+  async getInvestorVerification(): Promise<InvestorVerification> {
+    return getJson(`${API_BASE_URL}/investors/verification`, "Could not load your verification");
+  },
+
+  async submitInvestorVerification(data: { linkedin_url: string; website: string; past_investments: PortfolioEntry[] }): Promise<InvestorVerification> {
+    return sendJson("POST", `${API_BASE_URL}/investors/verification`, data, "Could not send your evidence");
+  },
+
+  async getCompanyVerification(projectId: number | string): Promise<CompanyVerification> {
+    return getJson(`${API_BASE_URL}/projects/${projectId}/verification`, "Could not load company verification");
+  },
+
+  async sendCompanyCode(projectId: number | string, email: string): Promise<CompanyVerification> {
+    return sendJson("POST", `${API_BASE_URL}/projects/${projectId}/verification/email`, { email }, "Could not send the code");
+  },
+
+  async confirmCompanyCode(projectId: number | string, code: string): Promise<CompanyVerification> {
+    return sendJson("POST", `${API_BASE_URL}/projects/${projectId}/verification/confirm`, { code }, "Could not check the code");
+  },
+
+  async submitCompanyRegistration(projectId: number | string, registration_type: RegistrationType, registration_number: string, note?: string): Promise<CompanyVerification> {
+    return sendJson("POST", `${API_BASE_URL}/projects/${projectId}/verification/registration`,
+      { registration_type, registration_number, note: note || null }, "Could not send the registration number");
+  },
+
+  async getAdminCounts(): Promise<{ investors_pending: number; companies_pending: number }> {
+    return getJson(`${API_BASE_URL}/admin/verifications/counts`, "Could not load the review queue");
+  },
+
+  async getAdminInvestors(status?: string): Promise<AdminInvestorRow[]> {
+    const url = new URL(`${API_BASE_URL}/admin/verifications`);
+    url.searchParams.set("kind", "investor");
+    if (status) url.searchParams.set("status", status);
+    return getJson(url.toString(), "Could not load the review queue");
+  },
+
+  async getAdminCompanies(status?: string): Promise<AdminCompanyRow[]> {
+    const url = new URL(`${API_BASE_URL}/admin/verifications`);
+    url.searchParams.set("kind", "company");
+    if (status) url.searchParams.set("status", status);
+    return getJson(url.toString(), "Could not load the review queue");
+  },
+
+  async reviewInvestor(userId: string, decision: ReviewDecision, note?: string): Promise<unknown> {
+    return sendJson("POST", `${API_BASE_URL}/admin/investors/${encodeURIComponent(userId)}/review`,
+      { decision, note: note || null }, "Could not save the review");
+  },
+
+  async reviewCompany(projectId: number, decision: ReviewDecision, note?: string): Promise<unknown> {
+    return sendJson("POST", `${API_BASE_URL}/admin/companies/${projectId}/review`,
+      { decision, note: note || null }, "Could not save the review");
   },
 
   /* ---------- founder outreach ---------- */

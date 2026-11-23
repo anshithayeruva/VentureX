@@ -13,6 +13,15 @@ from app.schemas.interest import (
 )
 from app.services.founder_outreach_service import FounderOutreachService, OutreachError
 from app.services.interest_service import InterestService
+from app.services.verification_service import VerificationService
+
+
+async def _require_verified_investor(user: CurrentUser) -> None:
+    if not await VerificationService.investor_is_verified(user.id):
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail={
+            "code": "verification_required",
+            "message": "Get your investor account verified to contact founders. Send your evidence on the Verification page.",
+        })
 
 logger = logging.getLogger(__name__)
 
@@ -26,6 +35,7 @@ async def express_interest(
     user: CurrentUser = Depends(require_investor),
 ):
     """Express interest / request introduction for a startup project (as the signed-in investor)."""
+    await _require_verified_investor(user)
     try:
         interest = await InterestService.express_interest(
             project_id=interest_in.project_id,
@@ -72,6 +82,12 @@ async def list_interests(
         for item in interests:
             if item.get("initiated_by") == "founder" and item.get("status") != "accepted":
                 item["investor_email"] = None
+    # Badges: verified investors and verified companies.
+    verified = await VerificationService.verified_investors({i.get("investor_id") for i in interests})
+    companies = await VerificationService.company_statuses({i.get("project_id") for i in interests})
+    for item in interests:
+        item["investor_verified"] = item.get("investor_id") in verified
+        item["company_verified"] = companies.get(item.get("project_id")) == "verified"
     return interests
 
 
@@ -154,6 +170,8 @@ async def respond_to_founder_request(
 ):
     """Investor action on a founder's request: Interested opens the deal room; Pass needs a reason,
     which the founder sees."""
+    if body.decision == "interested":
+        await _require_verified_investor(user)
     try:
         updated = await FounderOutreachService.respond(user.id, interest_id, body.decision, body.reason, body.note)
     except OutreachError as e:

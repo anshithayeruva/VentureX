@@ -33,6 +33,8 @@ class CurrentUser:
     email: str
     name: Optional[str]
     role: Optional[str]  # "FOUNDER" | "INVESTOR" | None until onboarding
+    email_verified: bool = False
+    is_admin: bool = False  # VentureX staff: reviews investors and companies
 
     @property
     def is_founder(self) -> bool:
@@ -116,8 +118,9 @@ async def user_from_token(token: str) -> CurrentUser:
     user_id = str(claims["sub"])
     email = claims.get("email") or ""
     name = claims.get("name")
+    email_verified = bool(claims.get("emailVerified") or claims.get("email_verified"))
 
-    row = await pg.fetch_one("SELECT role, name FROM app_users WHERE id = %s", [user_id])
+    row = await pg.fetch_one("SELECT role, name, is_admin FROM app_users WHERE id = %s", [user_id])
     if row is None:
         # First request from this Neon Auth user: register them (role chosen at onboarding).
         row = await pg.upsert(
@@ -126,7 +129,10 @@ async def user_from_token(token: str) -> CurrentUser:
             ["id"],
             update=["email"],
         )
-    return CurrentUser(id=user_id, email=email, name=row.get("name") or name, role=row.get("role"))
+    # Admin: flagged in the database, or a verified email listed in ADMIN_EMAILS.
+    is_admin = bool(row.get("is_admin")) or (email_verified and email.lower() in settings.admin_emails)
+    return CurrentUser(id=user_id, email=email, name=row.get("name") or name, role=row.get("role"),
+                       email_verified=email_verified, is_admin=is_admin)
 
 
 async def require_user(user: Optional[CurrentUser] = Depends(get_current_user)) -> CurrentUser:
@@ -148,4 +154,14 @@ async def require_founder(user: CurrentUser = Depends(require_user)) -> CurrentU
 async def require_investor(user: CurrentUser = Depends(require_user)) -> CurrentUser:
     if not user.is_investor:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Investor account required")
+    return user
+
+
+async def require_admin(user: CurrentUser = Depends(require_user)) -> CurrentUser:
+    """VentureX staff only. Checked against the database too, so a test override or a stale
+    token can't keep admin access after it is removed."""
+    if not user.is_admin:
+        flagged = await pg.fetch_val("SELECT is_admin FROM app_users WHERE id = %s", [user.id])
+        if not flagged:
+            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Admin access required")
     return user

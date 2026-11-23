@@ -9,6 +9,10 @@ class MeResponse(BaseModel):
     name: Optional[str] = None
     role: Optional[Literal["FOUNDER", "INVESTOR"]] = None
     organization: Optional[str] = None
+    is_admin: bool = False
+    # Investors only: unverified | pending | verified | rejected
+    verification_status: Optional[str] = None
+    verification_required: bool = False
 
 
 class OnboardingInput(BaseModel):

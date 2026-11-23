@@ -1,6 +1,7 @@
 import logging
 from typing import List, Optional
 from fastapi import APIRouter, Depends, File, Form, HTTPException, status, Query, UploadFile
+from app.services.verification_service import VerificationService
 from app.core.auth import CurrentUser, get_current_user, require_founder, require_user
 from app.core.rate_limit import rate_limit
 from fastapi.responses import FileResponse, Response
@@ -54,11 +55,36 @@ async def _readable_project(project_id: str, user: Optional[CurrentUser]):
 _PRIVATE_FIELDS = ("readiness_score", "ai_readiness_breakdown", "ai_feedback_summary", "strengths", "recommendations")
 
 
-def _public_view(project: dict, user: Optional[CurrentUser]) -> dict:
-    """A project as someone other than its founder may see it."""
+# Links that let someone reach the founder outside VentureX: hidden from investors until they're verified.
+_LINK_FIELDS = ("website", "pitch_deck_url", "github_url", "demo_url")
+
+
+def _public_view(project: dict, user: Optional[CurrentUser], limited: bool = False) -> dict:
+    """A project as someone other than its founder may see it (limited: an unverified investor)."""
     if user is not None and project.get("founder_id") == user.id:
         return project
-    return {**project, **{k: None for k in _PRIVATE_FIELDS}}
+    hidden = {k: None for k in _PRIVATE_FIELDS}
+    if limited:
+        hidden.update({k: "" for k in _LINK_FIELDS})
+    return {**project, **hidden}
+
+
+async def _limited(user: Optional[CurrentUser]) -> bool:
+    """Unverified investors explore in a limited form: no links, documents or intro requests."""
+    return bool(user and user.is_investor and not await VerificationService.investor_is_verified(user.id))
+
+
+async def _with_badges(projects: List[dict]) -> List[dict]:
+    statuses = await VerificationService.company_statuses([p.get("id") for p in projects])
+    return [{**p, "company_verified": statuses.get(p.get("id")) == "verified"} for p in projects]
+
+
+async def _documents_allowed(user: CurrentUser, project: dict) -> None:
+    if project.get("founder_id") != user.id and await _limited(user):
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail={
+            "code": "verification_required",
+            "message": "Founders' documents open once your investor account is verified.",
+        })
 
 
 async def _private_report_project(project_id: str, user: Optional[CurrentUser]):
@@ -105,13 +131,15 @@ async def list_projects(
         skip=skip,
         limit=limit,
     )
-    return [_public_view(p, user) for p in projects]
+    limited = await _limited(user)
+    return [_public_view(p, user, limited) for p in await _with_badges(projects)]
 
 
 @router.get("/{project_id}", response_model=ProjectResponse)
 async def get_project(project_id: str, user: Optional[CurrentUser] = Depends(get_current_user)):
     """Retrieve details of a specific startup project by ID."""
-    return _public_view(await _readable_project(project_id, user), user)
+    project = (await _with_badges([await _readable_project(project_id, user)]))[0]
+    return _public_view(project, user, await _limited(user))
 
 
 @router.put("/{project_id}", response_model=ProjectResponse)
@@ -121,8 +149,10 @@ async def update_project(
     user: CurrentUser = Depends(require_founder),
 ):
     """Update details of a startup project."""
-    await _owned_project(project_id, user)
+    before = await _owned_project(project_id, user)
     updated = await ProjectService.update(project_id, project_in)
+    if updated and project_in.website is not None and (project_in.website or "") != (before.get("website") or ""):
+        await VerificationService.website_changed(before["id"], project_in.website or "")
     if not updated:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
@@ -235,6 +265,7 @@ async def upload_project_document(
 async def list_project_documents(project_id: str, user: CurrentUser = Depends(require_user)):
     """List a project's materials (signed-in users only; others see them once it is published)."""
     project = await _readable_project(project_id, user)
+    await _documents_allowed(user, project)
     return await DocumentService.list(project["id"])
 
 
@@ -246,6 +277,7 @@ async def download_project_document(
 ):
     """Download one of a project's materials (signed-in users only)."""
     project = await _readable_project(project_id, user)
+    await _documents_allowed(user, project)
     found = await DocumentService.file_path(project["id"], doc_id)
     if not found:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Document not found")

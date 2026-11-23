@@ -30,7 +30,7 @@ MIN_REQUESTS_FOR_STATS = 3
 
 _PROFILE_SQL = """
     SELECT p.user_id, p.name, p.firm, p.title, p.bio, p.location, p.min_check, p.max_check,
-           p.value_add, p.portfolio, u.email AS account_email, u.name AS account_name, u.organization AS account_org
+           p.value_add, p.portfolio, p.verification_status, u.email AS account_email, u.name AS account_name, u.organization AS account_org
     FROM investor_profiles p LEFT JOIN app_users u ON u.id = p.user_id
     WHERE p.listed_for_founders
       AND (u.role = 'INVESTOR' OR (u.id IS NULL AND p.user_id = ANY(%s::text[])))
@@ -104,6 +104,8 @@ class FounderOutreachService:
     @classmethod
     async def _pick_project(cls, founder_id: str, project_id: Optional[int]) -> Tuple[Optional[Dict[str, Any]], List[Dict[str, Any]]]:
         projects = await cls._founder_projects(founder_id)
+        flags = await cls._company_flags(projects)
+        projects = [{**p, "company_verified": flags.get(p["id"], False)} for p in projects]
         if project_id is not None:
             chosen = next((p for p in projects if p["id"] == project_id), None)
             if chosen is None:
@@ -112,11 +114,18 @@ class FounderOutreachService:
         return (projects[0] if projects else None), projects
 
     @staticmethod
+    async def _company_flags(projects: List[Dict[str, Any]]) -> Dict[int, bool]:
+        from app.services.verification_service import VerificationService
+        statuses = await VerificationService.company_statuses([p["id"] for p in projects])
+        return {pid: s == "verified" for pid, s in statuses.items()}
+
+    @staticmethod
     def _project_option(p: Dict[str, Any]) -> Dict[str, Any]:
         return {"id": p["id"], "title": p["title"], "is_published": bool(p.get("is_published")),
                 "readiness_score": p.get("readiness_score"), "stage": p.get("stage"),
                 "industry": p.get("industry"), "tagline": p.get("tagline"),
-                "funding_required": p.get("funding_required"), "summary": _summary(p)}
+                "funding_required": p.get("funding_required"), "summary": _summary(p),
+                "company_verified": bool(p.get("company_verified"))}
 
     @staticmethod
     async def _preferences(ids: List[str]) -> Dict[str, Dict[str, Any]]:
@@ -162,6 +171,7 @@ class FounderOutreachService:
             "firm": row.get("firm") or row.get("account_org") or "",
             "title": row.get("title") or "",
             "location": row.get("location") or "",
+            "verified": row.get("verification_status") == "verified",
         }
 
     @staticmethod
@@ -187,6 +197,7 @@ class FounderOutreachService:
         max_check: Optional[float] = None,
         location: Optional[str] = None,
         role: Optional[str] = None,
+        verified_only: bool = False,
         sort: str = "fit",
         page: int = 1,
         page_size: int = 20,
@@ -238,6 +249,8 @@ class FounderOutreachService:
                         or loc in (row.get("location") or "").lower()):
                     continue
             if role in ("lead", "co_invest") and thesis["structure"]["role"] not in (role, "either"):
+                continue
+            if verified_only and row.get("verification_status") != "verified":
                 continue
 
             fit = cls._fit(project, row, pref)
@@ -385,11 +398,14 @@ class FounderOutreachService:
                     block("recently_expired", f"Your last request got no response. You can try again from "
                                               f"{retry.strftime('%d %b %Y')}.")
         sent = await cls._sent_today(founder_id)
-        limit = settings.FOUNDER_INTRO_DAILY_LIMIT
+        from app.services.verification_service import VerificationService
+        verified_company = await VerificationService.company_is_verified(project["id"])
+        limit = settings.FOUNDER_INTRO_DAILY_LIMIT_VERIFIED if verified_company else settings.FOUNDER_INTRO_DAILY_LIMIT
         if sent >= limit:
             block("daily_limit", f"You've sent {limit} intro requests in the last 24 hours, the daily limit. "
                                  "Try again tomorrow.")
-        return {"can_request": not blockers, "blockers": blockers, "sent_today": sent, "daily_limit": limit}
+        return {"can_request": not blockers, "blockers": blockers, "sent_today": sent, "daily_limit": limit,
+                "company_verified": verified_company}
 
     @classmethod
     async def request_intro(cls, founder_id: str, investor_id: str, project_id: int, note: str) -> Dict[str, Any]:

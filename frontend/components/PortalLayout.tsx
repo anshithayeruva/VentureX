@@ -14,6 +14,7 @@ import {
   Rocket,
   Search,
   Settings,
+  ShieldCheck,
   Sliders,
   Sparkles,
   User,
@@ -25,6 +26,7 @@ import { api, MeResponse } from "@/lib/api";
 import { authClient, clearApiToken } from "@/lib/auth/client";
 import { BrandMark } from "@/components/BrandMark";
 import { cx } from "@/components/ui";
+import { InvestorVerificationBanner } from "@/components/verification";
 
 interface PortalLayoutProps {
   role: "FOUNDER" | "INVESTOR";
@@ -90,6 +92,7 @@ export function PortalLayout({ role, children, activeItem, onSelectItem, title }
         { id: "dealflow", label: "Deal Flow", href: "/investor/deal-flow", icon: MessagesSquare },
         { id: "portfolio", label: "Portfolio & Finances", href: "/investor/portfolio", icon: Wallet },
         { id: "preferences", label: "Criteria", href: "/investor/preferences", icon: Sliders },
+        { id: "verification", label: "Verification", href: "/investor/verification", icon: ShieldCheck },
       ];
 
   const initials =
@@ -223,13 +226,17 @@ export function PortalLayout({ role, children, activeItem, onSelectItem, title }
               workspace={isFounder ? "Founder" : "Investor"}
               profileHref={`${base}?tab=profile`}
               settingsHref={`${base}?tab=settings`}
+              isAdmin={!!me?.is_admin}
               onSignOut={signOut}
             />
           </div>
         </header>
 
         <main className="flex-1">
-          <div className="mx-auto w-full max-w-6xl px-4 py-6 sm:px-8 sm:py-10">{children}</div>
+          <div className="mx-auto w-full max-w-6xl px-4 py-6 sm:px-8 sm:py-10">
+            {activeItem !== "verification" && <InvestorVerificationBanner me={me} />}
+            {children}
+          </div>
         </main>
       </div>
     </div>
@@ -244,6 +251,7 @@ function AccountMenu({
   workspace,
   profileHref,
   settingsHref,
+  isAdmin,
   onSignOut,
 }: {
   initials: string;
@@ -252,6 +260,7 @@ function AccountMenu({
   workspace: string;
   profileHref: string;
   settingsHref: string;
+  isAdmin?: boolean;
   onSignOut: () => void;
 }) {
   const [open, setOpen] = useState(false);
@@ -308,6 +317,12 @@ function AccountMenu({
             Settings
           </Link>
           <div className="my-1 border-t border-line" />
+          {isAdmin && (
+            <Link role="menuitem" href="/admin" onClick={() => setOpen(false)} className={itemClass}>
+              <ShieldCheck className="w-4 h-4" />
+              Admin review
+            </Link>
+          )}
           <button role="menuitem" type="button" onClick={onSignOut} className={itemClass}>
             <LogOut className="h-4 w-4 text-faint" />
             Sign out
