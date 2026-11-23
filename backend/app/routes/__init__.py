@@ -10,6 +10,8 @@ from app.routes.notifications import router as notifications_router
 from app.routes.dealrooms import router as dealrooms_router
 from app.routes.portfolio import router as portfolio_router
 
+from app.routes.verification import router as verification_router  # noqa: E402
+
 api_router = APIRouter()
 api_router.include_router(health_router)
 api_router.include_router(auth_router)
@@ -19,6 +21,7 @@ api_router.include_router(investors_router)
 api_router.include_router(matches_router)
 api_router.include_router(interests_router)
 api_router.include_router(notifications_router)
+api_router.include_router(verification_router)
 api_router.include_router(dealrooms_router)
 api_router.include_router(portfolio_router)
 

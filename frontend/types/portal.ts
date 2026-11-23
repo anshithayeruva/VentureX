@@ -108,6 +108,7 @@ export interface DiscoverItem {
   interest_id?: string | null;
   interest_status?: "pending" | "accepted" | "declined" | "expired" | null;
   interest_initiated_by?: "investor" | "founder" | null;
+  company_verified?: boolean;
   room_id?: string | null;
   deal_stage?: string | null;
 }
@@ -136,6 +137,7 @@ export interface DiscoverQuery {
   live_product?: boolean;
   matched_only?: boolean;
   saved_only?: boolean;
+  verified_only?: boolean;
   sort?: "fit" | "newest" | "raise_asc" | "raise_desc";
   page?: number;
   page_size?: number;
@@ -359,6 +361,7 @@ export interface OutreachProject {
   funding_required?: number | null;
   /** One-liner, amount raising and traction, for the request draft. */
   summary: string;
+  company_verified?: boolean;
 }
 
 export interface OutreachRelationship {
@@ -387,6 +390,7 @@ export interface DirectoryInvestor {
   regions: string[];
   countries: string[];
   criteria_set: boolean;
+  verified: boolean;
   match_score: number | null;
   reasons: FitReason[];
   excluded_reason: string | null;
@@ -413,6 +417,7 @@ export interface DirectoryQuery {
   max_check?: number;
   location?: string;
   role?: "lead" | "co_invest";
+  verified_only?: boolean;
   sort?: "fit" | "name";
   page?: number;
   page_size?: number;
@@ -435,14 +440,89 @@ export interface PublicInvestorProfile {
   thesis: Partial<InvestmentThesis>;
   criteria_set: boolean;
   email: string | null;
+  verified: boolean;
   connected: boolean;
   stats: { enough_data: boolean; resolved_requests: number; reply_rate: number | null; median_reply_days: number | null };
   match_score: number | null;
   reasons: FitReason[];
   excluded_reason: string | null;
   relationship: OutreachRelationship | null;
-  eligibility: { can_request: boolean; blockers: IntroBlocker[]; sent_today: number; daily_limit: number };
+  eligibility: { can_request: boolean; blockers: IntroBlocker[]; sent_today: number; daily_limit: number; company_verified?: boolean };
   project: OutreachProject | null;
   projects: OutreachProject[];
   min_readiness: number;
 }
+
+
+/* ---------- verification ---------- */
+
+export type InvestorVerificationStatus = "unverified" | "pending" | "verified" | "rejected";
+export type CompanyVerificationStatus = "unverified" | "code_sent" | "pending" | "verified" | "rejected";
+export type RegistrationType = "gstin" | "cin" | "llpin" | "udyam";
+
+export interface InvestorVerification {
+  status: InvestorVerificationStatus;
+  review_note?: string | null;
+  submitted_at?: string | null;
+  reviewed_at?: string | null;
+  linkedin_url: string;
+  website: string;
+  past_investments: PortfolioEntry[];
+  required: boolean;
+}
+
+export interface CompanyVerification {
+  project_id: number;
+  status: CompanyVerificationStatus;
+  method?: "domain_email" | "registration" | null;
+  email?: string | null;
+  domain?: string | null;
+  website_domain?: string | null;
+  registration_type?: RegistrationType | null;
+  registration_number?: string | null;
+  review_note?: string | null;
+  submitted_at?: string | null;
+  verified_at?: string | null;
+  code_expires_at?: string | null;
+  registration_types: Record<RegistrationType, string>;
+}
+
+export interface AdminInvestorRow {
+  user_id: string;
+  name?: string | null;
+  firm?: string | null;
+  title?: string | null;
+  location?: string | null;
+  email: string;
+  linkedin_url: string;
+  website: string;
+  portfolio: PortfolioEntry[];
+  status: InvestorVerificationStatus;
+  review_note?: string | null;
+  submitted_at?: string | null;
+  reviewed_at?: string | null;
+}
+
+export interface AdminCompanyRow {
+  project_id: number;
+  title: string;
+  website?: string | null;
+  industry?: string | null;
+  city?: string | null;
+  country?: string | null;
+  founder_name?: string | null;
+  founder_email?: string | null;
+  status: CompanyVerificationStatus;
+  method?: "domain_email" | "registration" | null;
+  email?: string | null;
+  domain?: string | null;
+  registration_type?: RegistrationType | null;
+  registration_number?: string | null;
+  evidence_note?: string | null;
+  review_note?: string | null;
+  submitted_at?: string | null;
+  reviewed_at?: string | null;
+  verified_at?: string | null;
+}
+
+export type ReviewDecision = "approve" | "reject" | "revoke";

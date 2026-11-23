@@ -131,6 +131,24 @@ class EmailService:
         return cls._send_email_raw(founder_email, subject, html, body_text)
 
     @classmethod
+    def send_verification_code_email(cls, to_email: str, project_title: str, code: str, minutes: int) -> Dict[str, Any]:
+        """The code that proves the founder can receive email on the startup's domain."""
+        subject = f"Your VentureX verification code: {code}"
+        body_text = (
+            f"Your code to verify {project_title} on VentureX is {code}.\n\n"
+            f"It expires in {minutes} minutes. If you didn't ask for it, ignore this email.\n"
+        )
+        html = f"""
+        <div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 24px; border: 1px solid #E7E0D3; border-radius: 12px; background: #FFFDF9;">
+          <h2 style="color: #111C32; margin: 0 0 12px; font-family: Georgia, serif; font-weight: 500;">Verify {project_title}</h2>
+          <p style="color: #33405A; font-size: 14px;">Enter this code in VentureX to verify your company:</p>
+          <p style="font-size: 28px; letter-spacing: 6px; font-weight: 700; color: #20477F; margin: 12px 0;">{code}</p>
+          <p style="color: #6B6457; font-size: 12px;">It expires in {minutes} minutes. If you didn't ask for it, ignore this email.</p>
+        </div>
+        """
+        return cls._send_email_raw(to_email, subject, html, body_text)
+
+    @classmethod
     def send_founder_intro_request_email(
         cls,
         investor_email: str,

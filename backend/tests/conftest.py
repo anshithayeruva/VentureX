@@ -26,6 +26,16 @@ def signed_in_founder():
     app.dependency_overrides.pop(get_current_user, None)
 
 
+@pytest.fixture(autouse=True, scope="session")
+def investor_verification_off():
+    """Most suites test other things; investor verification is switched on in test_verification.py."""
+    from app.core.config import settings
+    previous = settings.REQUIRE_INVESTOR_VERIFICATION
+    settings.REQUIRE_INVESTOR_VERIFICATION = False
+    yield
+    settings.REQUIRE_INVESTOR_VERIFICATION = previous
+
+
 @pytest.fixture(autouse=True)
 def fresh_rate_limits():
     """Rate-limit counts live in memory; start every test from zero."""

@@ -8,11 +8,20 @@ import { PortalLayout } from "@/components/PortalLayout";
 import { ErrorState, Pagination, ReasonLine } from "@/components/forms";
 import { ProjectGate, ProjectPicker, ROLE_LABEL, RelationshipTag, chequeRange } from "@/components/outreach";
 import { Avatar, Button, ButtonLink, Card, EmptyState, Field, LoadingRows, PageHeader, Tag, cx, inputClass } from "@/components/ui";
+import { VerifiedBadge } from "@/components/verification";
 import { api } from "@/lib/api";
 import type { DirectoryInvestor, DirectoryQuery, InvestorDirectory } from "@/types";
 
-type Filters = { stage: string; sector: string; min_check: string; max_check: string; location: string; role: "" | "lead" | "co_invest" };
-const NO_FILTERS: Filters = { stage: "", sector: "", min_check: "", max_check: "", location: "", role: "" };
+type Filters = {
+  stage: string;
+  sector: string;
+  min_check: string;
+  max_check: string;
+  location: string;
+  role: "" | "lead" | "co_invest";
+  verified_only: boolean;
+};
+const NO_FILTERS: Filters = { stage: "", sector: "", min_check: "", max_check: "", location: "", role: "", verified_only: false };
 const STAGES = ["Idea", "Pre-seed", "Seed", "Series A", "Series B", "Series C", "Growth", "Pre-IPO"];
 const PAGE_SIZE = 12;
 
@@ -52,6 +61,7 @@ function FindInvestorsContent() {
       max_check: num(filters.max_check),
       location: filters.location.trim() || undefined,
       role: filters.role || undefined,
+      verified_only: filters.verified_only || undefined,
       sort,
       page,
       page_size: PAGE_SIZE,
@@ -122,6 +132,15 @@ function FindInvestorsContent() {
           </select>
         </Field>
       </div>
+      <label className="mt-4 flex items-center gap-2 text-sm text-ink-2">
+        <input
+          type="checkbox"
+          checked={filters.verified_only}
+          onChange={(e) => update({ verified_only: e.target.checked })}
+          className="h-4 w-4 accent-[var(--color-accent)]"
+        />
+        Verified investors only
+      </label>
       {activeCount > 0 && (
         <Button variant="ghost" className="mt-3" onClick={() => update(NO_FILTERS)}>
           <X className="h-4 w-4" />
@@ -222,6 +241,7 @@ function InvestorCard({ inv, projectId }: { inv: DirectoryInvestor; projectId?: 
               {inv.name}
             </Link>
             <div className="truncate text-sm text-muted">{[inv.firm, inv.title, inv.location].filter(Boolean).join(" · ") || "Independent investor"}</div>
+            {inv.verified && <VerifiedBadge kind="investor" className="mt-1.5" />}
           </div>
         </div>
         <div className="shrink-0">

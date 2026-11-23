@@ -54,9 +54,11 @@ class DiscoverService:
         live_product: bool = False,
         matched_only: bool = False,
         saved_only: bool = False,
+        verified_only: bool = False,
         sort: str = "fit",
         page: int = 1,
         page_size: int = 12,
+        limited: bool = False,
     ) -> Dict[str, Any]:
         if page == 1 and not await pg.fetch_val(
             "SELECT EXISTS (SELECT 1 FROM matches WHERE investor_id = %s) AS e", [investor_id]
@@ -109,6 +111,8 @@ class DiscoverService:
             where.append("m.match_score IS NOT NULL")
         if saved_only:
             where.append("s.project_id IS NOT NULL")
+        if verified_only:
+            where.append("cv.status = 'verified'")
 
         order = SORTS.get(sort, SORTS["fit"])
         sql = f"""
@@ -117,8 +121,10 @@ class DiscoverService:
                    (s.project_id IS NOT NULL) AS saved,
                    i.id AS interest_id, i.status AS interest_status, i.initiated_by AS interest_initiated_by,
                    d.id AS room_id, d.stage AS deal_stage,
+                   COALESCE(cv.status = 'verified', FALSE) AS company_verified,
                    count(*) OVER () AS total
             FROM projects p
+            LEFT JOIN company_verifications cv ON cv.project_id = p.id
             LEFT JOIN matches m ON m.project_id = p.id AND m.investor_id = %s
             LEFT JOIN saved_opportunities s ON s.project_id = p.id AND s.investor_id = %s
             LEFT JOIN project_interests i ON i.project_id = p.id AND i.investor_id = %s
@@ -136,6 +142,7 @@ class DiscoverService:
             # Past the last page: still report the real total.
             total = int(await pg.fetch_val(
                 "SELECT count(*) AS n FROM projects p "
+                "LEFT JOIN company_verifications cv ON cv.project_id = p.id "
                 "LEFT JOIN matches m ON m.project_id = p.id AND m.investor_id = %s "
                 "LEFT JOIN saved_opportunities s ON s.project_id = p.id AND s.investor_id = %s "
                 f"WHERE {' AND '.join(where)}",
@@ -143,6 +150,8 @@ class DiscoverService:
             ) or 0)
         for r in rows:
             r.pop("total", None)
+            if limited:
+                r["website"] = None
         pref = await pg.fetch_one("SELECT * FROM investor_preferences WHERE investor_id = %s", [investor_id])
         criteria_set = has_criteria(thesis_from_row(pref)) if pref else False
         return {

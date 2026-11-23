@@ -6,6 +6,7 @@ import { Bookmark, BookmarkCheck, MessagesSquare, Rocket, Search, SlidersHorizon
 import { PortalLayout } from "@/components/PortalLayout";
 import { ChipGroup, ErrorState, Notice, Pagination, ReasonLine } from "@/components/forms";
 import { Button, ButtonLink, Card, EmptyState, Field, LoadingRows, PageHeader, Tag, Toggle, buttonClass, cx, inputClass } from "@/components/ui";
+import { VerifiedBadge, useInvestorCanContact } from "@/components/verification";
 import { api } from "@/lib/api";
 import { formatMoney } from "@/lib/format";
 import type { CriteriaOptions, DiscoverItem, DiscoverPage, DiscoverQuery } from "@/types";
@@ -18,6 +19,7 @@ type Filters = Required<Pick<DiscoverQuery, "industry" | "stage" | "business_mod
   live_product: boolean;
   matched_only: boolean;
   saved_only: boolean;
+  verified_only: boolean;
 };
 
 const NO_FILTERS: Filters = {
@@ -33,6 +35,7 @@ const NO_FILTERS: Filters = {
   live_product: false,
   matched_only: false,
   saved_only: false,
+  verified_only: false,
 };
 
 const SORTS: { value: NonNullable<DiscoverQuery["sort"]>; label: string }[] = [
@@ -88,6 +91,7 @@ export default function DiscoverPage() {
       live_product: filters.live_product,
       matched_only: filters.matched_only,
       saved_only: filters.saved_only,
+      verified_only: filters.verified_only,
       sort,
       page,
       page_size: PAGE_SIZE,
@@ -124,7 +128,7 @@ export default function DiscoverPage() {
     filters.country.length +
     filters.region.length +
     [filters.min_raise, filters.max_raise, filters.min_monthly_revenue, filters.min_customers].filter(Boolean).length +
-    [filters.live_product, filters.matched_only, filters.saved_only].filter(Boolean).length;
+    [filters.live_product, filters.matched_only, filters.saved_only, filters.verified_only].filter(Boolean).length;
 
   const patchItem = (id: number, patch: Partial<DiscoverItem>) =>
     setResult((r) => (r ? { ...r, data: { ...r.data, items: r.data.items.map((i) => (i.id === id ? { ...i, ...patch } : i)) } } : r));
@@ -166,12 +170,14 @@ export default function DiscoverPage() {
   };
 
   const facets = data?.facets;
+  const canContact = useInvestorCanContact();
 
   const filterPanel = (
     <div className="space-y-6">
       <div className="divide-y divide-line">
         <Toggle label="Matches only" description="Startups that fit your criteria." checked={filters.matched_only} onChange={(v) => update({ matched_only: v })} />
         <Toggle label="Saved only" description="Startups you've bookmarked." checked={filters.saved_only} onChange={(v) => update({ saved_only: v })} />
+        <Toggle label="Verified startups only" description="Companies VentureX has verified." checked={filters.verified_only} onChange={(v) => update({ verified_only: v })} />
       </div>
       {facets && facets.industries.length > 0 && (
         <Field label="Industry">
@@ -328,6 +334,7 @@ export default function DiscoverPage() {
                     key={item.id}
                     item={item}
                     criteriaSet={data.criteria_set}
+                    canContact={canContact !== false}
                     busy={busy === item.id}
                     onSave={() => toggleSave(item)}
                     onRequest={() => requestIntro(item)}
@@ -346,12 +353,14 @@ export default function DiscoverPage() {
 function StartupCard({
   item,
   criteriaSet,
+  canContact,
   busy,
   onSave,
   onRequest,
 }: {
   item: DiscoverItem;
   criteriaSet: boolean;
+  canContact: boolean;
   busy: boolean;
   onSave: () => void;
   onRequest: () => void;
@@ -370,6 +379,7 @@ function StartupCard({
             {item.title}
           </Link>
           <div className="text-sm text-muted">{[item.stage, item.industry, item.business_model].filter(Boolean).join(" · ")}</div>
+          {item.company_verified && <VerifiedBadge kind="company" className="mt-1.5" />}
         </div>
         <div className="flex shrink-0 items-center gap-1">
           {item.match_score != null ? (
@@ -427,6 +437,10 @@ function StartupCard({
             <Tag>No response</Tag>
           ) : item.interest_status === "accepted" ? (
             <Tag tone="positive">Connected</Tag>
+          ) : !canContact ? (
+            <ButtonLink href="/investor/verification" variant="secondary">
+              Verify to request
+            </ButtonLink>
           ) : (
             <Button onClick={onRequest} disabled={busy}>
               {busy ? "Sending…" : "Request intro"}

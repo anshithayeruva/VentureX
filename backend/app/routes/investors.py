@@ -3,6 +3,7 @@ from typing import List, Literal, Optional
 
 from fastapi import APIRouter, Depends, Query, status
 
+from app.services.verification_service import VerificationService
 from app.core.auth import CurrentUser, require_investor, require_user
 from app.core.rate_limit import rate_limit
 from app.schemas.investor import (
@@ -73,6 +74,7 @@ async def discover(
     live_product: bool = False,
     matched_only: bool = False,
     saved_only: bool = False,
+    verified_only: bool = False,
     sort: Literal["fit", "newest", "raise_asc", "raise_desc"] = "fit",
     page: int = Query(1, ge=1, le=1000),
     page_size: int = Query(12, ge=1, le=50),
@@ -83,7 +85,8 @@ async def discover(
         user.id, q=q, industries=industry[:20], stages=stage[:10], business_models=business_model[:20],
         countries=country[:40], regions=region[:10], min_raise=min_raise, max_raise=max_raise,
         min_monthly_revenue=min_monthly_revenue, min_customers=min_customers, live_product=live_product,
-        matched_only=matched_only, saved_only=saved_only, sort=sort, page=page, page_size=page_size,
+        matched_only=matched_only, saved_only=saved_only, verified_only=verified_only, sort=sort, page=page,
+        page_size=page_size, limited=not await VerificationService.investor_is_verified(user.id),
     )
 
 

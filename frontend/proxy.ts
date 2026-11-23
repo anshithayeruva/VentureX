@@ -9,7 +9,7 @@ import { auth } from "@/lib/auth/server";
  *    Everything else (landing, /login, /register, /forgot-password) stays public.
  */
 
-const PORTALS = ["/founder", "/investor", "/dealroom"];
+const PORTALS = ["/founder", "/investor", "/dealroom", "/admin"];
 const requireSignIn = auth.middleware({ loginUrl: "/login" });
 
 /** The API's origin and its WebSocket twin (deal rooms use live updates). */

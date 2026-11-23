@@ -20,8 +20,14 @@ router = APIRouter(prefix="/me", tags=["Authentication"])
 @router.get("", response_model=MeResponse)
 async def get_me(user: CurrentUser = Depends(require_user)):
     """Return the signed-in user and their role (null until onboarding)."""
-    row = await pg.fetch_one("SELECT * FROM app_users WHERE id = %s", [user.id])
-    return row
+    row = await pg.fetch_one("SELECT * FROM app_users WHERE id = %s", [user.id]) or {}
+    out = {**row, "is_admin": user.is_admin or bool(row.get("is_admin"))}
+    if user.is_investor:
+        from app.services.verification_service import VerificationService
+        out["verification_status"] = await VerificationService.investor_status(user.id)
+        from app.core.config import settings
+        out["verification_required"] = settings.REQUIRE_INVESTOR_VERIFICATION
+    return out
 
 
 @router.post("", response_model=MeResponse)

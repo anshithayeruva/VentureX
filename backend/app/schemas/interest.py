@@ -39,6 +39,8 @@ class ProjectInterestResponse(BaseModel):
     founder_email: Optional[str] = None
     status: str = "pending"  # "pending", "accepted", "declined", "expired" (no reply in 14 days)
     initiated_by: str = "investor"  # who asked to connect: "investor" or "founder"
+    investor_verified: Optional[bool] = None
+    company_verified: Optional[bool] = None
     pass_reason: Optional[str] = None
     responded_at: Optional[Union[datetime, str]] = None
     message: Optional[str] = None

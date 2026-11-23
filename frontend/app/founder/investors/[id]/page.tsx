@@ -8,6 +8,7 @@ import { PortalLayout } from "@/components/PortalLayout";
 import { ErrorState, Notice, ReasonLine } from "@/components/forms";
 import { ProjectGate, ProjectPicker, ROLE_LABEL, RelationshipTag, chequeRange } from "@/components/outreach";
 import { Avatar, Button, ButtonLink, Card, EmptyState, LoadingRows, Section, Tag, buttonClass, cx, inputClass } from "@/components/ui";
+import { VerifiedBadge } from "@/components/verification";
 import { api } from "@/lib/api";
 import { normalizeThesis, summarizeThesis } from "@/lib/thesis";
 import type { OutreachProject, PublicInvestorProfile } from "@/types";
@@ -120,6 +121,7 @@ function InvestorProfileContent({ investorId }: { investorId: string }) {
               {profile.match_score != null && (
                 <Tag tone={profile.match_score >= 85 ? "positive" : "accent"}>{Math.round(profile.match_score)}% fit</Tag>
               )}
+              {profile.verified ? <VerifiedBadge kind="investor" /> : <Tag>Not verified yet</Tag>}
               <Tag>{ROLE_LABEL[thesis.structure.role]}</Tag>
               <RelationshipTag rel={rel} />
             </div>
@@ -354,6 +356,7 @@ function IntroPanel({
           <div className="flex items-center justify-between text-xs text-muted">
             <span>
               {gate.daily_limit - gate.sent_today} of {gate.daily_limit} requests left today
+              {gate.company_verified ? " (verified company)" : ""}
             </span>
             <span className={noteLength > NOTE_MAX ? "text-danger" : undefined}>
               {noteLength}/{NOTE_MAX}

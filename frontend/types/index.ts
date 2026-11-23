@@ -94,6 +94,7 @@ export interface Project {
   recommendations?: string[];
   created_at: string;
   updated_at?: string;
+  company_verified?: boolean | null;
 }
 
 export interface ProjectCreateInput {
@@ -234,6 +235,8 @@ export interface ProjectInterest {
   status: "pending" | "accepted" | "declined" | "expired";
   /** Who asked to connect. */
   initiated_by?: "investor" | "founder";
+  investor_verified?: boolean;
+  company_verified?: boolean;
   pass_reason?: PassReason | null;
   responded_at?: string | null;
   message?: string;

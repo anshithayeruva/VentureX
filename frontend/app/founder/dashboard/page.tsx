@@ -41,6 +41,7 @@ import {
   cx,
   inputClass,
 } from "@/components/ui";
+import { VerifiedBadge } from "@/components/verification";
 import { api } from "@/lib/api";
 import { formatMoney, timeAgo } from "@/lib/format";
 import { MatchItem, NotificationItem, PASS_REASON_LABEL, Project, ProjectInterest } from "@/types";
@@ -307,6 +308,7 @@ function FounderDashboardContent() {
                 {item.investor_name || "Investor"}
                 {item.investor_firm && <span className="font-normal text-muted"> · {item.investor_firm}</span>}
               </div>
+              {item.investor_verified && <VerifiedBadge kind="investor" className="mb-1" />}
               <div className="text-sm text-muted">
                 Wants to connect about <span className="text-ink-2">{item.project_title || "your project"}</span>
                 {item.created_at && <> · {timeAgo(item.created_at)}</>}

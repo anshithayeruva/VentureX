@@ -1,5 +1,7 @@
 """Shared settings for the end-to-end suites."""
+import json
 import os
+import subprocess
 import sys
 from pathlib import Path
 
@@ -16,3 +18,33 @@ ENV = dict(
 )
 ENV.update({k: v for k, v in os.environ.items() if k.startswith("E2E_")})
 ENV = {k: v.strip().strip('"') for k, v in ENV.items()}
+
+
+def db(statements):
+    """Run SQL statements with the backend's own database helper (test setup and cleanup)."""
+    code = "\n".join([
+        "import asyncio, json, sys; sys.path.insert(0, '.')",
+        "if sys.platform == 'win32': asyncio.set_event_loop_policy(asyncio.WindowsSelectorEventLoopPolicy())",
+        "from app.database import postgres as pg",
+        "async def main():",
+        "    await pg.open_pool()",
+        "    await pg.run_batch([(sql, params) for sql, params in json.loads(sys.argv[1])])",
+        "    await pg.close_pool()",
+        "asyncio.run(main())",
+    ])
+    python = BACKEND_DIR / ".venv" / ("Scripts/python.exe" if sys.platform == "win32" else "bin/python")
+    r = subprocess.run([str(python), "-c", code, json.dumps(statements)],
+                       cwd=str(BACKEND_DIR), capture_output=True, text=True)
+    if r.returncode:
+        print("DB step failed:", r.stderr.strip().splitlines()[-1:])
+    return r.returncode == 0
+
+
+def set_test_investor_verification(status="verified"):
+    """Investors must be admin-verified to contact founders; the suites mark the E2E test
+    investor (only that account) as verified, or reset it."""
+    return db([[
+        "UPDATE investor_profiles SET verification_status = %s WHERE user_id = "
+        "(SELECT id FROM app_users WHERE email = %s)",
+        [status, ENV["E2E_INVESTOR_EMAIL"]],
+    ]])

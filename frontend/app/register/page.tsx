@@ -27,6 +27,11 @@ function RegisterForm() {
   );
   const [fullName, setFullName] = useState("");
   const [organization, setOrganization] = useState("");
+  // Investors send evidence at sign-up; an admin reviews it before they can contact founders.
+  const [linkedin, setLinkedin] = useState("");
+  const [firmWebsite, setFirmWebsite] = useState("");
+  const [pastCompany, setPastCompany] = useState("");
+  const [pastYear, setPastYear] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [pending, setPending] = useState(false);
   // Browser-only check (null during server render, so hydration matches).
@@ -80,7 +85,22 @@ function RegisterForm() {
         );
         return;
       }
-      router.replace(role === "FOUNDER" ? "/founder/dashboard" : "/investor/dashboard");
+      if (role === "INVESTOR") {
+        try {
+          await api.submitInvestorVerification({
+            linkedin_url: linkedin,
+            website: firmWebsite,
+            past_investments: [{ company: pastCompany.trim(), year: pastYear ? parseInt(pastYear, 10) || null : null }],
+          });
+          router.replace("/investor/dashboard");
+        } catch {
+          // The account works; the evidence can be fixed on the Verification page.
+          router.replace("/investor/verification");
+        }
+        router.refresh();
+        return;
+      }
+      router.replace("/founder/dashboard");
       router.refresh();
     } catch (err) {
       setError(err instanceof Error ? err.message : "Sign-up failed. Please try again.");
@@ -167,6 +187,37 @@ function RegisterForm() {
                 className="w-full px-3.5 py-2.5 bg-surface border border-line rounded-lg text-ink placeholder-faint focus:outline-none focus:border-accent"
               />
             </div>
+          )}
+
+          {role === "INVESTOR" && (
+            <fieldset className="space-y-3 rounded-lg border border-line p-3">
+              <legend className="px-1 text-xs font-semibold text-ink">Verification</legend>
+              <p className="text-xs text-muted">
+                An admin checks these before you can contact founders. Until then you can explore startups.
+              </p>
+              <div>
+                <label htmlFor="reg-linkedin" className="block text-xs font-semibold text-ink mb-1">LinkedIn profile</label>
+                <input id="reg-linkedin" type="text" required placeholder="linkedin.com/in/your-name" value={linkedin}
+                  onChange={(e) => setLinkedin(e.target.value)} className="w-full px-3.5 py-2.5 bg-surface border border-line rounded-lg text-ink placeholder-faint focus:outline-none focus:border-accent" />
+              </div>
+              <div>
+                <label htmlFor="reg-website" className="block text-xs font-semibold text-ink mb-1">Firm website</label>
+                <input id="reg-website" type="text" required placeholder="yourfund.in" value={firmWebsite}
+                  onChange={(e) => setFirmWebsite(e.target.value)} className="w-full px-3.5 py-2.5 bg-surface border border-line rounded-lg text-ink placeholder-faint focus:outline-none focus:border-accent" />
+              </div>
+              <div className="grid grid-cols-[minmax(0,1fr)_90px] gap-2">
+                <div>
+                  <label htmlFor="reg-past" className="block text-xs font-semibold text-ink mb-1">A past investment</label>
+                  <input id="reg-past" type="text" required placeholder="Company name" value={pastCompany}
+                    onChange={(e) => setPastCompany(e.target.value)} className="w-full px-3.5 py-2.5 bg-surface border border-line rounded-lg text-ink placeholder-faint focus:outline-none focus:border-accent" />
+                </div>
+                <div>
+                  <label htmlFor="reg-past-year" className="block text-xs font-semibold text-ink mb-1">Year</label>
+                  <input id="reg-past-year" type="text" inputMode="numeric" placeholder="2024" value={pastYear}
+                    onChange={(e) => setPastYear(e.target.value)} className="w-full px-3.5 py-2.5 bg-surface border border-line rounded-lg text-ink placeholder-faint focus:outline-none focus:border-accent" />
+                </div>
+              </div>
+            </fieldset>
           )}
 
           <div>
