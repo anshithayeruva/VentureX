@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import { connection } from "next/server";
 import "./globals.css";
 import { AppShell } from "@/components/AppShell";
 
@@ -8,11 +9,14 @@ export const metadata: Metadata = {
     "Private AI feedback on your pitch, and introductions to investors who fit.",
 };
 
-export default function RootLayout({
+export default async function RootLayout({
   children,
 }: {
   children: React.ReactNode;
 }) {
+  // Render per request: the Content-Security-Policy nonce (set in proxy.ts) is new every time,
+  // and a page built ahead of time could not carry it.
+  await connection();
   return (
     <html
       lang="en"

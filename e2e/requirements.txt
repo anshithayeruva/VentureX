@@ -1,0 +1,2 @@
+# Browser suites (the API suite runs with backend/.venv).
+playwright>=1.45

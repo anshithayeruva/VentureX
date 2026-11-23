@@ -1,0 +1,70 @@
+# Render Blueprint: deploys the VentureX API and web app from this repo.
+# In Render: New > Blueprint > pick this repo. Values marked `sync: false` are asked for once
+# and stored as secrets in Render (never in git). Database and auth stay on Neon.
+#
+# After the first deploy:
+#   1. Copy the web service URL into the API's CORS_ORIGINS and PUBLIC_APP_URL.
+#   2. Copy the API URL (+ /api) into the web service's NEXT_PUBLIC_API_URL and redeploy it
+#      (it is baked into the browser bundle at build time).
+#   3. Add both URLs as trusted domains in Neon Auth.
+services:
+  - type: web
+    name: venturex-api
+    runtime: docker
+    rootDir: backend
+    dockerfilePath: ./Dockerfile
+    plan: starter            # a paid plan is needed for the persistent disk below
+    healthCheckPath: /api/health
+    autoDeploy: true
+    disk:
+      name: uploads          # pitch decks and deal-room files survive restarts and deploys
+      mountPath: /app/private_uploads
+      sizeGB: 5
+    envVars:
+      - key: APP_ENV
+        value: production
+      - key: NEON_DB_TRANSPORT
+        value: https
+      - key: DATABASE_URL
+        sync: false
+      - key: NEON_AUTH_BASE_URL
+        sync: false
+      - key: NEON_AUTH_JWKS_URL
+        sync: false
+      - key: CORS_ORIGINS
+        sync: false          # e.g. https://venturex-web.onrender.com,https://yourdomain.com
+      - key: PUBLIC_APP_URL
+        sync: false          # e.g. https://yourdomain.com
+      - key: AI_PROVIDER
+        value: auto
+      - key: ANTHROPIC_API_KEY
+        sync: false
+      - key: GEMINI_API_KEY
+        sync: false
+      - key: UPSTASH_REDIS_REST_URL
+        sync: false          # optional: shared rate limits when running more than one instance
+      - key: UPSTASH_REDIS_REST_TOKEN
+        sync: false
+      - key: SMTP_HOST
+        sync: false          # optional until email is set up
+      - key: SMTP_USER
+        sync: false
+      - key: SMTP_PASSWORD
+        sync: false
+      - key: SMTP_FROM
+        sync: false
+
+  - type: web
+    name: venturex-web
+    runtime: docker
+    rootDir: frontend
+    dockerfilePath: ./Dockerfile
+    plan: starter
+    autoDeploy: true
+    envVars:
+      - key: NEXT_PUBLIC_API_URL
+        sync: false          # e.g. https://venturex-api.onrender.com/api (build-time)
+      - key: NEON_AUTH_BASE_URL
+        sync: false
+      - key: NEON_AUTH_COOKIE_SECRET
+        generateValue: true  # a long random secret, created by Render

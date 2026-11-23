@@ -4,14 +4,41 @@
     {
       "name": "frontend",
       "runtimeExecutable": "npm",
-      "runtimeArgs": ["--prefix", "frontend", "run", "dev"],
+      "runtimeArgs": [
+        "--prefix",
+        "frontend",
+        "run",
+        "dev"
+      ],
       "port": 3000
     },
     {
       "name": "backend",
       "runtimeExecutable": "backend/.venv/Scripts/uvicorn.exe",
-      "runtimeArgs": ["app.main:app", "--app-dir", "backend", "--port", "8000", "--loop", "asyncio:SelectorEventLoop"],
+      "runtimeArgs": [
+        "app.main:app",
+        "--app-dir",
+        "backend",
+        "--port",
+        "8000",
+        "--loop",
+        "asyncio:SelectorEventLoop"
+      ],
       "port": 8000
+    },
+    {
+      "name": "frontend-prod",
+      "runtimeExecutable": "npm",
+      "runtimeArgs": [
+        "--prefix",
+        "frontend",
+        "run",
+        "start",
+        "--",
+        "-p",
+        "3000"
+      ],
+      "port": 3000
     }
   ]
 }

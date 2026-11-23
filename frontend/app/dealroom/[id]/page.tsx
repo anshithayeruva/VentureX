@@ -123,11 +123,9 @@ function DealRoomContent({ params }: PageProps) {
     // Live updates over WebSocket. Browsers can't send an Authorization header on
     // WebSockets, so the short-lived token goes in the query string; the server
     // verifies it and checks the user belongs to this room.
-    const protocol = window.location.protocol === "https:" ? "wss:" : "ws:";
-    const host = process.env.NEXT_PUBLIC_API_URL
-      ? process.env.NEXT_PUBLIC_API_URL.replace(/^http(s?):\/\//, "")
-      : "localhost:8000";
-    const baseWsUrl = `${protocol}//${host}/api/dealrooms/ws/${roomId}`;
+    // NEXT_PUBLIC_API_URL already ends in /api (e.g. https://api.example.com/api).
+    const apiBase = (process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000/api").replace(/\/+$/, "");
+    const baseWsUrl = `${apiBase.replace(/^http/, "ws")}/dealrooms/ws/${roomId}`;
 
     const connect = async () => {
       const token = await getApiToken();
