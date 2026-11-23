@@ -1,6 +1,7 @@
 import logging
 from datetime import datetime, timezone
 from typing import List, Optional, Dict, Any, Union
+from app.services.team_service import TEAM_PROJECTS, TeamService
 from app.database import postgres as pg
 from app.schemas.project import ProjectCreate, ProjectUpdate
 
@@ -85,8 +86,9 @@ class ProjectService:
         params: List[Any] = []
         if founder_only:
             # A founder's own workspace: their drafts and published projects.
-            where.append("founder_id = %s")
-            params.append(founder_id or "founder-001")
+            # Projects they created plus ones they're a co-founder on.
+            where.append(f"id IN {TEAM_PROJECTS}")
+            params.extend([founder_id or "founder-001"] * 2)
         else:
             # Public / Investor view only shows published projects
             where.append("is_published")

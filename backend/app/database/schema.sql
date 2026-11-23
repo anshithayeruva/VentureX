@@ -407,3 +407,44 @@ CREATE TABLE IF NOT EXISTS company_update_responses (
     created_at   TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 CREATE INDEX IF NOT EXISTS company_update_responses_update_idx ON company_update_responses (update_id, created_at);
+
+-- Teams: co-founders on a startup, partners in an investor firm, and email invitations to join.
+CREATE TABLE IF NOT EXISTS project_members (
+    project_id  BIGINT NOT NULL REFERENCES projects (id) ON DELETE CASCADE,
+    user_id     TEXT NOT NULL,
+    role        TEXT NOT NULL DEFAULT 'cofounder',
+    added_by    TEXT,
+    created_at  TIMESTAMPTZ NOT NULL DEFAULT now(),
+    PRIMARY KEY (project_id, user_id)
+);
+CREATE INDEX IF NOT EXISTS project_members_user_idx ON project_members (user_id);
+CREATE TABLE IF NOT EXISTS firms (
+    id          BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+    name        TEXT NOT NULL,
+    website     TEXT NOT NULL DEFAULT '',
+    created_by  TEXT NOT NULL,
+    created_at  TIMESTAMPTZ NOT NULL DEFAULT now(),
+    updated_at  TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+CREATE TABLE IF NOT EXISTS firm_members (
+    firm_id     BIGINT NOT NULL REFERENCES firms (id) ON DELETE CASCADE,
+    user_id     TEXT NOT NULL UNIQUE,
+    role        TEXT NOT NULL DEFAULT 'partner',
+    created_at  TIMESTAMPTZ NOT NULL DEFAULT now(),
+    PRIMARY KEY (firm_id, user_id)
+);
+CREATE TABLE IF NOT EXISTS team_invitations (
+    id           TEXT PRIMARY KEY,
+    kind         TEXT NOT NULL,
+    project_id   BIGINT REFERENCES projects (id) ON DELETE CASCADE,
+    firm_id      BIGINT REFERENCES firms (id) ON DELETE CASCADE,
+    email        TEXT NOT NULL,
+    role         TEXT NOT NULL,
+    invited_by   TEXT NOT NULL,
+    status       TEXT NOT NULL DEFAULT 'pending',
+    accepted_by  TEXT,
+    created_at   TIMESTAMPTZ NOT NULL DEFAULT now(),
+    expires_at   TIMESTAMPTZ NOT NULL,
+    responded_at TIMESTAMPTZ
+);
+CREATE INDEX IF NOT EXISTS team_invitations_email_idx ON team_invitations (lower(email), status);

@@ -83,8 +83,9 @@ class DealRoomService:
         if user_id:
             clean_uid = str(user_id)
             if role == "FOUNDER":
-                where = " WHERE founder_id = %s"
-                params = [clean_uid]
+                from app.services.team_service import TEAM_PROJECTS
+                where = f" WHERE founder_id = %s OR project_id IN {TEAM_PROJECTS}"
+                params = [clean_uid, clean_uid, clean_uid]
             elif role == "INVESTOR":
                 where = " WHERE investor_id = %s"
                 params = [clean_uid]
@@ -105,8 +106,10 @@ class DealRoomService:
 
         # Verify access if user_id provided
         if user_id and str(user_id) not in [room.get("founder_id"), room.get("investor_id"), "admin"]:
-            logger.warning("Unauthorized access attempt to deal room %s by user %s", room_id, user_id)
-            return None
+            from app.services.team_service import TeamService
+            if not (room.get("project_id") and await TeamService.is_member(str(user_id), int(room["project_id"]))):
+                logger.warning("Unauthorized access attempt to deal room %s by user %s", room_id, user_id)
+                return None
 
         return room
 
@@ -287,15 +290,25 @@ class DealRoomService:
         recipient_id = room["investor_id"] if message_in.sender_role == "FOUNDER" else room["founder_id"]
         recipient_role = "INVESTOR" if message_in.sender_role == "FOUNDER" else "FOUNDER"
         from app.services.notification_service import NotificationService
-        await NotificationService.create_notification(
-            target_role=recipient_role,
-            user_id=recipient_id,
-            title=f"New Message from {message_in.sender_name}",
-            desc=f"{message_in.sender_name} posted in Deal Room for '{room.get('project_title')}': {message_in.content[:80]}",
-            badge="Deal Room",
-            badge_variant="primary",
-            link=f"/dealroom/{room_id}",
-        )
+        recipients = [recipient_id]
+        if recipient_role == "FOUNDER" and room.get("project_id"):
+            # Every founder on the startup's team hears about investor messages.
+            from app.services.team_service import TeamService
+            recipients = await TeamService.team_user_ids(int(room["project_id"])) or [recipient_id]
+        elif recipient_role == "INVESTOR":
+            recipients = [recipient_id]
+        for rid in recipients:
+            if rid == message_in.sender_id:
+                continue
+            await NotificationService.create_notification(
+                target_role=recipient_role,
+                user_id=rid,
+                title=f"New Message from {message_in.sender_name}",
+                desc=f"{message_in.sender_name} posted in Deal Room for '{room.get('project_title')}': {message_in.content[:80]}",
+                badge="Deal Room",
+                badge_variant="primary",
+                link=f"/dealroom/{room_id}",
+            )
 
         # Dispatch email alert to counterparty
         try:

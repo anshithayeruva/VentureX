@@ -68,6 +68,8 @@ class ProjectUpdate(BaseModel):
 class ProjectResponse(ProjectBase):
     id: Union[int, str]
     company_verified: Optional[bool] = None
+    # Set for the project's own team: whether you created it (co-founders are not owners).
+    is_owner: Optional[bool] = None
     founder_id: Optional[Union[int, str]] = None
     is_published: bool = False
     readiness_score: Optional[float] = None

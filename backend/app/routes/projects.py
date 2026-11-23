@@ -1,6 +1,7 @@
 import logging
 from typing import List, Optional
 from fastapi import APIRouter, Depends, File, Form, HTTPException, status, Query, UploadFile
+from app.services.team_service import TEAM_PROJECTS, TeamService
 from app.services.verification_service import VerificationService
 from app.core.auth import CurrentUser, get_current_user, require_founder, require_user
 from app.core.rate_limit import rate_limit
@@ -32,7 +33,7 @@ async def _owned_project(project_id: str, user: CurrentUser):
             status_code=status.HTTP_404_NOT_FOUND,
             detail=f"Project with ID '{project_id}' not found",
         )
-    if project["founder_id"] != user.id:
+    if not await TeamService.can_work_on(user.id, project):
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="You do not own this project")
     return project
 
@@ -42,7 +43,7 @@ async def _readable_project(project_id: str, user: Optional[CurrentUser]):
     project = await ProjectService.get_by_id(project_id)
     if not project or (
         not project["is_published"]
-        and (user is None or project["founder_id"] != user.id)
+        and not await TeamService.can_work_on(user.id if user else None, project)
     ):
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
@@ -59,9 +60,9 @@ _PRIVATE_FIELDS = ("readiness_score", "ai_readiness_breakdown", "ai_feedback_sum
 _LINK_FIELDS = ("website", "pitch_deck_url", "github_url", "demo_url")
 
 
-def _public_view(project: dict, user: Optional[CurrentUser], limited: bool = False) -> dict:
-    """A project as someone other than its founder may see it (limited: an unverified investor)."""
-    if user is not None and project.get("founder_id") == user.id:
+def _public_view(project: dict, user: Optional[CurrentUser], limited: bool = False, team: bool = False) -> dict:
+    """A project as someone other than its founders may see it (limited: an unverified investor)."""
+    if team or (user is not None and project.get("founder_id") == user.id):
         return project
     hidden = {k: None for k in _PRIVATE_FIELDS}
     if limited:
@@ -80,7 +81,7 @@ async def _with_badges(projects: List[dict]) -> List[dict]:
 
 
 async def _documents_allowed(user: CurrentUser, project: dict) -> None:
-    if project.get("founder_id") != user.id and await _limited(user):
+    if not await TeamService.can_work_on(user.id, project) and await _limited(user):
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail={
             "code": "verification_required",
             "message": "Founders' documents open once your investor account is verified.",
@@ -90,7 +91,7 @@ async def _documents_allowed(user: CurrentUser, project: dict) -> None:
 async def _private_report_project(project_id: str, user: Optional[CurrentUser]):
     """Readiness reports are private to the project's founder (404 for everyone else)."""
     project = await ProjectService.get_by_id(project_id)
-    if not project or user is None or project["founder_id"] != user.id:
+    if not project or user is None or not await TeamService.can_work_on(user.id, project):
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail=f"Project with ID '{project_id}' not found",
@@ -132,14 +133,25 @@ async def list_projects(
         limit=limit,
     )
     limited = await _limited(user)
-    return [_public_view(p, user, limited) for p in await _with_badges(projects)]
+    mine = set(await TeamService.project_ids(user.id)) if user and user.is_founder else set()
+    out = []
+    for p in await _with_badges(projects):
+        view = _public_view(p, user, limited, team=p.get("id") in mine)
+        if p.get("id") in mine:
+            view["is_owner"] = p.get("founder_id") == user.id
+        out.append(view)
+    return out
 
 
 @router.get("/{project_id}", response_model=ProjectResponse)
 async def get_project(project_id: str, user: Optional[CurrentUser] = Depends(get_current_user)):
     """Retrieve details of a specific startup project by ID."""
     project = (await _with_badges([await _readable_project(project_id, user)]))[0]
-    return _public_view(project, user, await _limited(user))
+    team = await TeamService.can_work_on(user.id if user else None, project)
+    view = _public_view(project, user, await _limited(user), team=team)
+    if team:
+        view["is_owner"] = project.get("founder_id") == user.id
+    return view
 
 
 @router.put("/{project_id}", response_model=ProjectResponse)

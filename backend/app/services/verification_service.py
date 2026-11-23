@@ -198,7 +198,8 @@ class VerificationService:
     @staticmethod
     async def _owned(founder_id: str, project_id: int) -> Dict[str, Any]:
         project = await pg.fetch_one("SELECT id, founder_id, title, website FROM projects WHERE id = %s", [project_id])
-        if not project or project["founder_id"] != founder_id:
+        from app.services.team_service import TeamService
+        if not await TeamService.can_work_on(founder_id, project):
             raise VerificationError("Project not found.", 404, "not_found")
         return project
 

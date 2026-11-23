@@ -132,6 +132,8 @@ class DiscoverItem(BaseModel):
     interest_status: Optional[str] = None
     interest_initiated_by: Optional[str] = None
     company_verified: bool = False
+    # Partners in your firm already pursuing this startup: [{name, status, initiated_by}]
+    partners: List[Dict[str, Any]] = Field(default_factory=list)
     room_id: Optional[str] = None
     deal_stage: Optional[str] = None
 

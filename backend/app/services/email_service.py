@@ -131,6 +131,25 @@ class EmailService:
         return cls._send_email_raw(founder_email, subject, html, body_text)
 
     @classmethod
+    def send_team_invite_email(cls, to_email: str, inviter: str, kind: str, team_name: str, invite_id: str,
+                               days: int) -> Dict[str, Any]:
+        """An invitation to join a startup as a co-founder, or an investor firm as a partner."""
+        link = f"{_app_url()}/invite/{invite_id}"
+        what = f"join {team_name} on VentureX as a co-founder" if kind == "project" else f"join {team_name} on VentureX"
+        subject = f"{inviter} invited you to {what}"[:150]
+        body_text = (f"{inviter} invited you to {what}.\n\nAccept it here (sign in or create an account with this "
+                     f"email address): {link}\n\nThe invitation expires in {days} days.\n")
+        html = f"""
+        <div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 24px; border: 1px solid #E7E0D3; border-radius: 12px; background: #FFFDF9;">
+          <h2 style="color: #111C32; margin: 0 0 12px; font-family: Georgia, serif; font-weight: 500;">You're invited to {team_name}</h2>
+          <p style="color: #33405A; font-size: 14px; line-height: 1.6;">{inviter} invited you to {what}. Sign in or create an account with this email address to accept.</p>
+          <a href="{link}" style="display: inline-block; margin-top: 12px; background: #20477F; color: #FFFFFF; padding: 10px 20px; border-radius: 6px; text-decoration: none; font-size: 13px; font-weight: 600;">View invitation</a>
+          <p style="color: #6B6457; font-size: 12px; margin-top: 16px;">The invitation expires in {days} days.</p>
+        </div>
+        """
+        return cls._send_email_raw(to_email, subject, html, body_text)
+
+    @classmethod
     def send_company_update_email(cls, to_email: str, investor_name: str, project_title: str, period: str,
                                   teaser: str, update_id: int) -> Dict[str, Any]:
         """A portfolio company sent its periodic update."""

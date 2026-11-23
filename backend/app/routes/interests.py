@@ -1,6 +1,7 @@
 import logging
 from typing import List, Optional
 from fastapi import APIRouter, Depends, HTTPException, status, Query
+from app.services.team_service import TEAM_PROJECTS, TeamService
 from app.core.auth import CurrentUser, get_current_user, require_founder, require_investor, require_user
 from app.core.rate_limit import rate_limit
 from app.schemas.dealroom import DealRoomCreateInput
@@ -14,6 +15,13 @@ from app.schemas.interest import (
 from app.services.founder_outreach_service import FounderOutreachService, OutreachError
 from app.services.interest_service import InterestService
 from app.services.verification_service import VerificationService
+
+
+async def _on_team(user: CurrentUser, interest: dict) -> bool:
+    """The startup's owner or a co-founder."""
+    if interest.get("founder_id") == user.id:
+        return True
+    return user.is_founder and await TeamService.is_member(user.id, interest.get("project_id"))
 
 
 async def _require_verified_investor(user: CurrentUser) -> None:
@@ -95,7 +103,7 @@ async def list_interests(
 async def get_interest(interest_id: str, user: CurrentUser = Depends(require_user)):
     """Retrieve details and unlocked deal room for one of your introduction requests."""
     interest = await InterestService.get_by_id(interest_id)
-    if not interest or user.id not in (interest.get("founder_id"), interest.get("investor_id")):
+    if not interest or not (user.id == interest.get("investor_id") or await _on_team(user, interest)):
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail=f"Interest record '{interest_id}' not found",
@@ -113,8 +121,8 @@ async def update_interest_status(
     current = await InterestService.get_by_id(interest_id)
     if not current:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"Interest record '{interest_id}' not found")
-    if current.get("founder_id") != user.id:
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Only the project's founder can respond")
+    if not await _on_team(user, current):
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Only the project's founders can respond")
     if current.get("initiated_by") == "founder":
         raise HTTPException(status_code=status.HTTP_409_CONFLICT,
                             detail="You sent this request; the investor replies to it.")
@@ -187,8 +195,8 @@ async def withdraw_interest(interest_id: str, user: CurrentUser = Depends(requir
     current = await InterestService.get_by_id(interest_id)
     if current:
         by_founder = current.get("initiated_by") == "founder"
-        sender = current.get("founder_id") if by_founder else current.get("investor_id")
-        if sender != user.id:
+        allowed = await _on_team(user, current) if by_founder else current.get("investor_id") == user.id
+        if not allowed:
             raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Only whoever sent the request can withdraw it")
         if by_founder and current.get("status") != "pending":
             raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Only a request still waiting for a reply can be withdrawn")

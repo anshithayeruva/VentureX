@@ -109,6 +109,7 @@ export interface DiscoverItem {
   interest_status?: "pending" | "accepted" | "declined" | "expired" | null;
   interest_initiated_by?: "investor" | "founder" | null;
   company_verified?: boolean;
+  partners?: PartnerActivity[];
   room_id?: string | null;
   deal_stage?: string | null;
 }
@@ -443,6 +444,7 @@ export interface PublicInvestorProfile {
   verified: boolean;
   connected: boolean;
   stats: { enough_data: boolean; resolved_requests: number; reply_rate: number | null; median_reply_days: number | null };
+  partners?: { investor_id: string; name: string; title: string }[];
   match_score: number | null;
   reasons: FitReason[];
   excluded_reason: string | null;
@@ -622,4 +624,82 @@ export interface InvestorUpdatesPage {
   page: number;
   page_size: number;
   unread: number;
+}
+
+
+/* ---------- teams ---------- */
+
+export interface PendingInvite {
+  id: string;
+  email: string;
+  role: string;
+  created_at: string;
+  expires_at: string;
+}
+
+export interface ProjectTeamMember {
+  user_id: string;
+  role: "owner" | "cofounder";
+  name: string;
+  email?: string | null;
+  created_at?: string;
+}
+
+export interface ProjectTeam {
+  project: { id: number; title: string };
+  members: ProjectTeamMember[];
+  invitations: PendingInvite[];
+  can_manage: boolean;
+  you: string;
+}
+
+export interface FirmMember {
+  user_id: string;
+  role: "admin" | "partner";
+  name: string;
+  email?: string | null;
+  title?: string | null;
+  verification_status?: string;
+  created_at?: string;
+}
+
+export interface MyFirm {
+  firm: { id: number; name: string; website: string; created_at?: string } | null;
+  members: FirmMember[];
+  invitations: PendingInvite[];
+  is_admin: boolean;
+  you?: string;
+}
+
+export interface FirmPipelineRow {
+  project_id: number;
+  title: string;
+  industry?: string | null;
+  stage?: string | null;
+  member_id: string;
+  member_name: string;
+  intro_status: "pending" | "accepted" | "declined" | "expired";
+  initiated_by: "investor" | "founder";
+  updated_at: string;
+  deal_stage?: string | null;
+  invested: boolean;
+}
+
+export interface PartnerActivity {
+  name: string;
+  status: "pending" | "accepted";
+  initiated_by: "investor" | "founder";
+}
+
+export interface Invitation {
+  id: string;
+  kind: "project" | "firm";
+  role: string;
+  status: "pending" | "accepted" | "declined" | "revoked";
+  target_name: string;
+  invited_by?: string | null;
+  expires_at: string;
+  email: string;
+  expired: boolean;
+  for_you?: boolean;
 }

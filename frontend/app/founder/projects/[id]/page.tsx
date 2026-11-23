@@ -5,6 +5,7 @@ import Link from "next/link";
 import { ArrowLeft, ExternalLink, Eye, FileQuestion, Lock, Pencil } from "lucide-react";
 import { PortalLayout } from "@/components/PortalLayout";
 import { CompanyVerificationCard } from "@/components/CompanyVerificationCard";
+import { ProjectTeamCard } from "@/components/teams";
 import { ProjectIntelligence } from "@/components/ProjectIntelligence";
 import { VerifiedBadge } from "@/components/verification";
 import { Button, ButtonLink, Card, EmptyState, LoadingRows, Stat, Tag } from "@/components/ui";
@@ -101,6 +102,7 @@ export default function FounderProjectPage({ params }: { params: Promise<{ id: s
                   </Tag>
                 )}
                 {project.company_verified && <VerifiedBadge kind="company" />}
+                {project.is_owner === false && <Tag>You&apos;re a co-founder</Tag>}
               </div>
               {project.tagline && <p className="mt-1 text-muted">{project.tagline}</p>}
               <p className="mt-1 text-sm text-muted">
@@ -132,6 +134,8 @@ export default function FounderProjectPage({ params }: { params: Promise<{ id: s
             hint={!published ? "Publish to get matched" : "Investors whose criteria fit"}
           />
         </div>
+
+        <ProjectTeamCard projectId={project.id} />
 
         <CompanyVerificationCard
           projectId={project.id}

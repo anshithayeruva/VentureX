@@ -9,7 +9,7 @@ import { Button, ButtonLink, Card, EmptyState, LoadingRows, Stat, Tag, inputClas
 import { VerifiedBadge, useInvestorCanContact } from "@/components/verification";
 import { api } from "@/lib/api";
 import { formatMoney } from "@/lib/format";
-import { MatchItem, PASS_REASON_LABEL, PassReason, Project, ProjectInterest } from "@/types";
+import { MatchItem, PASS_REASON_LABEL, PartnerActivity, PassReason, Project, ProjectInterest } from "@/types";
 
 export default function InvestorProjectPage({ params }: { params: Promise<{ id: string }> }) {
   const { id: projectId } = use(params);
@@ -26,6 +26,14 @@ export default function InvestorProjectPage({ params }: { params: Promise<{ id: 
   const [passing, setPassing] = useState(false);
   const [passReason, setPassReason] = useState<PassReason | "">("");
   const canContact = useInvestorCanContact() !== false;
+  const [partners, setPartners] = useState<PartnerActivity[]>([]);
+  useEffect(() => {
+    let active = true;
+    api.getPartnerActivity(Number(projectId)).then((p) => active && setPartners(p)).catch(() => undefined);
+    return () => {
+      active = false;
+    };
+  }, [projectId]);
 
   useEffect(() => {
     let mounted = true;
@@ -216,6 +224,12 @@ export default function InvestorProjectPage({ params }: { params: Promise<{ id: 
           <div className="space-y-6">
             <Card className="space-y-4">
               <h2 className="text-lg font-medium text-ink">Connect with the founder</h2>
+              {partners.length > 0 && (
+                <p className="rounded-lg bg-warning-soft px-3 py-2 text-sm text-warning">
+                  {partners.map((p) => `${p.name} (${p.status === "accepted" ? "connected" : "intro pending"})`).join(", ")} from your firm
+                  {partners.length === 1 ? " is" : " are"} already talking to this founder.
+                </p>
+              )}
               {!interest ? (
                 <>
                   <p className="text-sm text-muted">

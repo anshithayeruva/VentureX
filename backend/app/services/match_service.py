@@ -691,8 +691,9 @@ class MatchService:
             where.append("investor_id = %s")
             params.append(investor_id)
         if founder_id:
-            where.append("project_id IN (SELECT id FROM projects WHERE founder_id = %s)")
-            params.append(founder_id)
+            from app.services.team_service import TEAM_PROJECTS
+            where.append(f"project_id IN {TEAM_PROJECTS}")
+            params.extend([founder_id, founder_id])
 
         if search and search.strip():
             pattern = f"%{pg.escape_like(search.strip())}%"

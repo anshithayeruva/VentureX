@@ -118,15 +118,18 @@ class InterestService:
         # Create instant notification for founder
         try:
             from app.services.notification_service import NotificationService
-            await NotificationService.create_notification(
-                target_role="FOUNDER",
-                user_id=founder_id,
-                title=f"Intro Request: {investor_name}",
-                desc=f"{investor_name} ({investor_firm}) requested an introduction for '{project_title}'.",
-                badge="Intro Request",
-                badge_variant="primary",
-                link="/founder/dashboard?tab=intros",
-            )
+            from app.services.team_service import TeamService
+            # Everyone on the startup's team (owner and co-founders) hears about it.
+            for member_id in await TeamService.team_user_ids(canonical_project_id) or [founder_id]:
+                await NotificationService.create_notification(
+                    target_role="FOUNDER",
+                    user_id=member_id,
+                    title=f"Intro Request: {investor_name}",
+                    desc=f"{investor_name} ({investor_firm}) requested an introduction for '{project_title}'.",
+                    badge="Intro Request",
+                    badge_variant="primary",
+                    link="/founder/dashboard?tab=intros",
+                )
         except Exception as e:
             logger.warning("Failed to dispatch founder intro notification: %s", e)
 
@@ -286,8 +289,10 @@ class InterestService:
             where.append("investor_id = %s")
             params.append(investor_id)
         if founder_id:
-            where.append("founder_id = %s")
-            params.append(founder_id)
+            # Intros for every startup the founder works on (as owner or co-founder).
+            from app.services.team_service import TEAM_PROJECTS
+            where.append(f"project_id IN {TEAM_PROJECTS}")
+            params.extend([founder_id, founder_id])
         if status:
             where.append("status = %s")
             params.append(status.lower().strip())

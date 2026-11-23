@@ -64,14 +64,17 @@ class UpdatesService:
     @staticmethod
     async def _owned_project(founder_id: str, project_id: int) -> Dict[str, Any]:
         p = await pg.fetch_one("SELECT id, founder_id, title FROM projects WHERE id = %s", [project_id])
-        if not p or p["founder_id"] != founder_id:
+        from app.services.team_service import TeamService
+        if not await TeamService.can_work_on(founder_id, p):
             raise UpdateError("Project not found.", 404, "not_found")
         return p
 
     @staticmethod
     async def _owned_update(founder_id: str, update_id: int) -> Dict[str, Any]:
         u = await pg.fetch_one("SELECT * FROM company_updates WHERE id = %s", [update_id])
-        if not u or u["founder_id"] != founder_id:
+        from app.services.team_service import TeamService
+        if not u or not (u["founder_id"] == founder_id or await TeamService.can_work_on(
+                founder_id, await pg.fetch_one("SELECT id, founder_id FROM projects WHERE id = %s", [u["project_id"]]))):
             raise UpdateError("Update not found.", 404, "not_found")
         return u
 
