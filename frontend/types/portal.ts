@@ -106,7 +106,8 @@ export interface DiscoverItem {
   reasons: MatchReason[];
   saved: boolean;
   interest_id?: string | null;
-  interest_status?: "pending" | "accepted" | "declined" | null;
+  interest_status?: "pending" | "accepted" | "declined" | "expired" | null;
+  interest_initiated_by?: "investor" | "founder" | null;
   room_id?: string | null;
   deal_stage?: string | null;
 }
@@ -140,7 +141,7 @@ export interface DiscoverQuery {
   page_size?: number;
 }
 
-export type DealFlowStatus = "saved" | "requested" | "active" | "closed" | "declined" | "passed";
+export type DealFlowStatus = "saved" | "inbound" | "requested" | "active" | "closed" | "declined" | "passed" | "expired";
 
 export interface DealFlowItem {
   project_id: number;
@@ -152,7 +153,11 @@ export interface DealFlowItem {
   status: DealFlowStatus;
   saved: boolean;
   interest_id?: string | null;
-  interest_status?: "pending" | "accepted" | "declined" | null;
+  interest_status?: "pending" | "accepted" | "declined" | "expired" | null;
+  initiated_by?: "investor" | "founder" | null;
+  pass_reason?: PassReason | null;
+  /** A founder's note when they asked to connect. */
+  message?: string | null;
   response_note?: string | null;
   founder_email?: string | null;
   requested_at?: string | null;
@@ -312,4 +317,132 @@ export interface PortfolioImportResult {
   valid_rows: number;
   errors: { row: number; message: string }[];
   imported: number;
+}
+
+
+/* ---------- founder outreach ---------- */
+
+export type PassReason = "too_early" | "outside_focus" | "market_size" | "team" | "traction" | "timing" | "other";
+
+export const PASS_REASON_LABEL: Record<PassReason, string> = {
+  too_early: "Too early for us",
+  outside_focus: "Outside our focus",
+  market_size: "Market size",
+  team: "Team",
+  traction: "Not enough traction yet",
+  timing: "Not investing right now",
+  other: "Other",
+};
+
+export interface PortfolioEntry {
+  company: string;
+  stage?: string | null;
+  year?: number | null;
+  url?: string | null;
+}
+
+export interface FitReason {
+  category: string;
+  explanation: string;
+  weight?: number;
+  score?: number;
+}
+
+export interface OutreachProject {
+  id: number;
+  title: string;
+  is_published: boolean;
+  readiness_score: number | null;
+  stage?: string | null;
+  industry?: string | null;
+  tagline?: string | null;
+  funding_required?: number | null;
+  /** One-liner, amount raising and traction, for the request draft. */
+  summary: string;
+}
+
+export interface OutreachRelationship {
+  interest_id: string;
+  status: "pending" | "accepted" | "declined" | "expired";
+  initiated_by: "investor" | "founder";
+  pass_reason?: PassReason | null;
+  pass_reason_label?: string | null;
+  response_note?: string | null;
+  room_id?: string | null;
+  requested_at?: string | null;
+}
+
+export interface DirectoryInvestor {
+  investor_id: string;
+  name: string;
+  firm: string;
+  title: string;
+  location: string;
+  stages: string[];
+  sectors: string[];
+  min_check: number | null;
+  max_check: number | null;
+  role: "lead" | "co_invest" | "either";
+  is_global: boolean;
+  regions: string[];
+  countries: string[];
+  criteria_set: boolean;
+  match_score: number | null;
+  reasons: FitReason[];
+  excluded_reason: string | null;
+  relationship: OutreachRelationship | null;
+}
+
+export interface InvestorDirectory {
+  items: DirectoryInvestor[];
+  total: number;
+  page: number;
+  page_size: number;
+  project: OutreachProject | null;
+  projects: OutreachProject[];
+  facets: { sectors: string[]; stages: string[] };
+  min_readiness: number;
+}
+
+export interface DirectoryQuery {
+  project_id?: number;
+  q?: string;
+  stage?: string;
+  sector?: string;
+  min_check?: number;
+  max_check?: number;
+  location?: string;
+  role?: "lead" | "co_invest";
+  sort?: "fit" | "name";
+  page?: number;
+  page_size?: number;
+}
+
+export interface IntroBlocker {
+  code: string;
+  message: string;
+}
+
+export interface PublicInvestorProfile {
+  investor_id: string;
+  name: string;
+  firm: string;
+  title: string;
+  location: string;
+  bio: string;
+  value_add: string;
+  portfolio: PortfolioEntry[];
+  thesis: Partial<InvestmentThesis>;
+  criteria_set: boolean;
+  email: string | null;
+  connected: boolean;
+  stats: { enough_data: boolean; resolved_requests: number; reply_rate: number | null; median_reply_days: number | null };
+  match_score: number | null;
+  reasons: FitReason[];
+  excluded_reason: string | null;
+  relationship: OutreachRelationship | null;
+  eligibility: { can_request: boolean; blockers: IntroBlocker[]; sent_today: number; daily_limit: number };
+  project: OutreachProject | null;
+  projects: OutreachProject[];
+  min_readiness: number;
 }

@@ -322,3 +322,14 @@ ALTER TABLE projects ADD COLUMN IF NOT EXISTS repeat_founder BOOLEAN;
 ALTER TABLE projects ADD COLUMN IF NOT EXISTS domain_expertise BOOLEAN;
 ALTER TABLE projects ADD COLUMN IF NOT EXISTS full_time_team BOOLEAN;
 ALTER TABLE projects ADD COLUMN IF NOT EXISTS ip_protected BOOLEAN;
+
+-- Founder-initiated intro requests and investor responses.
+ALTER TABLE project_interests ADD COLUMN IF NOT EXISTS initiated_by TEXT NOT NULL DEFAULT 'investor';
+ALTER TABLE project_interests ADD COLUMN IF NOT EXISTS pass_reason TEXT;
+ALTER TABLE project_interests ADD COLUMN IF NOT EXISTS responded_at TIMESTAMPTZ;
+CREATE INDEX IF NOT EXISTS project_interests_inbound_idx ON project_interests (investor_id, initiated_by, status);
+
+-- What founders see on an investor's public profile in the founder directory.
+ALTER TABLE investor_profiles ADD COLUMN IF NOT EXISTS value_add TEXT NOT NULL DEFAULT '';
+ALTER TABLE investor_profiles ADD COLUMN IF NOT EXISTS portfolio JSONB NOT NULL DEFAULT '[]';
+ALTER TABLE investor_profiles ADD COLUMN IF NOT EXISTS listed_for_founders BOOLEAN NOT NULL DEFAULT TRUE;

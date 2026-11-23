@@ -47,6 +47,11 @@ class Settings(BaseSettings):
     # Public address of the web app, used for links in emails.
     PUBLIC_APP_URL: str = "http://localhost:3000"
 
+    # Founder-initiated intro requests: the project's readiness score must reach this,
+    # and each founder can send at most FOUNDER_INTRO_DAILY_LIMIT per day.
+    FOUNDER_INTRO_MIN_READINESS: float = 50.0
+    FOUNDER_INTRO_DAILY_LIMIT: int = 5
+
     # Shared rate limiting across server instances (Upstash Redis REST). Unset = per-process memory.
     UPSTASH_REDIS_REST_URL: Optional[str] = None
     UPSTASH_REDIS_REST_TOKEN: Optional[str] = None

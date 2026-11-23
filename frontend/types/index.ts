@@ -1,4 +1,4 @@
-import type { InvestmentThesis } from "./portal";
+import type { InvestmentThesis, PassReason } from "./portal";
 
 export * from "./portal";
 
@@ -230,7 +230,12 @@ export interface ProjectInterest {
   founder_id?: string | number;
   founder_name?: string;
   founder_email?: string;
-  status: "pending" | "accepted" | "declined";
+  /** expired = a founder's request the investor didn't answer within 14 days ("No response"). */
+  status: "pending" | "accepted" | "declined" | "expired";
+  /** Who asked to connect. */
+  initiated_by?: "investor" | "founder";
+  pass_reason?: PassReason | null;
+  responded_at?: string | null;
   message?: string;
   response_note?: string;
   deal_room?: DealRoomDetails;

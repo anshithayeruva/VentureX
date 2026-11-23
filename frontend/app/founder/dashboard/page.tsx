@@ -1,8 +1,8 @@
 "use client";
 
-import React, { Suspense, useEffect, useMemo, useState } from "react";
+import React, { Suspense, useEffect, useState } from "react";
 import Link from "next/link";
-import { useSearchParams } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import {
   ArrowRight,
   Bell,
@@ -15,7 +15,6 @@ import {
   MessagesSquare,
   Plus,
   Rocket,
-  Search,
   Sparkles,
   Users,
 } from "lucide-react";
@@ -44,7 +43,7 @@ import {
 } from "@/components/ui";
 import { api } from "@/lib/api";
 import { formatMoney, timeAgo } from "@/lib/format";
-import { MatchItem, NotificationItem, Project, ProjectInterest } from "@/types";
+import { MatchItem, NotificationItem, PASS_REASON_LABEL, Project, ProjectInterest } from "@/types";
 
 type Tab = "overview" | "projects" | "readiness" | "investors" | "intros" | "notifications" | "profile" | "settings";
 
@@ -61,7 +60,7 @@ const TAB_COPY: Record<Tab, { title: string; description: string }> = {
   },
   intros: {
     title: "Intro requests",
-    description: "Investors asking to connect. Accepting opens a private deal room with them.",
+    description: "Investors asking to connect with you, and the requests you've sent. Every yes opens a private deal room.",
   },
   notifications: { title: "Notifications", description: "Recent activity on your projects." },
   profile: { title: "Profile", description: "What investors see about you once you accept an intro." },
@@ -71,6 +70,7 @@ const TAB_COPY: Record<Tab, { title: string; description: string }> = {
 const TABS = Object.keys(TAB_COPY) as Tab[];
 
 function FounderDashboardContent() {
+  const router = useRouter();
   const searchParams = useSearchParams();
   const tabParam = searchParams.get("tab") as Tab | null;
   const activeTab: Tab = tabParam && TABS.includes(tabParam) ? tabParam : "overview";
@@ -82,9 +82,8 @@ function FounderDashboardContent() {
   const [notifications, setNotifications] = useState<NotificationItem[]>([]);
 
   const [statusProcessing, setStatusProcessing] = useState<string | null>(null);
-  const [introFilter, setIntroFilter] = useState<"all" | "pending" | "accepted" | "declined">("all");
+  const [introFilter, setIntroFilter] = useState<"received" | "sent">("received");
   const [responseNotes, setResponseNotes] = useState<Record<string, string>>({});
-  const [investorSearch, setInvestorSearch] = useState("");
   const [readinessProjectId, setReadinessProjectId] = useState<number | null>(null);
   const [exporting, setExporting] = useState(false);
 
@@ -97,6 +96,10 @@ function FounderDashboardContent() {
     weeklyDigest: false,
   });
   const [settingsSaved, setSettingsSaved] = useState(false);
+
+  useEffect(() => {
+    if (activeTab === "investors") router.replace("/founder/investors");
+  }, [activeTab, router]);
 
   useEffect(() => {
     let mounted = true;
@@ -134,23 +137,26 @@ function FounderDashboardContent() {
     };
   }, []);
 
-  const pending = interests.filter((i) => i.status === "pending");
+  const received = interests.filter((i) => i.initiated_by !== "founder");
+  const sent = interests.filter((i) => i.initiated_by === "founder");
+  const pending = received.filter((i) => i.status === "pending");
   const unreadCount = notifications.filter((n) => !n.read).length;
   const scored = projects.filter((p) => typeof p.readiness_score === "number");
   const bestReadiness = scored.length ? Math.max(...scored.map((p) => p.readiness_score as number)) : null;
   const readinessProject = projects.find((p) => p.id === readinessProjectId) ?? projects[0] ?? null;
 
-  const filteredMatches = useMemo(() => {
-    const q = investorSearch.trim().toLowerCase();
-    if (!q) return matches;
-    return matches.filter((m) =>
-      [m.investor_name, m.investor_firm, m.project_title].some((v) => v?.toLowerCase().includes(q))
-    );
-  }, [matches, investorSearch]);
-
-  const visibleIntros = interests.filter((i) => introFilter === "all" || i.status === introFilter);
+  const visibleIntros = introFilter === "sent" ? sent : received;
 
   /* ---------- actions ---------- */
+
+  const withdrawIntro = async (interestId: string | number) => {
+    setStatusProcessing(String(interestId));
+    try {
+      if (await api.withdrawInterest(interestId)) setInterests((prev) => prev.filter((i) => String(i.id) !== String(interestId)));
+    } finally {
+      setStatusProcessing(null);
+    }
+  };
 
   const updateIntro = async (interestId: string | number, status: "accepted" | "declined") => {
     setStatusProcessing(String(interestId));
@@ -233,6 +239,61 @@ function FounderDashboardContent() {
       }
     />
   );
+
+  const sentRow = (item: ProjectInterest) => {
+    const busy = statusProcessing === String(item.id);
+    return (
+      <Card key={item.id} className="space-y-3">
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+          <div className="flex min-w-0 items-start gap-3">
+            <Avatar name={item.investor_name} />
+            <div className="min-w-0">
+              <Link href={`/founder/investors/${encodeURIComponent(String(item.investor_id))}?project=${item.project_id}`} className="text-sm font-medium text-ink hover:underline">
+                {item.investor_name || "Investor"}
+                {item.investor_firm && <span className="font-normal text-muted"> · {item.investor_firm}</span>}
+              </Link>
+              <div className="text-sm text-muted">
+                You asked about <span className="text-ink-2">{item.project_title || "your project"}</span>
+                {item.created_at && <> · {timeAgo(item.created_at)}</>}
+              </div>
+            </div>
+          </div>
+          <SentStatus item={item} />
+        </div>
+        {item.status === "declined" && (
+          <div className="rounded-lg bg-canvas px-3.5 py-2.5 text-sm text-ink-2">
+            <span className="font-medium">Reason:</span> {item.pass_reason ? PASS_REASON_LABEL[item.pass_reason] : "Not given"}
+            {item.response_note && <span className="text-muted"> · “{item.response_note}”</span>}
+          </div>
+        )}
+        {item.status === "expired" && (
+          <p className="text-sm text-muted">No reply within 14 days. You can ask again 30 days after it expired.</p>
+        )}
+        {item.status === "accepted" && (
+          <div className="flex flex-wrap items-center gap-2">
+            <ButtonLink href={item.deal_room?.room_id ? `/dealroom/${item.deal_room.room_id}` : "/dealroom?role=FOUNDER"}>
+              <MessagesSquare className="w-4 h-4" />
+              Open deal room
+            </ButtonLink>
+            {item.investor_email && (
+              <a href={`mailto:${item.investor_email}`} className={buttonClass("secondary")}>
+                <Mail className="w-4 h-4" />
+                {item.investor_email}
+              </a>
+            )}
+          </div>
+        )}
+        {item.status === "pending" && (
+          <div className="flex items-center justify-between gap-3 text-sm text-muted">
+            <span className="line-clamp-1">“{item.message}”</span>
+            <Button variant="ghost" disabled={busy} onClick={() => withdrawIntro(item.id)}>
+              {busy ? "Withdrawing…" : "Withdraw"}
+            </Button>
+          </div>
+        )}
+      </Card>
+    );
+  };
 
   const introRow = (item: ProjectInterest, compact = false) => {
     const busy = statusProcessing === String(item.id);
@@ -427,7 +488,15 @@ function FounderDashboardContent() {
           </Section>
 
           {matches.length > 0 && (
-            <Section title="Top investor matches" action={<TabLink tab="investors">See all</TabLink>}>
+            <Section
+              title="Top investor matches"
+              action={
+                <Link href="/founder/investors" className="inline-flex items-center gap-1 font-medium text-accent hover:underline">
+                  Find investors
+                  <ArrowRight className="w-3.5 h-3.5" />
+                </Link>
+              }
+            >
               <div className="grid gap-4 lg:grid-cols-2">{matches.slice(0, 4).map(matchRow)}</div>
             </Section>
           )}
@@ -535,71 +604,40 @@ function FounderDashboardContent() {
           </div>
         ))}
 
-      {/* ---------------- Investors ---------------- */}
-      {activeTab === "investors" && (
-        <div className="space-y-5">
-          {matches.length > 0 && (
-            <div className="relative max-w-sm">
-              <Search className="pointer-events-none absolute left-3 top-2.5 h-4 w-4 text-faint" />
-              <input
-                type="search"
-                placeholder="Search investors, firms or projects"
-                value={investorSearch}
-                onChange={(e) => setInvestorSearch(e.target.value)}
-                className={cx(inputClass, "pl-9")}
-              />
-            </div>
-          )}
-          {matches.length === 0 ? (
-            <EmptyState
-              icon={Users}
-              title="No investor matches yet"
-              description={
-                projects.some((p) => p.is_published)
-                  ? "Matches appear as investors with fitting criteria join. Check back soon."
-                  : "Publish a project to start getting matched with investors."
-              }
-              action={
-                !projects.some((p) => p.is_published) && projects.length > 0 ? (
-                  <TabLink tab="projects" asButton>
-                    Go to projects
-                  </TabLink>
-                ) : undefined
-              }
-            />
-          ) : filteredMatches.length === 0 ? (
-            <EmptyState compact title="No investors match that search" />
-          ) : (
-            <div className="grid gap-4 lg:grid-cols-2">{filteredMatches.map(matchRow)}</div>
-          )}
-        </div>
-      )}
+      {/* ---------------- Investors (moved to /founder/investors) ---------------- */}
+      {activeTab === "investors" && <LoadingRows />}
 
       {/* ---------------- Intro requests ---------------- */}
       {activeTab === "intros" && (
         <div className="space-y-5">
-          <Segmented
-            value={introFilter}
-            onChange={setIntroFilter}
-            options={[
-              { value: "all", label: `All ${interests.length}` },
-              { value: "pending", label: `Pending ${pending.length}` },
-              { value: "accepted", label: `Accepted ${interests.filter((i) => i.status === "accepted").length}` },
-              { value: "declined", label: `Declined ${interests.filter((i) => i.status === "declined").length}` },
-            ]}
-          />
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <Segmented
+              value={introFilter}
+              onChange={setIntroFilter}
+              options={[
+                { value: "received", label: `Received ${received.length}` },
+                { value: "sent", label: `Sent ${sent.length}` },
+              ]}
+            />
+            <ButtonLink href="/founder/investors" variant="secondary">
+              <Users className="w-4 h-4" />
+              Find investors
+            </ButtonLink>
+          </div>
           {visibleIntros.length === 0 ? (
             <EmptyState
               icon={Briefcase}
-              title={interests.length === 0 ? "No intro requests yet" : "Nothing here"}
+              title={introFilter === "sent" ? "You haven't sent any requests" : "No intro requests yet"}
               description={
-                interests.length === 0
-                  ? "When an investor asks to connect about one of your published projects, it shows up here."
-                  : undefined
+                introFilter === "sent"
+                  ? "Find investors whose criteria fit your project and ask for an intro."
+                  : "When an investor asks to connect about one of your published projects, it shows up here."
               }
             />
           ) : (
-            <div className="space-y-3">{visibleIntros.map((item) => introRow(item))}</div>
+            <div className="space-y-3">
+              {visibleIntros.map((item) => (introFilter === "sent" ? sentRow(item) : introRow(item)))}
+            </div>
           )}
         </div>
       )}
@@ -718,6 +756,13 @@ function TabLink({ tab, children, asButton = false }: { tab: Tab; children: Reac
       {!asButton && <ArrowRight className="w-3.5 h-3.5" />}
     </Link>
   );
+}
+
+function SentStatus({ item }: { item: ProjectInterest }) {
+  if (item.status === "accepted") return <Tag tone="positive">Interested</Tag>;
+  if (item.status === "declined") return <Tag>Passed</Tag>;
+  if (item.status === "expired") return <Tag>No response</Tag>;
+  return <Tag tone="warning">Waiting for reply</Tag>;
 }
 
 function IntroStatus({ status }: { status: ProjectInterest["status"] }) {

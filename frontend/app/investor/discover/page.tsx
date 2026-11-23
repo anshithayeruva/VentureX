@@ -415,10 +415,16 @@ function StartupCard({
               <MessagesSquare className="h-4 w-4" />
               Deal room
             </ButtonLink>
+          ) : item.interest_status === "pending" && item.interest_initiated_by === "founder" ? (
+            <ButtonLink href="/investor/deal-flow" variant="secondary">
+              Founder asked to connect
+            </ButtonLink>
           ) : item.interest_status === "pending" ? (
             <Tag tone="warning">Intro requested</Tag>
           ) : item.interest_status === "declined" ? (
-            <Tag>Founder declined</Tag>
+            <Tag>{item.interest_initiated_by === "founder" ? "You passed" : "Founder declined"}</Tag>
+          ) : item.interest_status === "expired" ? (
+            <Tag>No response</Tag>
           ) : item.interest_status === "accepted" ? (
             <Tag tone="positive">Connected</Tag>
           ) : (

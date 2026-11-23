@@ -6,10 +6,12 @@ from app.core.rate_limit import rate_limit
 from app.schemas.dealroom import DealRoomCreateInput
 from app.services.deal_room_service import DealRoomService
 from app.schemas.interest import (
+    InvestorResponseInput,
     ProjectInterestCreate,
     ProjectInterestResponse,
     ProjectInterestStatusUpdate,
 )
+from app.services.founder_outreach_service import FounderOutreachService, OutreachError
 from app.services.interest_service import InterestService
 
 logger = logging.getLogger(__name__)
@@ -65,6 +67,11 @@ async def list_interests(
         for item in interests:
             if item.get("status") != "accepted":
                 item["founder_email"] = None
+    if user is not None and user.is_founder:
+        # An investor's contact details reach the founder only once they say Interested.
+        for item in interests:
+            if item.get("initiated_by") == "founder" and item.get("status") != "accepted":
+                item["investor_email"] = None
     return interests
 
 
@@ -92,6 +99,9 @@ async def update_interest_status(
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"Interest record '{interest_id}' not found")
     if current.get("founder_id") != user.id:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Only the project's founder can respond")
+    if current.get("initiated_by") == "founder":
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT,
+                            detail="You sent this request; the investor replies to it.")
     clean_status = status_in.status.lower().strip()
     if clean_status not in ["accepted", "declined", "pending"]:
         raise HTTPException(
@@ -136,12 +146,34 @@ async def _open_deal_room(interest: dict, response_note: Optional[str]) -> dict:
     return await InterestService.link_deal_room(interest["id"], room["id"]) or interest
 
 
+@router.post("/{interest_id}/respond", response_model=ProjectInterestResponse)
+async def respond_to_founder_request(
+    interest_id: str,
+    body: InvestorResponseInput,
+    user: CurrentUser = Depends(require_investor),
+):
+    """Investor action on a founder's request: Interested opens the deal room; Pass needs a reason,
+    which the founder sees."""
+    try:
+        updated = await FounderOutreachService.respond(user.id, interest_id, body.decision, body.reason, body.note)
+    except OutreachError as e:
+        raise HTTPException(status_code=e.status, detail={"code": e.code, "message": e.message})
+    if body.decision == "interested":
+        updated = await _open_deal_room(updated, response_note=body.note or "Interested. Let's talk.")
+    return updated
+
+
 @router.delete("/{interest_id}", status_code=status.HTTP_200_OK)
-async def withdraw_interest(interest_id: str, user: CurrentUser = Depends(require_investor)):
-    """Investor action: Withdraw a pending introduction request."""
+async def withdraw_interest(interest_id: str, user: CurrentUser = Depends(require_user)):
+    """Withdraw a pending request you sent: an investor's intro request, or a founder's request to an investor."""
     current = await InterestService.get_by_id(interest_id)
-    if current and current.get("investor_id") != user.id:
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Only the requesting investor can withdraw")
+    if current:
+        by_founder = current.get("initiated_by") == "founder"
+        sender = current.get("founder_id") if by_founder else current.get("investor_id")
+        if sender != user.id:
+            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Only whoever sent the request can withdraw it")
+        if by_founder and current.get("status") != "pending":
+            raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Only a request still waiting for a reply can be withdrawn")
     deleted = await InterestService.delete_interest(interest_id)
     if not deleted:
         raise HTTPException(

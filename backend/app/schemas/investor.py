@@ -58,9 +58,24 @@ class InvestorProfileBase(BaseModel):
     thesis: Optional[str] = Field(None, alias="investment_thesis")
     minCheck: Optional[Union[str, float]] = Field(None, alias="min_check")
     maxCheck: Optional[Union[str, float]] = Field(None, alias="max_check")
+    # Shown to founders on the investor's profile in the founder directory.
+    valueAdd: Optional[str] = Field(None, alias="value_add", max_length=1500)
+    portfolio: Optional[List["PortfolioEntry"]] = Field(None, max_length=50)
+    listedForFounders: Optional[bool] = Field(None, alias="listed_for_founders")
 
     class Config:
         populate_by_name = True
+
+
+class PortfolioEntry(BaseModel):
+    """A past investment the investor chooses to show founders."""
+    company: str = Field(..., min_length=1, max_length=120)
+    stage: Optional[str] = Field(None, max_length=40)
+    year: Optional[int] = Field(None, ge=1980, le=2100)
+    url: Optional[str] = Field(None, max_length=300)
+
+
+InvestorProfileBase.model_rebuild()
 
 
 class InvestorProfileUpdate(InvestorProfileBase):
@@ -115,6 +130,7 @@ class DiscoverItem(BaseModel):
     saved: bool = False
     interest_id: Optional[str] = None
     interest_status: Optional[str] = None
+    interest_initiated_by: Optional[str] = None
     room_id: Optional[str] = None
     deal_stage: Optional[str] = None
 
@@ -146,10 +162,13 @@ class DealFlowItem(BaseModel):
     stage: Optional[str] = None
     funding_required: Optional[float] = None
     tagline: Optional[str] = None
-    status: str  # saved | requested | active | closed | declined | passed
+    status: str  # saved | inbound | requested | active | closed | declined | passed | expired
     saved: bool = False
     interest_id: Optional[str] = None
     interest_status: Optional[str] = None
+    initiated_by: Optional[str] = None
+    pass_reason: Optional[str] = None
+    message: Optional[str] = None
     response_note: Optional[str] = None
     founder_email: Optional[str] = None
     requested_at: Optional[datetime] = None
