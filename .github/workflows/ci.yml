@@ -1,0 +1,85 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  frontend:
+    name: Frontend (types and build)
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: frontend
+    env:
+      NEXT_TELEMETRY_DISABLED: "1"
+      NEXT_PUBLIC_API_URL: http://localhost:8000/api
+      # Build-time placeholders only. Real values live in your hosting provider, never here.
+      NEON_AUTH_BASE_URL: https://auth.example.invalid
+      NEON_AUTH_COOKIE_SECRET: ci-placeholder-not-a-real-secret-0000000000
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+      - run: npm ci
+      - name: Type check
+        run: npx tsc --noEmit
+      - name: Production build
+        run: npm run build
+
+  backend:
+    name: Backend (import and tests)
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: backend
+    env:
+      APP_ENV: development
+      AI_PROVIDER: none
+      NEON_DB_TRANSPORT: https
+      # Point this at a Neon *test branch*, never at production: tests create and delete rows.
+      DATABASE_URL: ${{ secrets.CI_DATABASE_URL }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+          cache: pip
+          cache-dependency-path: |
+            backend/requirements.txt
+            backend/requirements-dev.txt
+      - run: pip install -r requirements-dev.txt
+      - name: App starts (imports and routes)
+        run: python -c "from app.main import app; print(len(app.routes), 'routes')"
+      - name: Tests against the Neon test branch
+        if: env.DATABASE_URL != ''
+        run: python -m pytest -q -p no:logging
+      - name: Tests skipped
+        if: env.DATABASE_URL == ''
+        run: echo "::notice title=Backend tests skipped::Add a CI_DATABASE_URL repository secret (a Neon test branch) to run them."
+
+  docker:
+    name: Docker images build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: API image
+        run: docker build -t venturex-api:ci backend
+      - name: Web image
+        run: docker build --build-arg NEXT_PUBLIC_API_URL=https://api.example.invalid/api -t venturex-web:ci frontend
+      - name: API image starts and answers health checks
+        run: |
+          docker run -d --name api -p 8000:8000 -e APP_ENV=development venturex-api:ci
+          for i in $(seq 1 30); do curl -fsS http://localhost:8000/api/health && exit 0; sleep 2; done
+          docker logs api; exit 1

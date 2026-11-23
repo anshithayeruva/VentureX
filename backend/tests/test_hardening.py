@@ -123,18 +123,54 @@ def test_recalculate_endpoint_is_gone(client, as_user):
 def test_rate_limit_blocks_after_the_limit():
     rate_limit.reset()
     for _ in range(3):
-        assert rate_limit._check("unit", "user:a", 3, 60) is None
-    wait = rate_limit._check("unit", "user:a", 3, 60)
+        assert rate_limit._check_memory("unit", "user:a", 3, 60) is None
+    wait = rate_limit._check_memory("unit", "user:a", 3, 60)
     assert wait is not None and 1 <= wait <= 60
-    assert rate_limit._check("unit", "user:b", 3, 60) is None  # other users unaffected
+    assert rate_limit._check_memory("unit", "user:b", 3, 60) is None  # other users unaffected
+
+
+def test_shared_store_is_used_when_configured(monkeypatch):
+    """With Upstash configured, counts come from Redis (shared by every server instance)."""
+    import asyncio
+    counts = {}
+
+    async def fake_pipeline(url, token, commands):
+        key = commands[0][1]
+        counts[key] = counts.get(key, 0) + 1
+        assert commands[1][:2] == ["EXPIRE", key] and commands[1][-1] == "NX"
+        return [counts[key], 1]
+
+    monkeypatch.setattr(rate_limit, "_redis_config", lambda: ("https://redis.example", "token"))
+    monkeypatch.setattr(rate_limit, "_redis_pipeline", fake_pipeline)
+    rate_limit.reset()
+    results = asyncio.run(_hits(rate_limit, 3))
+    assert results[:2] == [None, None] and results[2] is not None
+    assert not rate_limit._hits  # nothing counted in memory
+
+
+def test_limiter_falls_back_to_memory_when_store_is_down(monkeypatch):
+    import asyncio
+
+    async def broken(url, token, commands):
+        raise RuntimeError("redis down")
+
+    monkeypatch.setattr(rate_limit, "_redis_config", lambda: ("https://redis.example", "token"))
+    monkeypatch.setattr(rate_limit, "_redis_pipeline", broken)
+    rate_limit.reset()
+    results = asyncio.run(_hits(rate_limit, 3))
+    assert results[:2] == [None, None] and results[2] is not None  # still limited, never errors
+
+
+async def _hits(rl, n):
+    return [await rl._check("unit-shared", "user:x", 2, 60) for _ in range(n)]
 
 
 def test_rate_limited_endpoint_returns_429(client, as_user, clean, monkeypatch):
     as_user(FOUNDER)
     real_check = rate_limit._check
 
-    def tight(bucket, key, limit, per_seconds):
-        return real_check(bucket, key, 1 if bucket == "create_project" else limit, per_seconds)
+    async def tight(bucket, key, limit, per_seconds):
+        return await real_check(bucket, key, 1 if bucket == "create_project" else limit, per_seconds)
 
     monkeypatch.setattr(rate_limit, "_check", tight)
     body = {

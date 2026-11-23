@@ -47,6 +47,10 @@ class Settings(BaseSettings):
     # Public address of the web app, used for links in emails.
     PUBLIC_APP_URL: str = "http://localhost:3000"
 
+    # Shared rate limiting across server instances (Upstash Redis REST). Unset = per-process memory.
+    UPSTASH_REDIS_REST_URL: Optional[str] = None
+    UPSTASH_REDIS_REST_TOKEN: Optional[str] = None
+
     # Outgoing email (SMTP). Without SMTP_HOST and SMTP_USER, emails are only written to
     # logs/emails.log, which is fine for development.
     SMTP_HOST: Optional[str] = None

@@ -1,0 +1,7 @@
+# Never ship secrets or local build output in the image.
+.env
+.env.*
+!.env.example
+node_modules/
+.next/
+npm-debug.log*

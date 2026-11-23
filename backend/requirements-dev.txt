@@ -1,0 +1,3 @@
+# Test tooling (CI and local). The app itself only needs requirements.txt.
+-r requirements.txt
+pytest>=9.0

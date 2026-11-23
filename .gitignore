@@ -5,3 +5,6 @@ node_modules/
 
 # Next.js build output at any depth (e.g. a stray frontend/frontend/.next)
 .next/
+
+# Screenshots from the e2e browser suites
+e2e-screenshots/
