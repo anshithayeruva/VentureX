@@ -6,6 +6,7 @@ import { useRouter } from "next/navigation";
 import {
   Bell,
   Briefcase,
+  Building2,
   ChevronDown,
   FileText,
   Inbox,
@@ -28,6 +29,7 @@ import { api, MeResponse } from "@/lib/api";
 import { authClient, clearApiToken } from "@/lib/auth/client";
 import { BrandMark } from "@/components/BrandMark";
 import { cx } from "@/components/ui";
+import { InvitationsBanner } from "@/components/teams";
 import { InvestorVerificationBanner } from "@/components/verification";
 
 interface PortalLayoutProps {
@@ -95,6 +97,7 @@ export function PortalLayout({ role, children, activeItem, onSelectItem, title }
         { id: "dealflow", label: "Deal Flow", href: "/investor/deal-flow", icon: MessagesSquare },
         { id: "portfolio", label: "Portfolio & Finances", href: "/investor/portfolio", icon: Wallet },
         { id: "updates", label: "Company updates", href: "/investor/updates", icon: Inbox },
+        { id: "firm", label: "Firm", href: "/investor/firm", icon: Building2 },
         { id: "preferences", label: "Criteria", href: "/investor/preferences", icon: Sliders },
         { id: "verification", label: "Verification", href: "/investor/verification", icon: ShieldCheck },
       ];
@@ -238,6 +241,7 @@ export function PortalLayout({ role, children, activeItem, onSelectItem, title }
 
         <main className="flex-1">
           <div className="mx-auto w-full max-w-6xl px-4 py-6 sm:px-8 sm:py-10">
+            <InvitationsBanner />
             {activeItem !== "verification" && <InvestorVerificationBanner me={me} />}
             {children}
           </div>

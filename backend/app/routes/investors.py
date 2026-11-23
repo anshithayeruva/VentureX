@@ -81,13 +81,18 @@ async def discover(
     user: CurrentUser = Depends(require_investor),
 ):
     """Search published startups with your fit score. Only public project facts are returned."""
-    return await DiscoverService.search(
+    page_data = await DiscoverService.search(
         user.id, q=q, industries=industry[:20], stages=stage[:10], business_models=business_model[:20],
         countries=country[:40], regions=region[:10], min_raise=min_raise, max_raise=max_raise,
         min_monthly_revenue=min_monthly_revenue, min_customers=min_customers, live_product=live_product,
         matched_only=matched_only, saved_only=saved_only, verified_only=verified_only, sort=sort, page=page,
         page_size=page_size, limited=not await VerificationService.investor_is_verified(user.id),
     )
+    from app.services.team_service import TeamService
+    activity = await TeamService.partner_activity(user.id, [i["id"] for i in page_data["items"]])
+    for item in page_data["items"]:
+        item["partners"] = activity.get(item["id"], [])
+    return page_data
 
 
 @router.put("/saved/{project_id}", status_code=status.HTTP_204_NO_CONTENT,

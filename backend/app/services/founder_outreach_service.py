@@ -19,6 +19,7 @@ from app.schemas.interest import PASS_REASONS
 from app.services.criteria import has_criteria, regions_for_country, thesis_from_row
 from app.services.interest_service import InterestService
 from app.services.match_service import DEMO_INVESTORS, MatchService
+from app.services.team_service import TEAM_PROJECTS, TeamService
 from app.utils.money import inr
 
 logger = logging.getLogger(__name__)
@@ -97,8 +98,8 @@ class FounderOutreachService:
     @staticmethod
     async def _founder_projects(founder_id: str) -> List[Dict[str, Any]]:
         return await pg.fetch_all(
-            "SELECT * FROM projects WHERE founder_id = %s ORDER BY is_published DESC, updated_at DESC LIMIT 50",
-            [founder_id],
+            f"SELECT * FROM projects WHERE id IN {TEAM_PROJECTS} ORDER BY is_published DESC, updated_at DESC LIMIT 50",
+            [founder_id, founder_id],
         )
 
     @classmethod
@@ -327,9 +328,9 @@ class FounderOutreachService:
 
         # Contact details only once this founder has an accepted intro with the investor (any project).
         connected = await pg.fetch_val(
-            "SELECT EXISTS (SELECT 1 FROM project_interests WHERE founder_id = %s AND investor_id = %s "
+            f"SELECT EXISTS (SELECT 1 FROM project_interests WHERE project_id IN {TEAM_PROJECTS} AND investor_id = %s "
             "AND status = 'accepted') AS c",
-            [founder_id, investor_id],
+            [founder_id, founder_id, investor_id],
         )
         portfolio = row.get("portfolio") or []
         return {
@@ -342,6 +343,7 @@ class FounderOutreachService:
             "email": row.get("account_email") if connected else None,
             "connected": bool(connected),
             "stats": await cls.response_stats(investor_id),
+            "partners": await TeamService.firm_partners_public(investor_id),
             **cls._fit(project, row, pref),
             "relationship": cls._relationship_view(rel),
             "eligibility": await cls._eligibility(founder_id, project, pref, rel) if project else

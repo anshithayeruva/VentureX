@@ -206,6 +206,23 @@ function InvestorProfileContent({ investorId }: { investorId: string }) {
             </Card>
           </Section>
 
+          {profile.partners && profile.partners.length > 0 && (
+            <Section title={`Partners at ${profile.firm || "the firm"}`}>
+              <Card padded={false}>
+                <ul className="divide-y divide-line">
+                  {profile.partners.map((p) => (
+                    <li key={p.investor_id} className="flex items-center justify-between gap-3 px-5 py-3 text-sm">
+                      <Link href={`/founder/investors/${encodeURIComponent(p.investor_id)}${project ? `?project=${project.id}` : ""}`} className="font-medium text-ink hover:underline">
+                        {p.name}
+                      </Link>
+                      <span className="text-muted">{p.title}</span>
+                    </li>
+                  ))}
+                </ul>
+              </Card>
+            </Section>
+          )}
+
           {profile.bio && (
             <Section title="About">
               <Card>

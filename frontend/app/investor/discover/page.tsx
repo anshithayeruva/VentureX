@@ -380,6 +380,12 @@ function StartupCard({
           </Link>
           <div className="text-sm text-muted">{[item.stage, item.industry, item.business_model].filter(Boolean).join(" · ")}</div>
           {item.company_verified && <VerifiedBadge kind="company" className="mt-1.5" />}
+          {item.partners && item.partners.length > 0 && (
+            <p className="mt-1.5 text-xs text-warning">
+              {item.partners.map((p) => `${p.name} (${p.status === "accepted" ? "connected" : "intro pending"})`).join(", ")} from your firm
+              {item.partners.length === 1 ? " is" : " are"} already on this.
+            </p>
+          )}
         </div>
         <div className="flex shrink-0 items-center gap-1">
           {item.match_score != null ? (

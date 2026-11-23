@@ -15,6 +15,12 @@ import {
   AnalysisHistoryItem,
   CriteriaOptions,
   DealFlow,
+  FirmPipelineRow,
+  Invitation,
+  MyFirm,
+  PartnerActivity,
+  PendingInvite,
+  ProjectTeam,
   CompanyUpdate,
   FounderUpdateDetail,
   InvestorUpdatesPage,
@@ -382,6 +388,74 @@ export const api = {
       apiFetch(`${API_BASE_URL}/investors/saved/${projectId}`, { method: saved ? "PUT" : "DELETE" })
     );
     await throwForStatus(res, saved ? "Could not save this startup" : "Could not remove it from saved");
+  },
+
+  /* ---------- teams ---------- */
+
+  async getProjectTeam(projectId: number): Promise<ProjectTeam> {
+    return getJson(`${API_BASE_URL}/projects/${projectId}/team`, "Could not load the team");
+  },
+
+  async inviteCofounder(projectId: number, email: string): Promise<PendingInvite> {
+    return sendJson("POST", `${API_BASE_URL}/projects/${projectId}/team/invitations`, { email }, "Could not send the invitation");
+  },
+
+  async removeCofounder(projectId: number, userId: string): Promise<void> {
+    const res = await networkSafe(() => apiFetch(`${API_BASE_URL}/projects/${projectId}/team/members/${encodeURIComponent(userId)}`, { method: "DELETE" }));
+    await throwForStatus(res, "Could not update the team");
+  },
+
+  async getMyFirm(): Promise<MyFirm> {
+    return getJson(`${API_BASE_URL}/firms/mine`, "Could not load your firm");
+  },
+
+  async createFirm(name: string, website: string): Promise<MyFirm> {
+    return sendJson("POST", `${API_BASE_URL}/firms`, { name, website }, "Could not create the firm");
+  },
+
+  async updateFirm(name: string, website: string): Promise<MyFirm> {
+    return sendJson("PUT", `${API_BASE_URL}/firms/mine`, { name, website }, "Could not save the firm");
+  },
+
+  async invitePartner(email: string, role: "partner" | "admin"): Promise<PendingInvite> {
+    return sendJson("POST", `${API_BASE_URL}/firms/mine/invitations`, { email, role }, "Could not send the invitation");
+  },
+
+  async setPartnerRole(userId: string, role: "partner" | "admin"): Promise<MyFirm> {
+    return sendJson("PUT", `${API_BASE_URL}/firms/mine/members/${encodeURIComponent(userId)}/role`, { role }, "Could not change the role");
+  },
+
+  async removePartner(userId: string): Promise<void> {
+    const res = await networkSafe(() => apiFetch(`${API_BASE_URL}/firms/mine/members/${encodeURIComponent(userId)}`, { method: "DELETE" }));
+    await throwForStatus(res, "Could not update the firm");
+  },
+
+  async getFirmPipeline(): Promise<{ firm: { id: number; name: string }; items: FirmPipelineRow[] }> {
+    return getJson(`${API_BASE_URL}/firms/mine/pipeline`, "Could not load the firm pipeline");
+  },
+
+  async getPartnerActivity(projectId: number): Promise<PartnerActivity[]> {
+    return getJson(`${API_BASE_URL}/firms/mine/activity?project_id=${projectId}`, "Could not load partner activity");
+  },
+
+  async getInvitations(): Promise<Invitation[]> {
+    return getJson(`${API_BASE_URL}/invitations`, "Could not load invitations");
+  },
+
+  async getInvitation(id: string): Promise<Invitation | null> {
+    const res = await networkSafe(() => apiFetch(`${API_BASE_URL}/invitations/${encodeURIComponent(id)}`, { cache: "no-store" }));
+    if (res.status === 404) return null;
+    await throwForStatus(res, "Could not load the invitation");
+    return res.json();
+  },
+
+  async respondToInvitation(id: string, accept: boolean): Promise<{ status: string; kind?: string; project_id?: number; firm_id?: number }> {
+    return sendJson("POST", `${API_BASE_URL}/invitations/${encodeURIComponent(id)}/${accept ? "accept" : "decline"}`, {}, "Could not answer the invitation");
+  },
+
+  async revokeInvitation(id: string): Promise<void> {
+    const res = await networkSafe(() => apiFetch(`${API_BASE_URL}/invitations/${encodeURIComponent(id)}`, { method: "DELETE" }));
+    await throwForStatus(res, "Could not withdraw the invitation");
   },
 
   /* ---------- investor updates ---------- */

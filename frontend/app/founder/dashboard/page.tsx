@@ -482,6 +482,7 @@ function FounderDashboardContent() {
                         {p.readiness_score != null ? `Readiness ${Math.round(p.readiness_score)}` : "Not analysed"}
                       </span>
                       <VisibilityTag published={!!p.is_published} />
+                      {p.is_owner === false && <Tag>Co-founder</Tag>}
                     </div>
                   </Link>
                 ))}
@@ -527,7 +528,10 @@ function FounderDashboardContent() {
                 {projects.map((p) => (
                   <tr key={p.id} className="hover:bg-canvas">
                     <td className="px-5 py-4">
-                      <div className="font-medium text-ink">{p.title}</div>
+                      <div className="flex items-center gap-2 font-medium text-ink">
+                        {p.title}
+                        {p.is_owner === false && <Tag>Co-founder</Tag>}
+                      </div>
                       <div className="text-muted">
                         {p.stage} · {p.industry}
                       </div>
