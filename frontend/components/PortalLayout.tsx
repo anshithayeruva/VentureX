@@ -80,7 +80,7 @@ export function PortalLayout({ role, children, activeItem, onSelectItem, title }
         { id: "overview", label: "Overview", href: base, icon: LayoutGrid },
         { id: "projects", label: "Projects", href: `${base}?tab=projects`, icon: Rocket },
         { id: "readiness", label: "Readiness", href: `${base}?tab=readiness`, icon: Sparkles },
-        { id: "investors", label: "Investors", href: `${base}?tab=investors`, icon: Users },
+        { id: "investors", label: "Find investors", href: "/founder/investors", icon: Users },
         { id: "intros", label: "Intro requests", href: `${base}?tab=intros`, icon: Briefcase },
         { id: "dealrooms", label: "Deal rooms", href: "/dealroom?role=FOUNDER", icon: MessagesSquare },
       ]

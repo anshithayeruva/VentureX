@@ -269,6 +269,31 @@ class MatchService:
             "updated_at": now,
         }
 
+    @classmethod
+    def exclusion_reason(cls, project: Dict[str, Any], preference: Dict[str, Any]) -> Optional[str]:
+        """Why the investor's own criteria rule this startup out, in plain words; None if they don't.
+
+        The same hard rules calculate_match applies (excluded industry or country, an unmet *required*
+        traction or team bar), plus a stage the investor doesn't back when they listed stages."""
+        thesis = thesis_from_row(preference or {})
+        if not has_criteria(thesis):
+            return None
+        sectors, geo = thesis["sectors"], thesis["geography"]
+        industry = (project.get("industry") or "").strip()
+        if industry and industry.lower() in {i.lower() for i in sectors["excluded_industries"]}:
+            return f"This investor doesn't invest in {industry}."
+        country = (project.get("country") or "").strip()
+        if country and country.lower() in {c.lower() for c in geo["excluded_countries"]}:
+            return f"This investor doesn't invest in startups based in {country}."
+        stage = canonical_stage(project.get("stage"))
+        if thesis["stages"] and stage and stage not in thesis["stages"]:
+            return f"This investor backs {', '.join(thesis['stages'])} rounds; your project is at {stage}."
+        if cls._traction_fit(project, thesis["traction"]) == "excluded":
+            return "This investor requires traction your project doesn't report yet (revenue, customers or a live product)."
+        if cls._team_fit(project, thesis["team"], thesis["additional"]) == "excluded":
+            return "This investor requires a team profile your project doesn't meet (see their team requirements)."
+        return None
+
     # ------------------------------------------------------------------ factors
 
     @classmethod

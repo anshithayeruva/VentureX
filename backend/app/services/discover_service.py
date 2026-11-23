@@ -115,7 +115,7 @@ class DiscoverService:
             SELECT {_PUBLIC},
                    m.match_score, m.reasons,
                    (s.project_id IS NOT NULL) AS saved,
-                   i.id AS interest_id, i.status AS interest_status,
+                   i.id AS interest_id, i.status AS interest_status, i.initiated_by AS interest_initiated_by,
                    d.id AS room_id, d.stage AS deal_stage,
                    count(*) OVER () AS total
             FROM projects p
@@ -186,11 +186,15 @@ class DiscoverService:
 
     @staticmethod
     async def deal_flow(investor_id: str) -> Dict[str, Any]:
-        """Every startup the investor is pursuing, in one list, from saved through closed."""
+        """Every startup the investor is pursuing, in one list, from saved through closed,
+        plus founders' requests waiting for the investor's reply."""
+        from app.services.interest_service import InterestService
+        await InterestService.expire_stale()
         interests = await pg.fetch_all(
             """
             SELECT i.id AS interest_id, i.project_id, i.status AS interest_status, i.created_at, i.updated_at,
-                   i.response_note, i.founder_email,
+                   i.response_note, i.founder_email, i.initiated_by, i.pass_reason, i.message,
+                   i.founder_name AS requester_name,
                    COALESCE(p.title, i.project_title) AS title, COALESCE(p.industry, i.project_industry) AS industry,
                    p.stage, p.funding_required, p.tagline
             FROM project_interests i LEFT JOIN projects p ON p.id = i.project_id
@@ -234,6 +238,10 @@ class DiscoverService:
                 "interest_id": i["interest_id"],
                 "interest_status": i["interest_status"],
                 "response_note": i["response_note"],
+                "initiated_by": i["initiated_by"],
+                "pass_reason": i["pass_reason"],
+                "message": i["message"] if i["initiated_by"] == "founder" else None,
+                "founder_name": i["requester_name"] if i["initiated_by"] == "founder" else None,
                 "founder_email": i["founder_email"] if i["interest_status"] == "accepted" else None,
                 "requested_at": i["created_at"],
                 "last_activity": i["updated_at"],
@@ -279,8 +287,14 @@ class DiscoverService:
                 bucket = "passed"
             elif stage or interest == "accepted":
                 bucket = "active"
+            elif interest == "pending" and item.get("initiated_by") == "founder":
+                bucket = "inbound"  # a founder asked to connect; waiting on this investor
             elif interest == "pending":
                 bucket = "requested"
+            elif interest == "declined" and item.get("initiated_by") == "founder":
+                bucket = "passed"  # the investor passed on the founder's request
+            elif interest == "expired":
+                bucket = "expired"  # a founder's request the investor never answered
             elif interest == "declined":
                 bucket = "declined"
             else:

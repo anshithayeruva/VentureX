@@ -27,7 +27,7 @@ import { stageLabel, stageTone } from "@/lib/dealroom";
 import { formatMoney, timeAgo } from "@/lib/format";
 import { formatCompact, formatSigned, gainTone } from "@/lib/money";
 import { normalizeThesis, summarizeThesis } from "@/lib/thesis";
-import type { DealFlow, DiscoverItem, NotificationItem, PortfolioSummary } from "@/types";
+import type { DealFlow, DiscoverItem, NotificationItem, PortfolioEntry, PortfolioSummary } from "@/types";
 
 type Tab = "overview" | "notifications" | "profile" | "settings";
 
@@ -73,8 +73,13 @@ function InvestorDashboardContent() {
     thesis: "",
     minCheck: "",
     maxCheck: "",
+    valueAdd: "",
+    listedForFounders: true,
   });
+  const [pastDeals, setPastDeals] = useState<PortfolioEntry[]>([]);
+  const [newDeal, setNewDeal] = useState({ company: "", stage: "", year: "" });
   const [profileSaved, setProfileSaved] = useState(false);
+  const [profileError, setProfileError] = useState<string | null>(null);
   const [settings, setSettings] = useState({
     autoNotifyHighConviction: true,
     weeklyDealflowSummary: true,
@@ -99,16 +104,20 @@ function InvestorDashboardContent() {
     api.getNotifications("INVESTOR").then((data) => mounted && Array.isArray(data) && setNotifications(data));
     api.getInvestorProfile().then((data) => {
       if (mounted && data) {
+        // The API answers with its field aliases (full_name, firm_name, investment_thesis, ...).
         setProfile({
-          name: data.name || "",
-          firm: data.firm || "",
+          name: data.full_name ?? data.name ?? "",
+          firm: data.firm_name ?? data.firm ?? "",
           title: data.title || "",
           bio: data.bio || "",
           location: data.location || "",
-          thesis: data.thesis || "",
+          thesis: data.investment_thesis ?? data.thesis ?? "",
           minCheck: data.min_check || "",
           maxCheck: data.max_check || "",
+          valueAdd: data.value_add ?? "",
+          listedForFounders: data.listed_for_founders ?? true,
         });
+        setPastDeals(Array.isArray(data.portfolio) ? data.portfolio : []);
       }
     });
     api.getInvestorSettings().then((data) => {
@@ -137,20 +146,36 @@ function InvestorDashboardContent() {
     setNotifications((prev) => prev.map((n) => ({ ...n, read: true })));
   };
 
+  const addDeal = () => {
+    const company = newDeal.company.trim();
+    if (!company) return;
+    const year = parseInt(newDeal.year, 10);
+    setPastDeals((d) => [...d, { company, stage: newDeal.stage.trim() || null, year: Number.isFinite(year) ? year : null }]);
+    setNewDeal({ company: "", stage: "", year: "" });
+  };
+
   const saveProfile = async (e: React.FormEvent) => {
     e.preventDefault();
-    await api.updateInvestorProfile({
-      name: profile.name,
-      firm: profile.firm,
-      title: profile.title,
-      bio: profile.bio,
-      location: profile.location,
-      thesis: profile.thesis,
-      min_check: profile.minCheck,
-      max_check: profile.maxCheck,
-    });
-    setProfileSaved(true);
-    setTimeout(() => setProfileSaved(false), 3000);
+    setProfileError(null);
+    try {
+      await api.updateInvestorProfile({
+        name: profile.name,
+        firm: profile.firm,
+        title: profile.title,
+        bio: profile.bio,
+        location: profile.location,
+        thesis: profile.thesis,
+        min_check: profile.minCheck,
+        max_check: profile.maxCheck,
+        value_add: profile.valueAdd,
+        portfolio: pastDeals,
+        listed_for_founders: profile.listedForFounders,
+      });
+      setProfileSaved(true);
+      setTimeout(() => setProfileSaved(false), 3000);
+    } catch (err) {
+      setProfileError(err instanceof Error ? err.message : "Couldn't save your profile.");
+    }
   };
 
   const saveSettings = async (e: React.FormEvent) => {
@@ -311,8 +336,8 @@ function InvestorDashboardContent() {
                       {d.deal_stage && d.status === "active" ? (
                         <Tag tone={stageTone(d.deal_stage)}>{stageLabel(d.deal_stage)}</Tag>
                       ) : (
-                        <Tag tone={d.status === "requested" ? "warning" : d.status === "closed" ? "positive" : "neutral"}>
-                          {{ saved: "Saved", requested: "Requested", active: "In progress", closed: "Closed", declined: "Declined", passed: "Passed" }[d.status]}
+                        <Tag tone={d.status === "requested" ? "warning" : d.status === "inbound" ? "accent" : d.status === "closed" ? "positive" : "neutral"}>
+                          {{ saved: "Saved", inbound: "Wants to connect", requested: "Requested", active: "In progress", closed: "Closed", declined: "Declined", passed: "Passed", expired: "No response" }[d.status]}
                         </Tag>
                       )}
                     </div>
@@ -467,6 +492,48 @@ function InvestorDashboardContent() {
             <Field label="About you" htmlFor="ip-bio">
               <textarea id="ip-bio" rows={2} className={inputClass} value={profile.bio} onChange={(e) => setProfile({ ...profile, bio: e.target.value })} />
             </Field>
+            <Field
+              label="How you help portfolio companies"
+              htmlFor="ip-value"
+              hint="Shown to founders on your profile: hiring, intros to customers, follow-on support…"
+            >
+              <textarea id="ip-value" rows={3} maxLength={1500} className={inputClass} value={profile.valueAdd} onChange={(e) => setProfile({ ...profile, valueAdd: e.target.value })} />
+            </Field>
+            <Field label="Past investments" hint="Companies you want founders to see.">
+              <div className="space-y-2">
+                {pastDeals.length > 0 && (
+                  <ul className="divide-y divide-line rounded-lg border border-line">
+                    {pastDeals.map((d, i) => (
+                      <li key={`${d.company}-${i}`} className="flex items-center justify-between gap-3 px-3 py-2 text-sm">
+                        <span className="text-ink">
+                          {d.company}
+                          <span className="text-muted">{[d.stage, d.year].filter(Boolean).length ? ` · ${[d.stage, d.year].filter(Boolean).join(" · ")}` : ""}</span>
+                        </span>
+                        <button type="button" aria-label={`Remove ${d.company}`} onClick={() => setPastDeals((all) => all.filter((_, j) => j !== i))} className="text-muted hover:text-danger">
+                          Remove
+                        </button>
+                      </li>
+                    ))}
+                  </ul>
+                )}
+                <div className="grid gap-2 sm:grid-cols-[minmax(0,1fr)_120px_90px_auto]">
+                  <input aria-label="Company" placeholder="Company" className={inputClass} value={newDeal.company} onChange={(e) => setNewDeal({ ...newDeal, company: e.target.value })} />
+                  <input aria-label="Stage" placeholder="Stage" className={inputClass} value={newDeal.stage} onChange={(e) => setNewDeal({ ...newDeal, stage: e.target.value })} />
+                  <input aria-label="Year" placeholder="Year" inputMode="numeric" className={inputClass} value={newDeal.year} onChange={(e) => setNewDeal({ ...newDeal, year: e.target.value })} />
+                  <Button variant="secondary" onClick={addDeal} disabled={!newDeal.company.trim()}>
+                    Add
+                  </Button>
+                </div>
+              </div>
+            </Field>
+            <div className="divide-y divide-line rounded-lg border border-line px-4">
+              <Toggle
+                label="Let founders find me"
+                description="List your profile in Find investors so founders with published, ready projects can request an intro."
+                checked={profile.listedForFounders}
+                onChange={(v) => setProfile({ ...profile, listedForFounders: v })}
+              />
+            </div>
             <div className="grid gap-5 sm:grid-cols-2">
               <Field label="Smallest check" htmlFor="ip-min">
                 <input id="ip-min" placeholder="₹5,00,000" className={inputClass} value={profile.minCheck} onChange={(e) => setProfile({ ...profile, minCheck: e.target.value })} />
@@ -475,6 +542,7 @@ function InvestorDashboardContent() {
                 <input id="ip-max" placeholder="₹50,00,000" className={inputClass} value={profile.maxCheck} onChange={(e) => setProfile({ ...profile, maxCheck: e.target.value })} />
               </Field>
             </div>
+            {profileError && <p role="alert" className="text-sm text-danger">{profileError}</p>}
             <FormFooter saved={profileSaved} label="Save profile" />
           </form>
         </Card>

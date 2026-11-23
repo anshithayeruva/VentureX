@@ -131,6 +131,34 @@ class EmailService:
         return cls._send_email_raw(founder_email, subject, html, body_text)
 
     @classmethod
+    def send_founder_intro_request_email(
+        cls,
+        investor_email: str,
+        investor_name: str,
+        founder_name: str,
+        project_title: str,
+        summary: str,
+        note: str,
+    ) -> Dict[str, Any]:
+        """Tell an investor that a founder asked to connect about a published startup."""
+        link = f"{_app_url()}/investor/deal-flow"
+        subject = f"{founder_name} would like to connect about {project_title}"
+        body_text = (
+            f"Hi {investor_name},\n\n{founder_name} asked to connect about {project_title} on VentureX.\n\n"
+            f"{summary}\n\nTheir note: \"{note}\"\n\nReply Interested or Pass in your Deal Flow: {link}\n"
+        )
+        html = f"""
+        <div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 24px; border: 1px solid #E7E0D3; border-radius: 12px; background: #FFFDF9;">
+          <h2 style="color: #111C32; margin: 0 0 12px; font-family: Georgia, serif; font-weight: 500;">A founder would like to connect</h2>
+          <p style="color: #33405A; font-size: 14px; line-height: 1.6;"><strong>{founder_name}</strong> asked to connect about <strong>{project_title}</strong>.</p>
+          <p style="color: #6B6457; font-size: 13px; line-height: 1.6;">{summary}</p>
+          <p style="color: #33405A; font-size: 13px; font-style: italic; border-left: 3px solid #20477F; padding-left: 12px;">"{note}"</p>
+          <a href="{link}" style="display: inline-block; margin-top: 12px; background: #20477F; color: #FFFFFF; padding: 10px 20px; border-radius: 6px; text-decoration: none; font-size: 13px; font-weight: 600;">Reply in Deal Flow</a>
+        </div>
+        """
+        return cls._send_email_raw(investor_email, subject, html, body_text)
+
+    @classmethod
     def send_intro_request_email(
         cls,
         founder_email: str,

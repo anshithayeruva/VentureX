@@ -15,6 +15,10 @@ import {
   AnalysisHistoryItem,
   CriteriaOptions,
   DealFlow,
+  DirectoryQuery,
+  InvestorDirectory,
+  PassReason,
+  PublicInvestorProfile,
   DiscoverPage,
   DiscoverQuery,
   InvestmentDetail,
@@ -70,6 +74,7 @@ async function throwForStatus(res: Response, fallback: string): Promise<void> {
   const body = await res.json().catch(() => null);
   const detail = body?.detail;
   if (typeof detail === "string") throw new Error(detail);
+  if (detail && typeof detail === "object" && typeof detail.message === "string") throw new Error(detail.message);
   if (Array.isArray(detail) && detail[0]?.msg) {
     const msg = String(detail[0].msg).replace(/^Value error, /, "");
     throw new Error(msg.charAt(0).toUpperCase() + msg.slice(1));
@@ -360,6 +365,34 @@ export const api = {
     await throwForStatus(res, saved ? "Could not save this startup" : "Could not remove it from saved");
   },
 
+  /* ---------- founder outreach ---------- */
+
+  async getInvestorDirectory(query: DirectoryQuery = {}): Promise<InvestorDirectory> {
+    const url = new URL(`${API_BASE_URL}/founders/investors`);
+    for (const [k, v] of Object.entries(query)) if (v !== undefined && v !== "") url.searchParams.set(k, String(v));
+    return getJson(url.toString(), "Could not load investors");
+  },
+
+  async getInvestorForFounder(investorId: string, projectId?: number): Promise<PublicInvestorProfile | null> {
+    const url = new URL(`${API_BASE_URL}/founders/investors/${encodeURIComponent(investorId)}`);
+    if (projectId) url.searchParams.set("project_id", String(projectId));
+    const res = await networkSafe(() => apiFetch(url.toString(), { cache: "no-store" }));
+    if (res.status === 404) return null;
+    await throwForStatus(res, "Could not load this investor");
+    return res.json();
+  },
+
+  async requestIntroFromInvestor(investorId: string, projectId: number, note: string): Promise<ProjectInterest> {
+    return sendJson("POST", `${API_BASE_URL}/founders/investors/${encodeURIComponent(investorId)}/intro-requests`,
+      { project_id: projectId, note }, "Could not send the intro request");
+  },
+
+  /** Investor's reply to a founder's request: Interested opens the deal room; Pass needs a reason. */
+  async respondToIntro(interestId: string | number, decision: "interested" | "pass", reason?: PassReason, note?: string): Promise<ProjectInterest> {
+    return sendJson("POST", `${API_BASE_URL}/interests/${interestId}/respond`,
+      { decision, reason: reason || null, note: note || null }, "Could not send your reply");
+  },
+
   async getDealFlow(): Promise<DealFlow> {
     return getJson(`${API_BASE_URL}/investors/deal-flow`, "Could not load your deal flow");
   },
@@ -498,17 +531,7 @@ export const api = {
   },
 
   async updateInvestorProfile(data: any): Promise<any> {
-    try {
-      const res = await apiFetch(`${API_BASE_URL}/investors/profile`, {
-        method: "PUT",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(data),
-      });
-      if (res.ok) return await res.json();
-    } catch {
-      // Fallback
-    }
-    return data;
+    return sendJson("PUT", `${API_BASE_URL}/investors/profile`, data, "Could not save your profile");
   },
 
   async getInvestorSettings(): Promise<any> {

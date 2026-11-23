@@ -10,11 +10,14 @@ import type { Tone } from "@/components/ui";
 import { api } from "@/lib/api";
 import { stageLabel, stageTone } from "@/lib/dealroom";
 import { formatMoney, timeAgo } from "@/lib/format";
-import type { DealFlow, DealFlowItem, DealFlowStatus } from "@/types";
+import type { DealFlow, DealFlowItem, DealFlowStatus, PassReason } from "@/types";
+import { PASS_REASON_LABEL } from "@/types";
 
-type Filter = "all" | "saved" | "requested" | "active" | "closed" | "ended";
+type Filter = "all" | "inbound" | "saved" | "requested" | "active" | "closed" | "ended";
 
 const STATUS: Record<DealFlowStatus, { label: string; tone: Tone }> = {
+  inbound: { label: "Wants to connect", tone: "accent" },
+  expired: { label: "No response", tone: "neutral" },
   saved: { label: "Saved", tone: "neutral" },
   requested: { label: "Intro requested", tone: "warning" },
   active: { label: "In progress", tone: "accent" },
@@ -63,7 +66,7 @@ export default function DealFlowPage() {
     return (flow?.items ?? []).filter((i) => {
       const inFilter =
         filter === "all" ||
-        (filter === "ended" ? i.status === "declined" || i.status === "passed" : i.status === filter);
+        (filter === "ended" ? ["declined", "passed", "expired"].includes(i.status) : i.status === filter);
       const inSearch = !q || [i.title, i.industry, i.founder_name, i.founder_company].some((v) => v?.toLowerCase().includes(q));
       return inFilter && inSearch;
     });
@@ -75,7 +78,7 @@ export default function DealFlowPage() {
     <PortalLayout role="INVESTOR" activeItem="dealflow" title="Deal Flow">
       <PageHeader
         title="Deal Flow"
-        description="Every startup you're pursuing, from saved to closed. Deal rooms open here when a founder accepts your intro."
+        description="Founders asking to connect, and every startup you're pursuing from saved to closed. Saying Interested, or a founder accepting your intro, opens a deal room."
         actions={
           <ButtonLink href="/investor/discover" variant="secondary">
             <Search className="h-4 w-4" />
@@ -116,11 +119,12 @@ export default function DealFlowPage() {
                 onChange={setFilter}
                 options={[
                   { value: "all", label: `All ${total}` },
+                  { value: "inbound", label: `Founders asking ${counts.inbound ?? 0}` },
                   { value: "saved", label: `Saved ${counts.saved ?? 0}` },
                   { value: "requested", label: `Requested ${counts.requested ?? 0}` },
                   { value: "active", label: `Active ${counts.active ?? 0}` },
                   { value: "closed", label: `Closed ${counts.closed ?? 0}` },
-                  { value: "ended", label: `Declined / passed ${(counts.declined ?? 0) + (counts.passed ?? 0)}` },
+                  { value: "ended", label: `Declined / passed ${(counts.declined ?? 0) + (counts.passed ?? 0) + (counts.expired ?? 0)}` },
                 ]}
               />
             </div>
@@ -157,6 +161,12 @@ export default function DealFlowPage() {
                     )
                   }
                   onUnsave={() => run(item, () => api.setSaved(item.project_id, false), `${item.title} removed from saved.`)}
+                  onInterested={() =>
+                    run(item, () => api.respondToIntro(item.interest_id!, "interested"), `Deal room with ${item.title} is open.`)
+                  }
+                  onPass={(reason, note) =>
+                    run(item, () => api.respondToIntro(item.interest_id!, "pass", reason, note), `You passed on ${item.title}. The founder sees your reason.`)
+                  }
                   onWithdraw={() =>
                     run(
                       item,
@@ -184,14 +194,21 @@ function DealRow({
   onRequest,
   onUnsave,
   onWithdraw,
+  onInterested,
+  onPass,
 }: {
   item: DealFlowItem;
   busy: boolean;
   onRequest: () => void;
   onUnsave: () => void;
   onWithdraw: () => void;
+  onInterested: () => void;
+  onPass: (reason: PassReason, note?: string) => void;
 }) {
   const status = STATUS[item.status];
+  const [passing, setPassing] = useState(false);
+  const [reason, setReason] = useState<PassReason | "">("");
+  const [note, setNote] = useState("");
   const recordHref = `/investor/portfolio?record=${item.project_id}&company=${encodeURIComponent(item.title)}`;
   return (
     <Card className="space-y-3">
@@ -235,6 +252,50 @@ function DealRow({
         </p>
       )}
       {item.status === "declined" && <p className="text-sm text-muted">The founder decided not to connect this time.</p>}
+      {item.status === "inbound" && (
+        <div className="rounded-lg bg-canvas px-3.5 py-2.5 text-sm text-ink-2">
+          <div className="mb-1 text-xs text-muted">
+            {item.founder_name || "The founder"} asked to connect{item.requested_at && <> · {timeAgo(item.requested_at)}</>}
+          </div>
+          <p className="whitespace-pre-line">{item.message}</p>
+        </div>
+      )}
+      {item.status === "passed" && item.initiated_by === "founder" && (
+        <p className="text-sm text-muted">
+          You passed: {item.pass_reason ? PASS_REASON_LABEL[item.pass_reason] : "no reason given"}.
+        </p>
+      )}
+      {item.status === "expired" && <p className="text-sm text-muted">The founder&apos;s request got no reply within 14 days.</p>}
+      {item.status === "inbound" && passing && (
+        <div className="space-y-2">
+          <div className="text-sm font-medium text-ink">Why are you passing? The founder sees this.</div>
+          <div className="flex flex-wrap gap-2" role="radiogroup" aria-label="Reason for passing">
+            {(Object.keys(PASS_REASON_LABEL) as PassReason[]).map((r) => (
+              <button
+                key={r}
+                type="button"
+                role="radio"
+                aria-checked={reason === r}
+                onClick={() => setReason(r)}
+                className={cx(
+                  "rounded-md border px-2.5 py-1 text-sm",
+                  reason === r ? "border-accent bg-accent-soft text-accent" : "border-line text-ink-2 hover:bg-subtle"
+                )}
+              >
+                {PASS_REASON_LABEL[r]}
+              </button>
+            ))}
+          </div>
+          <input
+            aria-label="Note to the founder"
+            placeholder="Optional note to the founder"
+            maxLength={1000}
+            value={note}
+            onChange={(e) => setNote(e.target.value)}
+            className={inputClass}
+          />
+        </div>
+      )}
 
       <div className="flex flex-wrap items-center gap-2">
         {item.status === "saved" && (
@@ -247,6 +308,29 @@ function DealRow({
             </Button>
           </>
         )}
+        {item.status === "inbound" &&
+          (passing ? (
+            <>
+              <Button onClick={() => reason && onPass(reason, note.trim() || undefined)} disabled={busy || !reason}>
+                {busy ? "Sending…" : "Confirm pass"}
+              </Button>
+              <Button variant="ghost" onClick={() => setPassing(false)} disabled={busy}>
+                Cancel
+              </Button>
+            </>
+          ) : (
+            <>
+              <Button onClick={onInterested} disabled={busy}>
+                {busy ? "Opening…" : "Interested"}
+              </Button>
+              <Button variant="secondary" onClick={() => setPassing(true)} disabled={busy}>
+                Pass
+              </Button>
+              <Link href={`/investor/projects/${item.project_id}`} className={buttonClass("ghost")}>
+                View startup
+              </Link>
+            </>
+          ))}
         {item.status === "requested" && (
           <>
             <span className="text-sm text-muted">Waiting on the founder.</span>

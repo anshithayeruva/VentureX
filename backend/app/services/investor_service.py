@@ -50,6 +50,9 @@ _PROFILE_COLUMNS = {
     "thesis": "thesis",
     "minCheck": "min_check",
     "maxCheck": "max_check",
+    "valueAdd": "value_add",
+    "portfolio": "portfolio",
+    "listedForFounders": "listed_for_founders",
 }
 
 _PREFERENCE_COLUMNS = set(DEFAULT_PREFERENCES)
@@ -97,7 +100,7 @@ class InvestorService:
         await cls.get_or_create_profile(user_id)
         fields = {
             _PROFILE_COLUMNS[k]: (str(v) if k in ("minCheck", "maxCheck") else v)
-            for k, v in data.model_dump(exclude_unset=True).items()
+            for k, v in data.model_dump(exclude_unset=True, mode="json").items()
             if v is not None and k in _PROFILE_COLUMNS
         }
         fields["updated_at"] = datetime.now(timezone.utc)

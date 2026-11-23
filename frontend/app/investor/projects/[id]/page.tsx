@@ -8,7 +8,7 @@ import { ReasonLine } from "@/components/forms";
 import { Button, ButtonLink, Card, EmptyState, LoadingRows, Stat, Tag, inputClass } from "@/components/ui";
 import { api } from "@/lib/api";
 import { formatMoney } from "@/lib/format";
-import { MatchItem, Project, ProjectInterest } from "@/types";
+import { MatchItem, PASS_REASON_LABEL, PassReason, Project, ProjectInterest } from "@/types";
 
 export default function InvestorProjectPage({ params }: { params: Promise<{ id: string }> }) {
   const { id: projectId } = use(params);
@@ -22,6 +22,8 @@ export default function InvestorProjectPage({ params }: { params: Promise<{ id: 
   const [error, setError] = useState<string | null>(null);
   const [saved, setSaved] = useState(false);
   const [savingBookmark, setSavingBookmark] = useState(false);
+  const [passing, setPassing] = useState(false);
+  const [passReason, setPassReason] = useState<PassReason | "">("");
 
   useEffect(() => {
     let mounted = true;
@@ -77,6 +79,21 @@ export default function InvestorProjectPage({ params }: { params: Promise<{ id: 
       setInterest(created);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Couldn't send the request.");
+    } finally {
+      setSending(false);
+    }
+  };
+
+  const respond = async (decision: "interested" | "pass") => {
+    if (!interest) return;
+    setSending(true);
+    setError(null);
+    try {
+      const updated = await api.respondToIntro(interest.id, decision, passReason || undefined, note.trim() || undefined);
+      setInterest(updated);
+      setPassing(false);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Couldn't send your reply.");
     } finally {
       setSending(false);
     }
@@ -213,9 +230,64 @@ export default function InvestorProjectPage({ params }: { params: Promise<{ id: 
                     {sending ? "Sending…" : "Request intro"}
                   </Button>
                 </>
+              ) : interest.initiated_by === "founder" && interest.status === "pending" ? (
+                <>
+                  <Tag tone="accent">{interest.founder_name || "The founder"} asked to connect</Tag>
+                  {interest.message && (
+                    <p className="whitespace-pre-line rounded-lg bg-canvas px-3.5 py-2.5 text-sm text-ink-2">{interest.message}</p>
+                  )}
+                  {passing ? (
+                    <div className="space-y-2">
+                      <label className="block text-sm font-medium text-ink" htmlFor="pass-reason">
+                        Why are you passing? The founder sees this.
+                      </label>
+                      <select id="pass-reason" className={inputClass} value={passReason} onChange={(e) => setPassReason(e.target.value as PassReason)}>
+                        <option value="">Choose a reason</option>
+                        {(Object.keys(PASS_REASON_LABEL) as PassReason[]).map((r) => (
+                          <option key={r} value={r}>
+                            {PASS_REASON_LABEL[r]}
+                          </option>
+                        ))}
+                      </select>
+                      <textarea rows={2} className={inputClass} placeholder="Optional note to the founder" value={note} onChange={(e) => setNote(e.target.value)} />
+                    </div>
+                  ) : (
+                    <textarea rows={2} className={inputClass} placeholder="Optional first message for the deal room" value={note} onChange={(e) => setNote(e.target.value)} />
+                  )}
+                  {error && <p className="text-sm text-danger">{error}</p>}
+                  {passing ? (
+                    <div className="flex gap-2">
+                      <Button className="flex-1" onClick={() => respond("pass")} disabled={sending || !passReason}>
+                        {sending ? "Sending…" : "Confirm pass"}
+                      </Button>
+                      <Button variant="ghost" onClick={() => setPassing(false)} disabled={sending}>
+                        Cancel
+                      </Button>
+                    </div>
+                  ) : (
+                    <div className="flex gap-2">
+                      <Button className="flex-1" onClick={() => respond("interested")} disabled={sending}>
+                        {sending ? "Opening…" : "Interested"}
+                      </Button>
+                      <Button variant="secondary" onClick={() => setPassing(true)} disabled={sending}>
+                        Pass
+                      </Button>
+                    </div>
+                  )}
+                </>
+              ) : interest.initiated_by === "founder" && interest.status === "declined" ? (
+                <>
+                  <Tag>You passed</Tag>
+                  <p className="text-sm text-muted">Reason shared with the founder: {interest.pass_reason ? PASS_REASON_LABEL[interest.pass_reason] : "none"}.</p>
+                </>
+              ) : interest.status === "expired" ? (
+                <>
+                  <Tag>No response</Tag>
+                  <p className="text-sm text-muted">The founder&apos;s request expired after 14 days without a reply.</p>
+                </>
               ) : interest.status === "accepted" ? (
                 <>
-                  <Tag tone="positive">Founder accepted</Tag>
+                  <Tag tone="positive">{interest.initiated_by === "founder" ? "Connected" : "Founder accepted"}</Tag>
                   <ButtonLink
                     className="w-full"
                     href={interest.deal_room?.room_id ? `/dealroom/${interest.deal_room.room_id}` : "/investor/deal-flow"}

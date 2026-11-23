@@ -6,7 +6,33 @@ from app.database import postgres as pg
 logger = logging.getLogger(__name__)
 
 
+class _SkipNotice(Exception):
+    """Internal: skip a notification without logging a warning."""
+
+
+# Founder requests nobody answers become "expired" ("No response") after this many days.
+NO_RESPONSE_DAYS = 14
+_EXPIRE_EVERY_SECONDS = 300
+_last_expire_run = 0.0
+
+
 class InterestService:
+    @staticmethod
+    async def expire_stale(force: bool = False) -> int:
+        """Mark founder-initiated requests with no reply in NO_RESPONSE_DAYS as expired.
+
+        Runs when lists are read (there is no job scheduler yet), at most every few minutes."""
+        import time
+        global _last_expire_run
+        if not force and time.monotonic() - _last_expire_run < _EXPIRE_EVERY_SECONDS:
+            return 0
+        _last_expire_run = time.monotonic()
+        return await pg.execute(
+            "UPDATE project_interests SET status = 'expired', updated_at = now() "
+            "WHERE status = 'pending' AND initiated_by = 'founder' "
+            f"AND created_at < now() - interval '{NO_RESPONSE_DAYS} days'"
+        )
+
     @classmethod
     async def express_interest(
         cls,
@@ -57,6 +83,8 @@ class InterestService:
         )
         if existing and existing.get("status") == "accepted":
             return existing
+        if existing and existing.get("status") == "pending" and existing.get("initiated_by") == "founder":
+            raise ValueError("This founder already asked to connect. Reply Interested or Pass in your Deal Flow.")
 
         doc = {
             "id": existing.get("id", int_id) if existing else int_id,
@@ -71,6 +99,9 @@ class InterestService:
             "founder_name": founder_name,
             "founder_email": emails.get(founder_id),
             "status": "pending",
+            "initiated_by": "investor",
+            "pass_reason": None,
+            "responded_at": None,
             "message": message or "Introduction requested for confidential data room review.",
             "created_at": existing.get("created_at", now) if existing else now,
             "updated_at": now,
@@ -123,8 +154,13 @@ class InterestService:
         interest_id: Union[int, str],
         status: str,
         response_note: Optional[str] = None,
+        notify: bool = True,
+        extra_fields: Optional[Dict[str, Any]] = None,
     ) -> Optional[Dict[str, Any]]:
-        """Update intro status to accepted or declined and unlock deal room resources."""
+        """Update intro status to accepted or declined and unlock deal room resources.
+
+        notify=False skips the founder-accepted-your-request messages to the investor (used when the
+        investor is the one responding to a founder's request; the caller notifies the founder)."""
         now = datetime.now(timezone.utc)
         current = await cls.get_by_id(interest_id)
         if not current:
@@ -138,6 +174,8 @@ class InterestService:
         }
         if response_note:
             update_fields["response_note"] = response_note
+        if extra_fields:
+            update_fields.update(extra_fields)
 
         project_id = current.get("project_id")
         project_title = current.get("project_title", "Project")
@@ -178,6 +216,8 @@ class InterestService:
 
             # Add notification for investor
             try:
+                if not notify:
+                    raise _SkipNotice()
                 from app.services.notification_service import NotificationService
                 await NotificationService.create_notification(
                     target_role="INVESTOR",
@@ -188,11 +228,15 @@ class InterestService:
                     badge_variant="success",
                     link="/investor/dashboard?tab=interests",
                 )
+            except _SkipNotice:
+                pass
             except Exception as e:
                 logger.warning("Failed to dispatch investor unlock notification: %s", e)
 
             # Dispatch transactional email alert to investor
             try:
+                if not notify:
+                    raise _SkipNotice()
                 investor_email = update_fields.get("investor_email") or current.get("investor_email")
                 if not investor_email:
                     raise ValueError("investor has no email on file")
@@ -204,10 +248,12 @@ class InterestService:
                     project_title=project_title,
                     room_id=f"room-{project_id}",
                 )
+            except _SkipNotice:
+                pass
             except Exception as e:
                 logger.warning("Failed to dispatch investor unlock email: %s", e)
 
-        elif clean_status == "declined":
+        elif clean_status == "declined" and notify:
             try:
                 from app.services.notification_service import NotificationService
                 await NotificationService.create_notification(
@@ -233,6 +279,7 @@ class InterestService:
         status: Optional[str] = None,
     ) -> List[Dict[str, Any]]:
         """List introduction requests and deal rooms with enriched context."""
+        await cls.expire_stale()
         where: List[str] = []
         params: List[Any] = []
         if investor_id:
