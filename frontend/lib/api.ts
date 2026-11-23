@@ -15,6 +15,14 @@ import {
   AnalysisHistoryItem,
   CriteriaOptions,
   DealFlow,
+  CompanyUpdate,
+  FounderUpdateDetail,
+  InvestorUpdatesPage,
+  ProjectUpdates,
+  UpdateAudience,
+  UpdateInput,
+  UpdateRecipient,
+  UpdateResponse,
   AdminCompanyRow,
   AdminInvestorRow,
   CompanyVerification,
@@ -374,6 +382,61 @@ export const api = {
       apiFetch(`${API_BASE_URL}/investors/saved/${projectId}`, { method: saved ? "PUT" : "DELETE" })
     );
     await throwForStatus(res, saved ? "Could not save this startup" : "Could not remove it from saved");
+  },
+
+  /* ---------- investor updates ---------- */
+
+  async getProjectUpdates(projectId: number): Promise<ProjectUpdates> {
+    return getJson(`${API_BASE_URL}/projects/${projectId}/updates`, "Could not load your updates");
+  },
+
+  async getUpdateAudience(projectId: number, audience: UpdateAudience): Promise<UpdateRecipient[]> {
+    return getJson(`${API_BASE_URL}/projects/${projectId}/updates/audience?audience=${audience}`, "Could not load recipients");
+  },
+
+  async createUpdate(projectId: number, data: UpdateInput): Promise<FounderUpdateDetail> {
+    return sendJson("POST", `${API_BASE_URL}/projects/${projectId}/updates`, data, "Could not save the draft");
+  },
+
+  async getUpdate(updateId: number): Promise<FounderUpdateDetail | null> {
+    const res = await networkSafe(() => apiFetch(`${API_BASE_URL}/updates/${updateId}`, { cache: "no-store" }));
+    if (res.status === 404) return null;
+    await throwForStatus(res, "Could not load this update");
+    return res.json();
+  },
+
+  async saveUpdate(updateId: number, data: UpdateInput): Promise<FounderUpdateDetail> {
+    return sendJson("PUT", `${API_BASE_URL}/updates/${updateId}`, data, "Could not save the draft");
+  },
+
+  async deleteUpdate(updateId: number): Promise<void> {
+    const res = await networkSafe(() => apiFetch(`${API_BASE_URL}/updates/${updateId}`, { method: "DELETE" }));
+    await throwForStatus(res, "Could not delete the draft");
+  },
+
+  async sendUpdate(updateId: number, applyToProject: boolean): Promise<FounderUpdateDetail> {
+    return sendJson("POST", `${API_BASE_URL}/updates/${updateId}/send`, { apply_to_project: applyToProject }, "Could not send the update");
+  },
+
+  async getInvestorUpdates(params: { project_id?: number; unread_only?: boolean; page?: number } = {}): Promise<InvestorUpdatesPage> {
+    const url = new URL(`${API_BASE_URL}/investors/updates`);
+    for (const [k, v] of Object.entries(params)) if (v !== undefined && v !== false) url.searchParams.set(k, String(v));
+    return getJson(url.toString(), "Could not load updates");
+  },
+
+  async markUpdateRead(updateId: number): Promise<void> {
+    const res = await networkSafe(() => apiFetch(`${API_BASE_URL}/investors/updates/${updateId}/read`, { method: "POST" }));
+    await throwForStatus(res, "Could not mark the update read");
+  },
+
+  async replyToUpdate(updateId: number, message: string, askIndex?: number | null): Promise<UpdateResponse> {
+    return sendJson("POST", `${API_BASE_URL}/investors/updates/${updateId}/responses`,
+      { message, ask_index: askIndex ?? null }, "Could not send your reply");
+  },
+
+  async applyUpdateValuation(updateId: number, investmentId: number): Promise<unknown> {
+    return sendJson("POST", `${API_BASE_URL}/investors/updates/${updateId}/apply-valuation`,
+      { investment_id: investmentId }, "Could not update your holding's value");
   },
 
   /* ---------- verification ---------- */

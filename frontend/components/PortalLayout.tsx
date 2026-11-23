@@ -7,6 +7,8 @@ import {
   Bell,
   Briefcase,
   ChevronDown,
+  FileText,
+  Inbox,
   LayoutGrid,
   LogOut,
   Menu,
@@ -85,12 +87,14 @@ export function PortalLayout({ role, children, activeItem, onSelectItem, title }
         { id: "investors", label: "Find investors", href: "/founder/investors", icon: Users },
         { id: "intros", label: "Intro requests", href: `${base}?tab=intros`, icon: Briefcase },
         { id: "dealrooms", label: "Deal rooms", href: "/dealroom?role=FOUNDER", icon: MessagesSquare },
+        { id: "updates", label: "Investor updates", href: "/founder/updates", icon: FileText },
       ]
     : [
         { id: "overview", label: "Overview", href: base, icon: LayoutGrid },
         { id: "discover", label: "Discover", href: "/investor/discover", icon: Search },
         { id: "dealflow", label: "Deal Flow", href: "/investor/deal-flow", icon: MessagesSquare },
         { id: "portfolio", label: "Portfolio & Finances", href: "/investor/portfolio", icon: Wallet },
+        { id: "updates", label: "Company updates", href: "/investor/updates", icon: Inbox },
         { id: "preferences", label: "Criteria", href: "/investor/preferences", icon: Sliders },
         { id: "verification", label: "Verification", href: "/investor/verification", icon: ShieldCheck },
       ];

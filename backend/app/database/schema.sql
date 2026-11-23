@@ -368,3 +368,42 @@ CREATE TABLE IF NOT EXISTS company_verifications (
     updated_at           TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 CREATE INDEX IF NOT EXISTS company_verifications_status_idx ON company_verifications (status, submitted_at);
+
+-- Founder updates to their investors (monthly or quarterly): metrics, wins, challenges and asks.
+CREATE TABLE IF NOT EXISTS company_updates (
+    id               BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+    project_id       BIGINT NOT NULL REFERENCES projects (id) ON DELETE CASCADE,
+    founder_id       TEXT NOT NULL,
+    period_type      TEXT NOT NULL DEFAULT 'month',
+    period_label     TEXT NOT NULL,
+    period_end       DATE NOT NULL,
+    status           TEXT NOT NULL DEFAULT 'draft',
+    metrics          JSONB NOT NULL DEFAULT '{}',
+    highlights       TEXT NOT NULL DEFAULT '',
+    challenges       TEXT NOT NULL DEFAULT '',
+    asks             JSONB NOT NULL DEFAULT '[]',
+    audience         TEXT NOT NULL DEFAULT 'investors',
+    recipients_count INTEGER NOT NULL DEFAULT 0,
+    sent_at          TIMESTAMPTZ,
+    created_at       TIMESTAMPTZ NOT NULL DEFAULT now(),
+    updated_at       TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS company_updates_project_idx ON company_updates (project_id, period_end DESC);
+CREATE TABLE IF NOT EXISTS company_update_recipients (
+    update_id    BIGINT NOT NULL REFERENCES company_updates (id) ON DELETE CASCADE,
+    investor_id  TEXT NOT NULL,
+    reason       TEXT NOT NULL DEFAULT 'investor',
+    read_at      TIMESTAMPTZ,
+    created_at   TIMESTAMPTZ NOT NULL DEFAULT now(),
+    PRIMARY KEY (update_id, investor_id)
+);
+CREATE INDEX IF NOT EXISTS company_update_recipients_investor_idx ON company_update_recipients (investor_id, created_at DESC);
+CREATE TABLE IF NOT EXISTS company_update_responses (
+    id           BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+    update_id    BIGINT NOT NULL REFERENCES company_updates (id) ON DELETE CASCADE,
+    investor_id  TEXT NOT NULL,
+    ask_index    INTEGER,
+    message      TEXT NOT NULL,
+    created_at   TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS company_update_responses_update_idx ON company_update_responses (update_id, created_at);

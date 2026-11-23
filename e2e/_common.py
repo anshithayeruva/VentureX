@@ -43,8 +43,10 @@ def db(statements):
 def set_test_investor_verification(status="verified"):
     """Investors must be admin-verified to contact founders; the suites mark the E2E test
     investor (only that account) as verified, or reset it."""
+    # Upsert: the API flow's cleanup removes the test investor's profile row.
     return db([[
-        "UPDATE investor_profiles SET verification_status = %s WHERE user_id = "
-        "(SELECT id FROM app_users WHERE email = %s)",
+        "INSERT INTO investor_profiles (user_id, verification_status) "
+        "SELECT id, %s FROM app_users WHERE email = %s "
+        "ON CONFLICT (user_id) DO UPDATE SET verification_status = EXCLUDED.verification_status",
         [status, ENV["E2E_INVESTOR_EMAIL"]],
     ]])
