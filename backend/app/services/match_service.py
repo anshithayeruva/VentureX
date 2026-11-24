@@ -108,8 +108,18 @@ def _usd(amount: float) -> str:
 
 
 def _wants_fit_alerts(profile: Dict[str, Any]) -> bool:
-    """The investor's "Notify me about strong fits" setting (on unless they turned it off)."""
+    """Legacy check kept for demo investors; real preferences are applied by the notification service
+    (category "startup_matches")."""
     return bool((profile.get("settings") or {}).get("auto_notify_high_conviction", True))
+
+
+async def _founder_allows_alerts(project: Dict[str, Any]) -> bool:
+    """The founder's privacy switch "Let investors be alerted about my projects"."""
+    from app.services.settings_service import privacy
+    founder_id = project.get("founder_id")
+    if not founder_id:
+        return True
+    return bool((await privacy(founder_id, "FOUNDER")).get("allow_investor_alerts", True))
 
 
 class MatchService:
@@ -482,6 +492,7 @@ class MatchService:
                 return
             score = float(match.get("match_score") or 0)
             await NotificationService.create_notification(
+                category="project_status",
                 target_role="FOUNDER",
                 user_id=founder_id,
                 title=title,
@@ -495,7 +506,8 @@ class MatchService:
                 "LEFT JOIN founder_profiles fp ON fp.user_id = u.id WHERE u.id = %s",
                 [founder_id],
             )
-            if row and row.get("email") and (row.get("settings") or {}).get("email_alerts", True):
+            from app.services.settings_service import email_allowed
+            if row and row.get("email") and await email_allowed(founder_id, "project_status"):
                 from app.services.email_service import EmailService
                 EmailService.send_strong_match_email(
                     founder_email=row["email"],
@@ -553,7 +565,7 @@ class MatchService:
                 # Strong fits: tell the founder, and the investor if they want these alerts.
                 if match_data.get("match_score", 0) >= 90.0:
                     await cls._alert_founder_of_strong_fit(project, inv, match_data)
-                if match_data.get("match_score", 0) >= 90.0 and _wants_fit_alerts(inv):
+                if match_data.get("match_score", 0) >= 90.0 and _wants_fit_alerts(inv) and await _founder_allows_alerts(project):
                     try:
                         from app.services.notification_service import NotificationService
                         p_title = project.get("title", "Startup")
@@ -565,6 +577,7 @@ class MatchService:
                         )
                         if not existing:
                             await NotificationService.create_notification(
+                                category="startup_matches",
                                 target_role="INVESTOR",
                                 user_id=user_id,
                                 title=f"Strong fit: {p_title} ({score}%)",
@@ -614,7 +627,7 @@ class MatchService:
                 # Strong fits: tell the founder, and the investor if they want these alerts.
                 if match_data.get("match_score", 0) >= 90.0:
                     await cls._alert_founder_of_strong_fit(project, investor, match_data)
-                if match_data.get("match_score", 0) >= 90.0 and _wants_fit_alerts(investor):
+                if match_data.get("match_score", 0) >= 90.0 and _wants_fit_alerts(investor) and await _founder_allows_alerts(project):
                     try:
                         from app.services.notification_service import NotificationService
                         p_title = project.get("title", "Startup")
@@ -626,6 +639,7 @@ class MatchService:
                         )
                         if not existing:
                             await NotificationService.create_notification(
+                                category="startup_matches",
                                 target_role="INVESTOR",
                                 user_id=investor_id,
                                 title=f"Strong fit: {p_title} ({score}%)",

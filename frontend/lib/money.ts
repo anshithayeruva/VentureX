@@ -2,10 +2,13 @@
  * Money from the API is a decimal string ("125000.00"). Totals are computed on the server with
  * exact decimals; the browser only formats them (and parses for chart geometry).
  */
+import { formatDatePref, getDisplayPrefs } from "@/lib/displayPrefs";
 import { formatMoney } from "@/lib/format";
 
-// Indian grouping: ₹1,20,000.50
-const inr = new Intl.NumberFormat("en-IN", { style: "currency", currency: "INR", minimumFractionDigits: 2 });
+// Indian grouping (₹1,20,000.50) or international (₹120,000.50), per the user's number format.
+const inrIndian = new Intl.NumberFormat("en-IN", { style: "currency", currency: "INR", minimumFractionDigits: 2 });
+const inrIntl = new Intl.NumberFormat("en-US", { style: "currency", currency: "INR", minimumFractionDigits: 2 });
+const inr = { format: (n: number) => (getDisplayPrefs().numberFormat === "international" ? inrIntl : inrIndian).format(n) };
 
 export function toNumber(value: string | number | null | undefined): number {
   if (value == null || value === "") return 0;
@@ -65,8 +68,8 @@ export function todayISO(): string {
   return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
 }
 
+/** A calendar date in the user's date format. */
 export function formatDate(value: string | null | undefined): string {
   if (!value) return "—";
-  const [y, m, d] = value.slice(0, 10).split("-").map(Number);
-  return new Date(y, m - 1, d).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
+  return formatDatePref(value.slice(0, 10));
 }

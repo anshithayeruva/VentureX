@@ -40,13 +40,15 @@ export function Card({
   children,
   className,
   padded = true,
+  id,
 }: {
   children: React.ReactNode;
   className?: string;
   padded?: boolean;
+  id?: string;
 }) {
   return (
-    <div className={cx("rounded-xl border border-line bg-surface", padded && "p-5", className)}>{children}</div>
+    <div id={id} className={cx("rounded-xl border border-line bg-surface", padded && "p-5", className)}>{children}</div>
   );
 }
 

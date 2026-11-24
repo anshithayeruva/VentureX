@@ -11,6 +11,7 @@ from datetime import date, datetime, timezone
 from decimal import Decimal
 from typing import Any, Dict, List, Optional
 
+from app.services.settings_service import email_allowed
 from app.database import postgres as pg
 from app.utils.money import inr
 
@@ -247,13 +248,15 @@ class UpdatesService:
         for r in recipients:
             try:
                 await NotificationService.create_notification(
+                    category="company_updates",
                     target_role="INVESTOR", user_id=r["investor_id"],
                     title=f"{project['title']}: {u['period_label']} update",
                     desc=teaser, badge="Update", badge_variant="primary", link=f"/investor/updates?update={u['id']}",
                 )
                 if emails.get(r["investor_id"]):
-                    EmailService.send_company_update_email(
-                        emails[r["investor_id"]], r["name"], project["title"], u["period_label"], teaser, u["id"])
+                    if await email_allowed(r["investor_id"], "company_updates"):
+                        EmailService.send_company_update_email(
+                            emails[r["investor_id"]], r["name"], project["title"], u["period_label"], teaser, u["id"])
             except Exception as e:
                 logger.warning("Could not notify %s of update %s: %s", r["investor_id"], u["id"], e)
 
@@ -350,6 +353,7 @@ class UpdatesService:
         try:
             from app.services.notification_service import NotificationService
             await NotificationService.create_notification(
+                category="connections",
                 target_role="FOUNDER", user_id=u["founder_id"],
                 title=f"{name} replied to {about}"[:200], desc=message.strip()[:200],
                 badge="Reply", badge_variant="primary", link=f"/founder/updates?update={update_id}",
@@ -357,8 +361,9 @@ class UpdatesService:
             founder_email = await pg.fetch_val("SELECT email FROM app_users WHERE id = %s", [u["founder_id"]])
             if founder_email:
                 from app.services.email_service import EmailService
-                EmailService.send_update_reply_email(founder_email, name, who.get("firm") or "", u["project_title"],
-                                                     about, message.strip(), update_id)
+                if await email_allowed(u["founder_id"], "connections"):
+                    EmailService.send_update_reply_email(founder_email, name, who.get("firm") or "", u["project_title"],
+                                                         about, message.strip(), update_id)
         except Exception as e:
             logger.warning("Could not notify founder of reply on update %s: %s", update_id, e)
         return row

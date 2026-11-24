@@ -5,6 +5,7 @@ import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { Download, FileUp, Info, Plus, Upload, Wallet, X } from "lucide-react";
 import { PortalLayout } from "@/components/PortalLayout";
+import { RoundAllocationsPanel } from "@/components/InvestorFunding";
 import { CompanyComparison, LabelledBars, SERIES, ValueOverTimeChart } from "@/components/PortfolioCharts";
 import { ErrorState, MoneyInput, Pagination } from "@/components/forms";
 import { Button, Card, EmptyState, Field, LoadingRows, PageHeader, Segmented, Tag, cx, inputClass } from "@/components/ui";
@@ -100,6 +101,8 @@ function PortfolioContent() {
           onCreated={(id) => router.push(`/investor/portfolio/${id}`)}
         />
       )}
+
+      <RoundAllocationsPanel />
 
       {error ? (
         <ErrorState

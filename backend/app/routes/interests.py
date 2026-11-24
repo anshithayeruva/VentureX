@@ -90,6 +90,16 @@ async def list_interests(
         for item in interests:
             if item.get("initiated_by") == "founder" and item.get("status") != "accepted":
                 item["investor_email"] = None
+    # Contact details follow the other side's privacy settings.
+    from app.services.settings_service import privacy as _privacy
+    if user is not None and user.is_investor:
+        for item in interests:
+            if item.get("founder_email") and not (await _privacy(item["founder_id"], "FOUNDER")).get("show_email", True):
+                item["founder_email"] = None
+    if user is not None and user.is_founder:
+        for item in interests:
+            if item.get("investor_email") and not (await _privacy(item["investor_id"], "INVESTOR")).get("show_email", True):
+                item["investor_email"] = None
     # Badges: verified investors and verified companies.
     verified = await VerificationService.verified_investors({i.get("investor_id") for i in interests})
     companies = await VerificationService.company_statuses({i.get("project_id") for i in interests})

@@ -59,11 +59,18 @@ class NotificationService:
         badge: str = "Alert",
         badge_variant: str = "primary",
         link: Optional[str] = None,
+        category: Optional[str] = None,
     ) -> Dict[str, Any]:
-        """Insert a new notification and return it."""
+        """Insert a new notification and return it. With a category, the user's in-app
+        notification preferences decide whether it is delivered ("account" is always delivered)."""
         if not pg.is_configured():
             logger.warning("Database unavailable, skipping notification creation")
             return {}
+        if user_id is not None and category:
+            from app.services.settings_service import allowed
+            if not await allowed(str(user_id), target_role, category, "in_app"):
+                logger.info("Notification '%s' for %s skipped by their preferences (%s)", title, user_id, category)
+                return {}
         row = await pg.insert(
             "notifications",
             {

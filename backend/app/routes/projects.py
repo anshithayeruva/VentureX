@@ -65,6 +65,8 @@ def _public_view(project: dict, user: Optional[CurrentUser], limited: bool = Fal
     if team or (user is not None and project.get("founder_id") == user.id):
         return project
     hidden = {k: None for k in _PRIVATE_FIELDS}
+    if project.get("_hide_traction"):
+        hidden.update({"monthly_revenue": None, "customer_count": None})
     if limited:
         hidden.update({k: "" for k in _LINK_FIELDS})
     return {**project, **hidden}
@@ -77,7 +79,16 @@ async def _limited(user: Optional[CurrentUser]) -> bool:
 
 async def _with_badges(projects: List[dict]) -> List[dict]:
     statuses = await VerificationService.company_statuses([p.get("id") for p in projects])
-    return [{**p, "company_verified": statuses.get(p.get("id")) == "verified"} for p in projects]
+    from app.services.settings_service import privacy as _privacy
+    shares: dict = {}
+    out = []
+    for p in projects:
+        fid = p.get("founder_id")
+        if fid and fid not in shares:
+            shares[fid] = (await _privacy(fid, "FOUNDER")).get("share_traction", True)
+        out.append({**p, "company_verified": statuses.get(p.get("id")) == "verified",
+                    "_hide_traction": not shares.get(fid, True), "has_logo": bool(p.get("logo_path"))})
+    return out
 
 
 async def _documents_allowed(user: CurrentUser, project: dict) -> None:
@@ -103,6 +114,10 @@ async def _private_report_project(project_id: str, user: Optional[CurrentUser]):
              dependencies=[Depends(rate_limit("create_project", 20, 3600))])
 async def create_project(project_in: ProjectCreate, user: CurrentUser = Depends(require_founder)):
     """Create and submit a new startup project, automatically evaluating AI readiness."""
+    if "is_published" not in project_in.model_fields_set:
+        # The founder's "start new projects private" setting decides.
+        from app.services.settings_service import privacy as _privacy
+        project_in.is_published = not (await _privacy(user.id, "FOUNDER")).get("default_private", True)
     try:
         project = await ProjectService.create(project_in, founder_id=user.id)
         return project

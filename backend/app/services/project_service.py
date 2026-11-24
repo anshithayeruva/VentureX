@@ -59,7 +59,7 @@ class ProjectService:
         # full AI analysis after uploading materials.
         try:
             from app.services.analysis_service import AnalysisService
-            await AnalysisService.analyze(created, engine="rules")
+            await AnalysisService.analyze(created, engine="rules", notify=False)
         except Exception as e:
             logger.warning("Baseline analysis failed for project %s: %s", new_id, e)
 

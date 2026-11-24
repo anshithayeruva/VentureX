@@ -13,6 +13,7 @@ from datetime import datetime, timedelta, timezone
 from statistics import median
 from typing import Any, Dict, List, Optional, Tuple
 
+from app.services.settings_service import email_allowed
 from app.core.config import settings
 from app.database import postgres as pg
 from app.schemas.interest import PASS_REASONS
@@ -31,11 +32,16 @@ MIN_REQUESTS_FOR_STATS = 3
 
 _PROFILE_SQL = """
     SELECT p.user_id, p.name, p.firm, p.title, p.bio, p.location, p.min_check, p.max_check,
-           p.value_add, p.portfolio, p.verification_status, u.email AS account_email, u.name AS account_name, u.organization AS account_org
+           p.value_add, p.portfolio, p.verification_status, p.settings, p.phone, p.photo_path, u.email AS account_email, u.name AS account_name, u.organization AS account_org
     FROM investor_profiles p LEFT JOIN app_users u ON u.id = p.user_id
     WHERE p.listed_for_founders
       AND (u.role = 'INVESTOR' OR (u.id IS NULL AND p.user_id = ANY(%s::text[])))
 """
+
+
+def _priv(row: Dict[str, Any]) -> Dict[str, Any]:
+    from app.services.settings_service import merge
+    return merge("INVESTOR", row.get("settings") or {})["privacy"]
 
 
 class OutreachError(Exception):
@@ -166,10 +172,13 @@ class FounderOutreachService:
 
     @staticmethod
     def _identity(row: Dict[str, Any]) -> Dict[str, Any]:
+        from app.services.settings_service import merge
+        priv = merge("INVESTOR", row.get("settings") or {})["privacy"]
         return {
             "investor_id": row["user_id"],
             "name": row.get("name") or row.get("account_name") or "Investor",
-            "firm": row.get("firm") or row.get("account_org") or "",
+            "firm": (row.get("firm") or row.get("account_org") or "") if priv["show_organization"] else "",
+            "has_photo": bool(row.get("photo_path")),
             "title": row.get("title") or "",
             "location": row.get("location") or "",
             "verified": row.get("verification_status") == "verified",
@@ -340,7 +349,8 @@ class FounderOutreachService:
             "portfolio": portfolio if isinstance(portfolio, list) else [],
             "thesis": _public_thesis(thesis),
             "criteria_set": has_criteria(thesis),
-            "email": row.get("account_email") if connected else None,
+            "email": row.get("account_email") if connected and _priv(row)["show_email"] else None,
+            "phone": (row.get("phone") or None) if connected and _priv(row)["show_phone"] else None,
             "connected": bool(connected),
             "stats": await cls.response_stats(investor_id),
             "partners": await TeamService.firm_partners_public(investor_id),
@@ -468,6 +478,7 @@ class FounderOutreachService:
         try:
             from app.services.notification_service import NotificationService
             await NotificationService.create_notification(
+                category="founder_responses",
                 target_role="INVESTOR",
                 user_id=investor_id,
                 title=f"{founder_name} wants to connect: {project['title']}",
@@ -482,14 +493,15 @@ class FounderOutreachService:
         try:
             if row.get("account_email"):
                 from app.services.email_service import EmailService
-                EmailService.send_founder_intro_request_email(
-                    investor_email=row["account_email"],
-                    investor_name=ident["name"],
-                    founder_name=founder_name,
-                    project_title=project["title"],
-                    summary=_summary(project),
-                    note=note.strip(),
-                )
+                if await email_allowed(investor_id, "founder_responses"):
+                    EmailService.send_founder_intro_request_email(
+                        investor_email=row["account_email"],
+                        investor_name=ident["name"],
+                        founder_name=founder_name,
+                        project_title=project["title"],
+                        summary=_summary(project),
+                        note=note.strip(),
+                    )
         except Exception as e:
             logger.warning("Failed to email investor about founder intro request: %s", e)
 
@@ -529,6 +541,7 @@ class FounderOutreachService:
             )
             try:
                 await NotificationService.create_notification(
+                    category="investor_interest",
                     target_role="FOUNDER", user_id=current["founder_id"],
                     title=f"{investor} is interested in {title}",
                     desc=f"{who} said Interested. Your deal room is open.",
@@ -547,6 +560,7 @@ class FounderOutreachService:
         )
         try:
             await NotificationService.create_notification(
+                category="investor_interest",
                 target_role="FOUNDER", user_id=current["founder_id"],
                 title=f"{investor} passed on {title}",
                 desc=f"Reason: {PASS_REASONS.get(reason, 'Other')}." + (f" \"{note}\"" if note else ""),

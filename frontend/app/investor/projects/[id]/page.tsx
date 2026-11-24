@@ -4,6 +4,8 @@ import React, { use, useEffect, useState } from "react";
 import Link from "next/link";
 import { ArrowLeft, Bookmark, BookmarkCheck, ExternalLink, FileQuestion, MessagesSquare } from "lucide-react";
 import { PortalLayout } from "@/components/PortalLayout";
+import { InvestorRoundsCard } from "@/components/InvestorFunding";
+import { FoundersCard } from "@/components/FoundersCard";
 import { ReasonLine } from "@/components/forms";
 import { Button, ButtonLink, Card, EmptyState, LoadingRows, Stat, Tag, inputClass } from "@/components/ui";
 import { VerifiedBadge, useInvestorCanContact } from "@/components/verification";
@@ -332,6 +334,10 @@ export default function InvestorProjectPage({ params }: { params: Promise<{ id: 
                 </>
               )}
             </Card>
+
+            <InvestorRoundsCard projectId={project.id} canContact={canContact} />
+
+            <FoundersCard projectId={project.id} />
 
             {links.length > 0 && (
               <Card className="space-y-3 text-sm">

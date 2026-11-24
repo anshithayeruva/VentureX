@@ -404,6 +404,7 @@ class VerificationService:
                 title = f"{subject}: verification not approved"
                 desc = f"Reviewer's note: {note}" if note else "See what to fix and send it again."
             await NotificationService.create_notification(
+                category="account",
                 target_role=role, user_id=user_id, title=title, desc=desc,
                 badge="Verified" if status == "verified" else "Action needed",
                 badge_variant="success" if status == "verified" else "warning", link=link,
