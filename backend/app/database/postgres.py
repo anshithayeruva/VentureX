@@ -14,9 +14,11 @@ Both return rows as plain dicts with JSON/JSONB columns decoded to Python
 lists/dicts, so services return the same shapes regardless of transport.
 SQL uses psycopg-style ``%s`` placeholders in both modes.
 """
+import asyncio
 import json
 import logging
 import re
+import socket
 from dataclasses import dataclass
 from datetime import date, datetime
 from decimal import Decimal
@@ -193,6 +195,49 @@ def _rows_from(result: Dict[str, Any]) -> Tuple[List[Dict[str, Any]], int]:
     return rows, int(result.get("rowCount") or 0)
 
 
+# --- resilience against brief network blips -------------------------------
+# Some networks (and some antivirus web filters) make DNS lookups fail for a few seconds at a
+# time ("getaddrinfo failed"), even though the database itself is reachable. Two safeguards:
+#  1. For the database host only, a failed lookup falls back to the last address that worked.
+#  2. A request that could not *connect* is retried a few times with a short backoff. Only
+#     connect failures are retried: the request never reached the server, so nothing ran twice.
+_dns_hosts: set = set()
+_dns_cache: Dict[Tuple[Any, ...], Any] = {}
+_dns_installed = False
+CONNECT_RETRY_DELAYS = (0.5, 1.0, 2.0, 4.0)
+
+
+def _install_dns_fallback(host: str) -> None:
+    """Remember successful lookups of ``host`` and reuse them if a later lookup fails."""
+    global _dns_installed
+    if not host:
+        return
+    _dns_hosts.add(host.lower())
+    if _dns_installed:
+        return
+    original = socket.getaddrinfo
+
+    def getaddrinfo(h, port, *args, **kwargs):
+        # httpx (via anyio) passes the host IDNA-encoded as bytes; other callers pass str.
+        name = h.decode("ascii", "ignore") if isinstance(h, (bytes, bytearray)) else h
+        name = name.lower() if isinstance(name, str) else name
+        key = (name, port, args, tuple(sorted(kwargs.items())))
+        watched = isinstance(name, str) and name in _dns_hosts
+        try:
+            result = original(h, port, *args, **kwargs)
+        except socket.gaierror:
+            if watched and key in _dns_cache:
+                logger.warning("DNS lookup for %s failed; using its last known address.", name)
+                return _dns_cache[key]
+            raise
+        if watched:
+            _dns_cache[key] = result
+        return result
+
+    socket.getaddrinfo = getaddrinfo
+    _dns_installed = True
+
+
 async def _http_post(body: Dict[str, Any], extra_headers: Optional[Dict[str, str]] = None) -> Dict[str, Any]:
     if _http is None or _sql_endpoint is None:
         raise DatabaseUnavailable("Database connection unavailable")
@@ -202,10 +247,18 @@ async def _http_post(body: Dict[str, Any], extra_headers: Optional[Dict[str, str
         "Neon-Array-Mode": "true",
         **(extra_headers or {}),
     }
-    try:
-        resp = await _http.post(_sql_endpoint, json=body, headers=headers)
-    except httpx.TransportError as e:
-        raise DatabaseUnavailable(f"Could not reach Neon SQL endpoint: {e}") from e
+    for attempt in range(len(CONNECT_RETRY_DELAYS) + 1):
+        try:
+            resp = await _http.post(_sql_endpoint, json=body, headers=headers)
+            break
+        except (httpx.ConnectError, httpx.ConnectTimeout) as e:
+            if attempt == len(CONNECT_RETRY_DELAYS):
+                raise DatabaseUnavailable(f"Could not reach Neon SQL endpoint: {e}") from e
+            delay = CONNECT_RETRY_DELAYS[attempt]
+            logger.warning("Could not connect to Neon (%s); retrying in %.1fs.", e, delay)
+            await asyncio.sleep(delay)
+        except httpx.TransportError as e:
+            raise DatabaseUnavailable(f"Could not reach Neon SQL endpoint: {e}") from e
     if resp.status_code != 200:
         try:
             err = resp.json()
@@ -288,6 +341,7 @@ async def open_pool() -> Optional[str]:
         host = urlparse(settings.DATABASE_URL).hostname or ""
         # Same rule as @neondatabase/serverless: replace the endpoint id label with "api".
         _sql_endpoint = "https://" + re.sub(r"^[^.]+\.", "api.", host, count=1) + "/sql"
+        _install_dns_fallback(urlparse(_sql_endpoint).hostname or "")
         _http = httpx.AsyncClient(timeout=httpx.Timeout(30.0, connect=10.0), http2=False)
         logger.info("Using Neon SQL-over-HTTPS endpoint at %s", urlparse(_sql_endpoint).hostname)
     return "https"
