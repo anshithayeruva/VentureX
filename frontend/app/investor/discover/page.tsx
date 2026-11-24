@@ -189,7 +189,7 @@ export default function DiscoverStartupsPage() {
   const anyFilter = !!filters && (filters.industry.length + filters.stage.length + filters.region.length + filters.country.length > 0 || moreCount > 0);
 
   return (
-    <PortalLayout role="INVESTOR" activeItem="discover" title="Discover Startups" wide>
+    <PortalLayout role="INVESTOR" activeItem="discover" title="Discover Startups">
       <div className="mb-6 flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
         <div>
           <h1 className="text-[32px] leading-tight text-ink">Discover Startups</h1>

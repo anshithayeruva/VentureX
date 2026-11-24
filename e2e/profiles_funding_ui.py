@@ -185,12 +185,11 @@ with sync_playwright() as p:
         i.get_by_text("Funding rounds on VentureX").wait_for(timeout=20000)
         ok("portfolio lists the round allocation", i.get_by_role("link", name=TITLE).count() >= 1)
 
-        # ---- Discover: no sidebar, top navigation, filters, save
+        # ---- Discover: sidebar layout, filters, save
         i.goto(B + "/investor/discover", wait_until="networkidle")
         i.get_by_role("heading", name="Discover Startups").wait_for(timeout=20000)
         aside_visible = i.evaluate("(() => { const a = document.querySelector('aside'); if (!a) return false; const r = a.getBoundingClientRect(); return r.right > 0; })()")
-        ok("Discover has no sidebar on desktop", not aside_visible)
-        ok("compact top navigation present", i.get_by_role("navigation", name="Workspace").get_by_role("link", name="Deal Flow").count() >= 1)
+        ok("Discover keeps the sidebar on desktop", aside_visible)
         i.get_by_role("searchbox", name="Search startups").fill(TITLE)
         i.get_by_role("button", name=re.compile("More filters")).click()
         i.get_by_label("Funding round").select_option("open")
