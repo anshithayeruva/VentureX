@@ -3,6 +3,7 @@ import hashlib
 import uuid
 from datetime import datetime, timezone
 from typing import List, Dict, Any, Optional, Union
+from app.services.settings_service import email_allowed
 from app.database import postgres as pg
 from app.schemas.dealroom import (
     MessageCreateInput,
@@ -301,6 +302,7 @@ class DealRoomService:
             if rid == message_in.sender_id:
                 continue
             await NotificationService.create_notification(
+                category="connections" if recipient_role == "FOUNDER" else "deal_flow",
                 target_role=recipient_role,
                 user_id=rid,
                 title=f"New Message from {message_in.sender_name}",
@@ -324,15 +326,16 @@ class DealRoomService:
                 else room.get("founder_name")
             ) or "Deal Partner"
 
-            EmailService.send_dealroom_message_alert(
-                recipient_email=recipient_email,
-                recipient_name=recipient_name,
-                sender_name=message_in.sender_name,
-                project_title=room.get("project_title", "Startup"),
-                message_preview=message_in.content,
-                room_id=room_id,
-                recipient_role=recipient_role,
-            )
+            if await email_allowed(recipient_id, "connections" if recipient_role == "FOUNDER" else "deal_flow"):
+                EmailService.send_dealroom_message_alert(
+                    recipient_email=recipient_email,
+                    recipient_name=recipient_name,
+                    sender_name=message_in.sender_name,
+                    project_title=room.get("project_title", "Startup"),
+                    message_preview=message_in.content,
+                    room_id=room_id,
+                    recipient_role=recipient_role,
+                )
         except Exception as e:
             logger.warning("Failed to dispatch dealroom message email alert: %s", e)
 

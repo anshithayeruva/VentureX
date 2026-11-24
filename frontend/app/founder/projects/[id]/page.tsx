@@ -2,7 +2,7 @@
 
 import React, { use, useEffect, useState } from "react";
 import Link from "next/link";
-import { ArrowLeft, ExternalLink, Eye, FileQuestion, Lock, Pencil } from "lucide-react";
+import { ArrowLeft, ExternalLink, Eye, FileQuestion, Landmark, Lock, Pencil } from "lucide-react";
 import { PortalLayout } from "@/components/PortalLayout";
 import { CompanyVerificationCard } from "@/components/CompanyVerificationCard";
 import { ProjectTeamCard } from "@/components/teams";
@@ -110,6 +110,10 @@ export default function FounderProjectPage({ params }: { params: Promise<{ id: s
               </p>
             </div>
             <div className="flex shrink-0 gap-2">
+              <ButtonLink href={`/founder/projects/${project.id}/funding`} variant="secondary">
+                <Landmark className="h-4 w-4" />
+                Funding
+              </ButtonLink>
               <ButtonLink href={`/founder/projects/${project.id}/edit`} variant="secondary">
                 <Pencil className="h-4 w-4" />
                 Edit

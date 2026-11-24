@@ -110,6 +110,11 @@ export interface DiscoverItem {
   interest_initiated_by?: "investor" | "founder" | null;
   company_verified?: boolean;
   partners?: PartnerActivity[];
+  has_logo?: boolean;
+  problem?: string | null;
+  solution?: string | null;
+  demo_url?: string | null;
+  open_round?: OpenRoundInfo | null;
   room_id?: string | null;
   deal_stage?: string | null;
 }
@@ -139,6 +144,9 @@ export interface DiscoverQuery {
   matched_only?: boolean;
   saved_only?: boolean;
   verified_only?: boolean;
+  round_status?: "open" | "none";
+  ticket_min?: number;
+  ticket_max?: number;
   sort?: "fit" | "newest" | "raise_asc" | "raise_desc";
   page?: number;
   page_size?: number;
@@ -702,4 +710,216 @@ export interface Invitation {
   email: string;
   expired: boolean;
   for_you?: boolean;
+}
+
+
+/* ---------- profiles, settings, account ---------- */
+
+export interface ProfileBase {
+  user_id: string;
+  first_name: string;
+  last_name: string;
+  email: string;
+  phone: string;
+  location: string;
+  headline: string;
+  bio: string;
+  linkedin: string;
+  website: string;
+  expertise: string[];
+  experience: string;
+  has_photo: boolean;
+  updated_at?: string | null;
+}
+
+export interface FounderProfileFull extends ProfileBase {
+  designation: string;
+  skills: string[];
+  previous_startups: string;
+  company: string;
+  startup_role: string;
+  background: string;
+  startups: { id: number; title: string; is_published: boolean; is_owner: boolean }[];
+}
+
+export type InvestorType = "" | "angel" | "vc" | "micro_vc" | "family_office" | "corporate_vc" | "accelerator" | "syndicate" | "other";
+
+export interface InvestorProfileFull extends ProfileBase {
+  firm: string;
+  firm_managed: boolean;
+  title: string;
+  investor_type: InvestorType;
+  focus: string;
+  value_add: string;
+  verification_status: string;
+  criteria: { sectors: string[]; stages: string[]; geography: string };
+}
+
+export interface NotificationPrefs {
+  email_enabled: boolean;
+  categories: Record<string, { in_app: boolean; email: boolean }>;
+}
+
+export interface UserSettings {
+  notifications: NotificationPrefs;
+  privacy: Record<string, boolean | string>;
+  preferences: { time_zone: string; date_format: string; number_format?: string; show_unread_badge: boolean };
+}
+
+export interface SettingsResponse {
+  settings: UserSettings;
+  categories: Record<string, string>;
+  date_formats: string[];
+}
+
+export interface AccountInfo {
+  email: string;
+  email_verified: boolean;
+  role: "FOUNDER" | "INVESTOR" | null;
+  created_at: string;
+  deletion_requested_at: string | null;
+  status: "active" | "deletion_requested";
+  verification_status?: string;
+}
+
+export interface FounderPublic {
+  user_id: string;
+  name: string;
+  role: string;
+  headline: string;
+  designation: string;
+  startup_role: string;
+  bio: string;
+  location: string;
+  background: string;
+  experience: string;
+  skills: string[];
+  expertise: string[];
+  previous_startups: string;
+  has_photo: boolean;
+  email: string | null;
+  phone: string | null;
+  linkedin: string | null;
+}
+
+/* ---------- funding rounds and allocations (money is a decimal string from the API) ---------- */
+
+export type RoundStatus = "draft" | "open" | "closed" | "cancelled";
+export type AllocationStatus = "proposed" | "accepted" | "committed" | "partially_funded" | "funded" | "rejected" | "cancelled";
+export type FundingInstrument = "equity" | "safe" | "convertible_note" | "other";
+
+export interface RoundSummary {
+  target: string;
+  committed?: string;
+  received?: string;
+  remaining?: string;
+  unreceived_committed?: string;
+  oversubscribed_by?: string | null;
+  committed_pct?: string | null;
+  received_pct?: string | null;
+  investor_count?: number;
+  in_negotiation?: string;
+  in_negotiation_count?: number;
+}
+
+export interface Ownership {
+  instrument: FundingInstrument;
+  agreed_equity_pct: string | null;
+  indicative_equity_pct: string | null;
+  basis: string | null;
+}
+
+export interface Allocation {
+  id: number;
+  round_id: number;
+  project_id: number;
+  investor_id: string | null;
+  investor_name: string;
+  investor_firm: string;
+  external: boolean;
+  instrument: FundingInstrument;
+  status: AllocationStatus;
+  proposed_amount: string | null;
+  committed_amount: string | null;
+  received: string;
+  outstanding: string | null;
+  agreed_equity_pct: string | null;
+  agreed_valuation: string | null;
+  discount_pct: string | null;
+  terms: string;
+  investor_note: string;
+  founder_note: string;
+  committed_on: string | null;
+  created_at: string;
+  ownership: Ownership;
+}
+
+export interface FundingRound {
+  id: number;
+  project_id: number;
+  name: string;
+  round_type: string;
+  instrument: FundingInstrument;
+  status: RoundStatus;
+  target_amount: string;
+  min_ticket: string | null;
+  max_ticket: string | null;
+  pre_money_valuation: string | null;
+  post_money_valuation: string | null;
+  valuation_cap: string | null;
+  discount_pct: string | null;
+  opens_on: string | null;
+  closes_on: string | null;
+  disclose_progress: boolean;
+  indicative_post_money: string | null;
+  combined_agreed_equity_pct: string | null;
+  combined_indicative_equity_pct: string | null;
+  summary: RoundSummary;
+  allocations: Allocation[];
+}
+
+export interface ProjectFunding {
+  project: { id: number; title: string; funding_required: string };
+  rounds: FundingRound[];
+}
+
+export interface RoundInput {
+  name: string;
+  round_type: string;
+  instrument: FundingInstrument;
+  target_amount: string;
+  min_ticket?: string | null;
+  max_ticket?: string | null;
+  pre_money_valuation?: string | null;
+  post_money_valuation?: string | null;
+  valuation_cap?: string | null;
+  discount_pct?: string | null;
+  opens_on?: string | null;
+  closes_on?: string | null;
+  disclose_progress: boolean;
+}
+
+export interface AllocationDetail {
+  allocation: Allocation;
+  round: Omit<FundingRound, "allocations">;
+  project: { id: number; title: string };
+  transactions: { id: number; type: "receipt" | "refund"; amount: string; received_on: string; reference: string; investor_confirmed_at: string | null }[];
+  history: { action: string; from_status: string | null; to_status: string | null; details: Record<string, unknown>; created_at: string }[];
+}
+
+export interface PortfolioAllocation extends Allocation {
+  round_name: string;
+  round_status: RoundStatus;
+  round_summary: RoundSummary;
+  project_title: string;
+}
+
+export interface OpenRoundInfo {
+  name: string;
+  round_type: string;
+  instrument: FundingInstrument;
+  target: string;
+  min_ticket: string | null;
+  max_ticket: string | null;
+  committed_pct: string | null;
 }

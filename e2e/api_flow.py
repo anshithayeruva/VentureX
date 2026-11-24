@@ -88,9 +88,17 @@ class Account:
 
     def api(self, method, path, **kw):
         headers = kw.pop("headers", {})
+        timeout = kw.pop("timeout", 60)
         if self.token():
             headers["Authorization"] = f"Bearer {self.token()}"
-        return self.http.request(method, API + path, headers=headers, timeout=kw.pop("timeout", 60), **kw)
+        r = self.http.request(method, API + path, headers=headers, timeout=timeout, **kw)
+        if r.status_code == 401 and "expired" in r.text.lower():
+            # Neon Auth tokens are short-lived; a slow run can outlive one. Get a fresh one and retry once.
+            self._token = None
+            if self.token():
+                headers["Authorization"] = f"Bearer {self.token()}"
+                r = self.http.request(method, API + path, headers=headers, timeout=timeout, **kw)
+        return r
 
 
 anon = httpx.Client(timeout=60, follow_redirects=False)

@@ -15,13 +15,23 @@ import {
   AnalysisHistoryItem,
   CriteriaOptions,
   DealFlow,
+  AccountInfo,
+  AllocationDetail,
+  FounderProfileFull,
+  FounderPublic,
+  InvestorProfileFull,
+  PortfolioAllocation,
+  ProjectFunding,
+  RoundInput,
+  RoundStatus,
+  SettingsResponse,
+  UserSettings,
   FirmPipelineRow,
   Invitation,
   MyFirm,
   PartnerActivity,
   PendingInvite,
   ProjectTeam,
-  CompanyUpdate,
   FounderUpdateDetail,
   InvestorUpdatesPage,
   ProjectUpdates,
@@ -388,6 +398,150 @@ export const api = {
       apiFetch(`${API_BASE_URL}/investors/saved/${projectId}`, { method: saved ? "PUT" : "DELETE" })
     );
     await throwForStatus(res, saved ? "Could not save this startup" : "Could not remove it from saved");
+  },
+
+  /* ---------- profile, settings, account ---------- */
+
+  async getMyProfile<T = FounderProfileFull | InvestorProfileFull>(): Promise<T> {
+    return getJson(`${API_BASE_URL}/me/profile`, "Could not load your profile");
+  },
+
+  async saveMyProfile<T = FounderProfileFull | InvestorProfileFull>(data: Record<string, unknown>): Promise<T> {
+    return sendJson("PUT", `${API_BASE_URL}/me/profile`, data, "Could not save your profile");
+  },
+
+  async uploadMyPhoto(file: File): Promise<unknown> {
+    const form = new FormData();
+    form.append("file", file);
+    const res = await networkSafe(() => apiFetch(`${API_BASE_URL}/me/profile/photo`, { method: "POST", body: form }));
+    await throwForStatus(res, "Could not upload the photo");
+    return res.json();
+  },
+
+  async removeMyPhoto(): Promise<unknown> {
+    const res = await networkSafe(() => apiFetch(`${API_BASE_URL}/me/profile/photo`, { method: "DELETE" }));
+    await throwForStatus(res, "Could not remove the photo");
+    return res.json();
+  },
+
+  /** An image the API serves to signed-in users, as a blob: URL the page can show. */
+  async imageUrl(path: string): Promise<string | null> {
+    try {
+      const res = await apiFetch(`${API_BASE_URL}${path}`, { cache: "no-store" });
+      if (!res.ok) return null;
+      return URL.createObjectURL(await res.blob());
+    } catch {
+      return null;
+    }
+  },
+
+  async uploadProjectLogo(projectId: number, file: File): Promise<unknown> {
+    const form = new FormData();
+    form.append("file", file);
+    const res = await networkSafe(() => apiFetch(`${API_BASE_URL}/projects/${projectId}/logo`, { method: "POST", body: form }));
+    await throwForStatus(res, "Could not upload the logo");
+    return res.json();
+  },
+
+  async removeProjectLogo(projectId: number): Promise<unknown> {
+    const res = await networkSafe(() => apiFetch(`${API_BASE_URL}/projects/${projectId}/logo`, { method: "DELETE" }));
+    await throwForStatus(res, "Could not remove the logo");
+    return res.json();
+  },
+
+  async getMySettings(): Promise<SettingsResponse> {
+    return getJson(`${API_BASE_URL}/me/settings`, "Could not load your settings");
+  },
+
+  async saveMySettings(settings: UserSettings): Promise<SettingsResponse> {
+    return sendJson("PUT", `${API_BASE_URL}/me/settings`, settings, "Could not save your settings");
+  },
+
+  async getMyAccount(): Promise<AccountInfo> {
+    return getJson(`${API_BASE_URL}/me/account`, "Could not load your account");
+  },
+
+  async requestAccountDeletion(reason: string): Promise<AccountInfo> {
+    return sendJson("POST", `${API_BASE_URL}/me/deletion-request`, { reason }, "Could not send the request");
+  },
+
+  async cancelAccountDeletion(): Promise<AccountInfo> {
+    const res = await networkSafe(() => apiFetch(`${API_BASE_URL}/me/deletion-request`, { method: "DELETE" }));
+    await throwForStatus(res, "Could not cancel the request");
+    return res.json();
+  },
+
+  async getProjectFounders(projectId: number): Promise<FounderPublic[]> {
+    return getJson(`${API_BASE_URL}/projects/${projectId}/founders`, "Could not load the founders");
+  },
+
+  /* ---------- funding rounds ---------- */
+
+  async getProjectFunding(projectId: number): Promise<ProjectFunding> {
+    return getJson(`${API_BASE_URL}/projects/${projectId}/funding`, "Could not load funding");
+  },
+
+  async createRound(projectId: number, data: RoundInput): Promise<ProjectFunding> {
+    return sendJson("POST", `${API_BASE_URL}/projects/${projectId}/rounds`, data, "Could not create the round");
+  },
+
+  async updateRound(roundId: number, data: RoundInput): Promise<ProjectFunding> {
+    return sendJson("PUT", `${API_BASE_URL}/rounds/${roundId}`, data, "Could not save the round");
+  },
+
+  async setRoundStatus(roundId: number, status: RoundStatus): Promise<ProjectFunding> {
+    return sendJson("POST", `${API_BASE_URL}/rounds/${roundId}/status`, { status }, "Could not change the round");
+  },
+
+  async addExternalAllocation(roundId: number, data: Record<string, unknown>): Promise<ProjectFunding> {
+    return sendJson("POST", `${API_BASE_URL}/rounds/${roundId}/external`, data, "Could not record the commitment");
+  },
+
+  async acceptAllocation(allocId: number, data: Record<string, unknown>): Promise<ProjectFunding> {
+    return sendJson("POST", `${API_BASE_URL}/allocations/${allocId}/accept`, data, "Could not accept the proposal");
+  },
+
+  async rejectAllocation(allocId: number, note: string): Promise<ProjectFunding> {
+    return sendJson("POST", `${API_BASE_URL}/allocations/${allocId}/reject`, { note }, "Could not decline the proposal");
+  },
+
+  async cancelCommitment(allocId: number): Promise<ProjectFunding> {
+    return sendJson("POST", `${API_BASE_URL}/allocations/${allocId}/cancel-commitment`, {}, "Could not cancel the commitment");
+  },
+
+  async recordReceipt(allocId: number, data: { amount: string; received_on: string; reference?: string; type?: "receipt" | "refund" }): Promise<ProjectFunding> {
+    return sendJson("POST", `${API_BASE_URL}/allocations/${allocId}/receipts`, data, "Could not record the payment");
+  },
+
+  async getInvestorRounds(projectId: number): Promise<{ project: { id: number; title: string }; rounds: ProjectFunding["rounds"]; can_propose: boolean }> {
+    return getJson(`${API_BASE_URL}/projects/${projectId}/rounds`, "Could not load funding rounds");
+  },
+
+  async proposeInvestment(roundId: number, amount: string, note: string): Promise<AllocationDetail> {
+    return sendJson("POST", `${API_BASE_URL}/rounds/${roundId}/proposals`, { amount, note }, "Could not send the proposal");
+  },
+
+  async getMyAllocations(): Promise<PortfolioAllocation[]> {
+    return getJson(`${API_BASE_URL}/investors/allocations`, "Could not load your investments");
+  },
+
+  async getMyAllocation(id: number): Promise<AllocationDetail | null> {
+    const res = await networkSafe(() => apiFetch(`${API_BASE_URL}/investors/allocations/${id}`, { cache: "no-store" }));
+    if (res.status === 404) return null;
+    await throwForStatus(res, "Could not load the investment");
+    return res.json();
+  },
+
+  async confirmAllocation(id: number): Promise<AllocationDetail> {
+    return sendJson("POST", `${API_BASE_URL}/investors/allocations/${id}/confirm`, {}, "Could not confirm");
+  },
+
+  async withdrawAllocation(id: number): Promise<AllocationDetail> {
+    return sendJson("POST", `${API_BASE_URL}/investors/allocations/${id}/withdraw`, {}, "Could not withdraw");
+  },
+
+  async confirmReceipt(txnId: number): Promise<AllocationDetail> {
+    return sendJson("POST", `${API_BASE_URL}/investors/receipts/${txnId}/confirm`, {}, "Could not confirm the receipt");
   },
 
   /* ---------- teams ---------- */

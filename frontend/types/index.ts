@@ -95,6 +95,7 @@ export interface Project {
   created_at: string;
   updated_at?: string;
   company_verified?: boolean | null;
+  has_logo?: boolean | null;
   /** For the project's own team: whether you created it (co-founders aren't owners). */
   is_owner?: boolean | null;
 }

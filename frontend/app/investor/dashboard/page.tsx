@@ -11,23 +11,19 @@ import {
   ButtonLink,
   Card,
   EmptyState,
-  Field,
-  FormFooter,
   LoadingRows,
   PageHeader,
   Section,
   Stat,
   Tag,
-  Toggle,
   cx,
-  inputClass,
 } from "@/components/ui";
 import { api } from "@/lib/api";
 import { stageLabel, stageTone } from "@/lib/dealroom";
 import { formatMoney, timeAgo } from "@/lib/format";
 import { formatCompact, formatSigned, gainTone } from "@/lib/money";
 import { normalizeThesis, summarizeThesis } from "@/lib/thesis";
-import type { DealFlow, DiscoverItem, NotificationItem, PortfolioEntry, PortfolioSummary } from "@/types";
+import type { DealFlow, DiscoverItem, InvestorProfileFull, NotificationItem, PortfolioSummary } from "@/types";
 
 type Tab = "overview" | "notifications" | "profile" | "settings";
 
@@ -44,6 +40,8 @@ const MOVED: Record<string, string> = {
   recommended: "/investor/discover",
   browse: "/investor/discover",
   interests: "/investor/deal-flow",
+  profile: "/investor/profile",
+  settings: "/investor/settings",
 };
 
 function InvestorDashboardContent() {
@@ -63,29 +61,7 @@ function InvestorDashboardContent() {
   const [thesisLines, setThesisLines] = useState<string[] | null>(null);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [notifications, setNotifications] = useState<NotificationItem[]>([]);
-
-  const [profile, setProfile] = useState({
-    name: "",
-    firm: "",
-    title: "",
-    bio: "",
-    location: "",
-    thesis: "",
-    minCheck: "",
-    maxCheck: "",
-    valueAdd: "",
-    listedForFounders: true,
-  });
-  const [pastDeals, setPastDeals] = useState<PortfolioEntry[]>([]);
-  const [newDeal, setNewDeal] = useState({ company: "", stage: "", year: "" });
-  const [profileSaved, setProfileSaved] = useState(false);
-  const [profileError, setProfileError] = useState<string | null>(null);
-  const [settings, setSettings] = useState({
-    autoNotifyHighConviction: true,
-    weeklyDealflowSummary: true,
-    directFounderMessaging: true,
-  });
-  const [settingsSaved, setSettingsSaved] = useState(false);
+  const [firstName, setFirstName] = useState("");
 
   useEffect(() => {
     let mounted = true;
@@ -102,33 +78,7 @@ function InvestorDashboardContent() {
     api.getPortfolioSummary().then((p) => mounted && setPortfolio(p)).catch(failed);
     api.getInvestorPreferences().then((p) => mounted && setThesisLines(p ? summarizeThesis(normalizeThesis(p.thesis)) : []));
     api.getNotifications("INVESTOR").then((data) => mounted && Array.isArray(data) && setNotifications(data));
-    api.getInvestorProfile().then((data) => {
-      if (mounted && data) {
-        // The API answers with its field aliases (full_name, firm_name, investment_thesis, ...).
-        setProfile({
-          name: data.full_name ?? data.name ?? "",
-          firm: data.firm_name ?? data.firm ?? "",
-          title: data.title || "",
-          bio: data.bio || "",
-          location: data.location || "",
-          thesis: data.investment_thesis ?? data.thesis ?? "",
-          minCheck: data.min_check || "",
-          maxCheck: data.max_check || "",
-          valueAdd: data.value_add ?? "",
-          listedForFounders: data.listed_for_founders ?? true,
-        });
-        setPastDeals(Array.isArray(data.portfolio) ? data.portfolio : []);
-      }
-    });
-    api.getInvestorSettings().then((data) => {
-      if (mounted && data) {
-        setSettings({
-          autoNotifyHighConviction: data.auto_notify_high_conviction ?? true,
-          weeklyDealflowSummary: data.weekly_dealflow_summary ?? true,
-          directFounderMessaging: data.direct_founder_messaging ?? true,
-        });
-      }
-    });
+    api.getMyProfile<InvestorProfileFull>().then((p) => mounted && setFirstName(p.first_name)).catch(() => undefined);
     return () => {
       mounted = false;
     };
@@ -146,49 +96,6 @@ function InvestorDashboardContent() {
     setNotifications((prev) => prev.map((n) => ({ ...n, read: true })));
   };
 
-  const addDeal = () => {
-    const company = newDeal.company.trim();
-    if (!company) return;
-    const year = parseInt(newDeal.year, 10);
-    setPastDeals((d) => [...d, { company, stage: newDeal.stage.trim() || null, year: Number.isFinite(year) ? year : null }]);
-    setNewDeal({ company: "", stage: "", year: "" });
-  };
-
-  const saveProfile = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setProfileError(null);
-    try {
-      await api.updateInvestorProfile({
-        name: profile.name,
-        firm: profile.firm,
-        title: profile.title,
-        bio: profile.bio,
-        location: profile.location,
-        thesis: profile.thesis,
-        min_check: profile.minCheck,
-        max_check: profile.maxCheck,
-        value_add: profile.valueAdd,
-        portfolio: pastDeals,
-        listed_for_founders: profile.listedForFounders,
-      });
-      setProfileSaved(true);
-      setTimeout(() => setProfileSaved(false), 3000);
-    } catch (err) {
-      setProfileError(err instanceof Error ? err.message : "Couldn't save your profile.");
-    }
-  };
-
-  const saveSettings = async (e: React.FormEvent) => {
-    e.preventDefault();
-    await api.updateInvestorSettings({
-      auto_notify_high_conviction: settings.autoNotifyHighConviction,
-      weekly_dealflow_summary: settings.weeklyDealflowSummary,
-      direct_founder_messaging: settings.directFounderMessaging,
-    });
-    setSettingsSaved(true);
-    setTimeout(() => setSettingsSaved(false), 3000);
-  };
-
   const copy = TAB_COPY[activeTab];
   const counts = flow?.counts ?? {};
   const t = portfolio?.totals;
@@ -196,7 +103,7 @@ function InvestorDashboardContent() {
   return (
     <PortalLayout role="INVESTOR" activeItem={activeTab} title={copy.title}>
       <PageHeader
-        title={activeTab === "overview" && profile.name ? `Welcome back, ${profile.name.split(" ")[0]}` : copy.title}
+        title={activeTab === "overview" && firstName ? `Welcome back, ${firstName}` : copy.title}
         description={copy.description}
         actions={
           activeTab === "notifications" && unreadCount > 0 ? (
@@ -467,109 +374,8 @@ function InvestorDashboardContent() {
         ))}
 
       {/* ---------------- Profile ---------------- */}
-      {activeTab === "profile" && (
-        <Card className="max-w-2xl">
-          <form onSubmit={saveProfile} className="space-y-5">
-            <div className="grid gap-5 sm:grid-cols-2">
-              <Field label="Full name" htmlFor="ip-name">
-                <input id="ip-name" className={inputClass} value={profile.name} onChange={(e) => setProfile({ ...profile, name: e.target.value })} />
-              </Field>
-              <Field label="Title" htmlFor="ip-title">
-                <input id="ip-title" placeholder="e.g. Partner, Angel investor" className={inputClass} value={profile.title} onChange={(e) => setProfile({ ...profile, title: e.target.value })} />
-              </Field>
-            </div>
-            <div className="grid gap-5 sm:grid-cols-2">
-              <Field label="Firm or fund" htmlFor="ip-firm">
-                <input id="ip-firm" className={inputClass} value={profile.firm} onChange={(e) => setProfile({ ...profile, firm: e.target.value })} />
-              </Field>
-              <Field label="Location" htmlFor="ip-location">
-                <input id="ip-location" className={inputClass} value={profile.location} onChange={(e) => setProfile({ ...profile, location: e.target.value })} />
-              </Field>
-            </div>
-            <Field label="Investment thesis" htmlFor="ip-thesis" hint="What you invest in and why, in a few lines.">
-              <textarea id="ip-thesis" rows={3} className={inputClass} value={profile.thesis} onChange={(e) => setProfile({ ...profile, thesis: e.target.value })} />
-            </Field>
-            <Field label="About you" htmlFor="ip-bio">
-              <textarea id="ip-bio" rows={2} className={inputClass} value={profile.bio} onChange={(e) => setProfile({ ...profile, bio: e.target.value })} />
-            </Field>
-            <Field
-              label="How you help portfolio companies"
-              htmlFor="ip-value"
-              hint="Shown to founders on your profile: hiring, intros to customers, follow-on support…"
-            >
-              <textarea id="ip-value" rows={3} maxLength={1500} className={inputClass} value={profile.valueAdd} onChange={(e) => setProfile({ ...profile, valueAdd: e.target.value })} />
-            </Field>
-            <Field label="Past investments" hint="Companies you want founders to see.">
-              <div className="space-y-2">
-                {pastDeals.length > 0 && (
-                  <ul className="divide-y divide-line rounded-lg border border-line">
-                    {pastDeals.map((d, i) => (
-                      <li key={`${d.company}-${i}`} className="flex items-center justify-between gap-3 px-3 py-2 text-sm">
-                        <span className="text-ink">
-                          {d.company}
-                          <span className="text-muted">{[d.stage, d.year].filter(Boolean).length ? ` · ${[d.stage, d.year].filter(Boolean).join(" · ")}` : ""}</span>
-                        </span>
-                        <button type="button" aria-label={`Remove ${d.company}`} onClick={() => setPastDeals((all) => all.filter((_, j) => j !== i))} className="text-muted hover:text-danger">
-                          Remove
-                        </button>
-                      </li>
-                    ))}
-                  </ul>
-                )}
-                <div className="grid gap-2 sm:grid-cols-[minmax(0,1fr)_120px_90px_auto]">
-                  <input aria-label="Company" placeholder="Company" className={inputClass} value={newDeal.company} onChange={(e) => setNewDeal({ ...newDeal, company: e.target.value })} />
-                  <input aria-label="Stage" placeholder="Stage" className={inputClass} value={newDeal.stage} onChange={(e) => setNewDeal({ ...newDeal, stage: e.target.value })} />
-                  <input aria-label="Year" placeholder="Year" inputMode="numeric" className={inputClass} value={newDeal.year} onChange={(e) => setNewDeal({ ...newDeal, year: e.target.value })} />
-                  <Button variant="secondary" onClick={addDeal} disabled={!newDeal.company.trim()}>
-                    Add
-                  </Button>
-                </div>
-              </div>
-            </Field>
-            <div className="divide-y divide-line rounded-lg border border-line px-4">
-              <Toggle
-                label="Let founders find me"
-                description="List your profile in Find investors so founders with published, ready projects can request an intro."
-                checked={profile.listedForFounders}
-                onChange={(v) => setProfile({ ...profile, listedForFounders: v })}
-              />
-            </div>
-            <div className="grid gap-5 sm:grid-cols-2">
-              <Field label="Smallest check" htmlFor="ip-min">
-                <input id="ip-min" placeholder="₹5,00,000" className={inputClass} value={profile.minCheck} onChange={(e) => setProfile({ ...profile, minCheck: e.target.value })} />
-              </Field>
-              <Field label="Largest check" htmlFor="ip-max">
-                <input id="ip-max" placeholder="₹50,00,000" className={inputClass} value={profile.maxCheck} onChange={(e) => setProfile({ ...profile, maxCheck: e.target.value })} />
-              </Field>
-            </div>
-            {profileError && <p role="alert" className="text-sm text-danger">{profileError}</p>}
-            <FormFooter saved={profileSaved} label="Save profile" />
-          </form>
-        </Card>
-      )}
-
-      {/* ---------------- Settings ---------------- */}
-      {activeTab === "settings" && (
-        <Card className="max-w-2xl">
-          <form onSubmit={saveSettings} className="space-y-6">
-            <div className="divide-y divide-line">
-              <Toggle
-                label="Notify me about strong fits"
-                description="A notification when a published startup fits your criteria at 90% or more."
-                checked={settings.autoNotifyHighConviction}
-                onChange={(v) => setSettings({ ...settings, autoNotifyHighConviction: v })}
-              />
-              <Toggle
-                label="Allow founders to message me"
-                description="When off, founders in your deal rooms can share documents but can't send messages."
-                checked={settings.directFounderMessaging}
-                onChange={(v) => setSettings({ ...settings, directFounderMessaging: v })}
-              />
-            </div>
-            <FormFooter saved={settingsSaved} label="Save settings" />
-          </form>
-        </Card>
-      )}
+      {/* Profile and settings moved to /investor/profile and /investor/settings */}
+      {(activeTab === "profile" || activeTab === "settings") && <LoadingRows />}
     </PortalLayout>
   );
 }

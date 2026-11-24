@@ -27,11 +27,8 @@ import {
   ButtonLink,
   Card,
   EmptyState,
-  Field,
-  FormFooter,
   LoadingRows,
   Segmented,
-  Toggle,
   PageHeader,
   ScoreBar,
   Section,
@@ -44,7 +41,7 @@ import {
 import { VerifiedBadge } from "@/components/verification";
 import { api } from "@/lib/api";
 import { formatMoney, timeAgo } from "@/lib/format";
-import { MatchItem, NotificationItem, PASS_REASON_LABEL, Project, ProjectInterest } from "@/types";
+import { FounderProfileFull, MatchItem, NotificationItem, PASS_REASON_LABEL, Project, ProjectInterest } from "@/types";
 
 type Tab = "overview" | "projects" | "readiness" | "investors" | "intros" | "notifications" | "profile" | "settings";
 
@@ -88,18 +85,12 @@ function FounderDashboardContent() {
   const [readinessProjectId, setReadinessProjectId] = useState<number | null>(null);
   const [exporting, setExporting] = useState(false);
 
-  const [profile, setProfile] = useState({ name: "", company: "", bio: "", location: "", linkedin: "", website: "" });
-  const [profileSaved, setProfileSaved] = useState(false);
-  const [settings, setSettings] = useState({
-    defaultPrivate: true,
-    hideGapsFromInvestors: true,
-    emailAlerts: true,
-    weeklyDigest: false,
-  });
-  const [settingsSaved, setSettingsSaved] = useState(false);
+  const [firstName, setFirstName] = useState("");
 
   useEffect(() => {
     if (activeTab === "investors") router.replace("/founder/investors");
+    if (activeTab === "profile") router.replace("/founder/profile");
+    if (activeTab === "settings") router.replace("/founder/settings");
   }, [activeTab, router]);
 
   useEffect(() => {
@@ -110,28 +101,10 @@ function FounderDashboardContent() {
       .finally(() => mounted && setProjectsLoaded(true));
     api.getMatches().then((data) => mounted && setMatches(data));
     api.getInterests().then((data) => mounted && Array.isArray(data) && setInterests(data));
-    api.getFounderProfile().then((data) => {
-      if (mounted && data) {
-        setProfile({
-          name: data.name || "",
-          company: data.company || "",
-          bio: data.bio || "",
-          location: data.location || "",
-          linkedin: data.linkedin || "",
-          website: data.website || "",
-        });
-      }
-    });
-    api.getFounderSettings().then((data) => {
-      if (mounted && data) {
-        setSettings({
-          defaultPrivate: data.default_private ?? true,
-          hideGapsFromInvestors: data.hide_gaps_from_investors ?? true,
-          emailAlerts: data.email_alerts ?? true,
-          weeklyDigest: data.weekly_digest ?? false,
-        });
-      }
-    });
+    api
+      .getMyProfile<FounderProfileFull>()
+      .then((p) => mounted && setFirstName(p.first_name))
+      .catch(() => undefined);
     api.getNotifications("FOUNDER").then((data) => mounted && Array.isArray(data) && setNotifications(data));
     return () => {
       mounted = false;
@@ -194,25 +167,6 @@ function FounderDashboardContent() {
   const markAllRead = async () => {
     await api.markAllNotificationsRead("FOUNDER");
     setNotifications((prev) => prev.map((n) => ({ ...n, read: true })));
-  };
-
-  const saveProfile = async (e: React.FormEvent) => {
-    e.preventDefault();
-    await api.updateFounderProfile(profile);
-    setProfileSaved(true);
-    setTimeout(() => setProfileSaved(false), 3000);
-  };
-
-  const saveSettings = async (e: React.FormEvent) => {
-    e.preventDefault();
-    await api.updateFounderSettings({
-      default_private: settings.defaultPrivate,
-      hide_gaps_from_investors: settings.hideGapsFromInvestors,
-      email_alerts: settings.emailAlerts,
-      weekly_digest: settings.weeklyDigest,
-    });
-    setSettingsSaved(true);
-    setTimeout(() => setSettingsSaved(false), 3000);
   };
 
   const exportReport = async () => {
@@ -412,7 +366,7 @@ function FounderDashboardContent() {
   return (
     <PortalLayout role="FOUNDER" activeItem={activeTab} title={copy.title}>
       <PageHeader
-        title={activeTab === "overview" && profile.name ? `Welcome back, ${profile.name.split(" ")[0]}` : copy.title}
+        title={activeTab === "overview" && firstName ? `Welcome back, ${firstName}` : copy.title}
         description={copy.description}
         actions={
           activeTab === "readiness" && readinessProject ? (
@@ -681,65 +635,8 @@ function FounderDashboardContent() {
           </Card>
         ))}
 
-      {/* ---------------- Profile ---------------- */}
-      {activeTab === "profile" && (
-        <Card className="max-w-2xl">
-          <form onSubmit={saveProfile} className="space-y-5">
-            <div className="grid gap-5 sm:grid-cols-2">
-              <Field label="Full name" htmlFor="pf-name">
-                <input id="pf-name" className={inputClass} value={profile.name} onChange={(e) => setProfile({ ...profile, name: e.target.value })} />
-              </Field>
-              <Field label="Company" htmlFor="pf-company">
-                <input id="pf-company" className={inputClass} value={profile.company} onChange={(e) => setProfile({ ...profile, company: e.target.value })} />
-              </Field>
-            </div>
-            <Field label="About you" htmlFor="pf-bio" hint="A few lines on your background.">
-              <textarea id="pf-bio" rows={3} className={inputClass} value={profile.bio} onChange={(e) => setProfile({ ...profile, bio: e.target.value })} />
-            </Field>
-            <div className="grid gap-5 sm:grid-cols-2">
-              <Field label="Location" htmlFor="pf-location">
-                <input id="pf-location" className={inputClass} value={profile.location} onChange={(e) => setProfile({ ...profile, location: e.target.value })} />
-              </Field>
-              <Field label="LinkedIn" htmlFor="pf-linkedin">
-                <input id="pf-linkedin" type="url" placeholder="https://linkedin.com/in/…" className={inputClass} value={profile.linkedin} onChange={(e) => setProfile({ ...profile, linkedin: e.target.value })} />
-              </Field>
-            </div>
-            <Field label="Company website" htmlFor="pf-website">
-              <input id="pf-website" type="url" placeholder="https://" className={inputClass} value={profile.website} onChange={(e) => setProfile({ ...profile, website: e.target.value })} />
-            </Field>
-            <FormFooter saved={profileSaved} label="Save profile" />
-          </form>
-        </Card>
-      )}
-
-      {/* ---------------- Settings ---------------- */}
-      {activeTab === "settings" && (
-        <Card className="max-w-2xl">
-          <form onSubmit={saveSettings} className="space-y-6">
-            <div className="divide-y divide-line">
-              <Toggle
-                label="Keep new projects private"
-                description="New projects start private. Turn off to have the publish switch on by default."
-                checked={settings.defaultPrivate}
-                onChange={(v) => setSettings({ ...settings, defaultPrivate: v })}
-              />
-              <Toggle
-                label="Hide readiness feedback from investors"
-                description="Always on. Scores and improvement notes are only ever shown to you."
-                checked
-                disabled
-              />
-              <Toggle
-                label="Email me about strong matches"
-                description="When an investor's criteria fit a published project at 90% or more. You'll always see these in Notifications."
-                checked={settings.emailAlerts}
-                onChange={(v) => setSettings({ ...settings, emailAlerts: v })}
-              />
-            </div>
-            <FormFooter saved={settingsSaved} label="Save settings" />
-          </form>
-        </Card>
-      )}
+      {/* Profile and settings moved to /founder/profile and /founder/settings */}
+      {(activeTab === "profile" || activeTab === "settings") && <LoadingRows />}
     </PortalLayout>
   );
 }

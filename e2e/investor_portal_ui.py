@@ -7,6 +7,7 @@ Covers navigation, Discover, Deal Flow, Criteria and Portfolio (record, transact
 valuations, exact rupee maths, charts, mobile layout). Exits non-zero on any failure.
 """
 import json
+import re
 import os
 import sys
 from pathlib import Path
@@ -63,10 +64,10 @@ with sync_playwright() as p:
     # ---- discover
     q.goto(B + "/investor/discover", wait_until="networkidle")
     q.get_by_text("startup", exact=False).first.wait_for(timeout=15000)
-    count_text = q.locator("p[aria-live=polite]").first.inner_text()
+    count_text = q.locator("[aria-live=polite]").first.inner_text()
     ok("discover shows a result count", "startup" in count_text, count_text)
     q.screenshot(path=str(OUT / "2_discover.png"), full_page=True)
-    first_save = q.get_by_role("button", name="Save ").first
+    first_save = q.get_by_role("button", name=re.compile(r"^Save ")).first
     title = first_save.get_attribute("aria-label").replace("Save ", "")
     first_save.click()
     q.get_by_role("button", name=f"Remove {title} from saved").wait_for(timeout=15000)

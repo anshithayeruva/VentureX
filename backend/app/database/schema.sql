@@ -448,3 +448,110 @@ CREATE TABLE IF NOT EXISTS team_invitations (
     responded_at TIMESTAMPTZ
 );
 CREATE INDEX IF NOT EXISTS team_invitations_email_idx ON team_invitations (lower(email), status);
+
+-- Profile and settings overhaul: richer founder and investor profiles, photos, deletion requests.
+ALTER TABLE founder_profiles ADD COLUMN IF NOT EXISTS first_name TEXT NOT NULL DEFAULT '';
+ALTER TABLE founder_profiles ADD COLUMN IF NOT EXISTS last_name TEXT NOT NULL DEFAULT '';
+ALTER TABLE founder_profiles ADD COLUMN IF NOT EXISTS phone TEXT NOT NULL DEFAULT '';
+ALTER TABLE founder_profiles ADD COLUMN IF NOT EXISTS headline TEXT NOT NULL DEFAULT '';
+ALTER TABLE founder_profiles ADD COLUMN IF NOT EXISTS designation TEXT NOT NULL DEFAULT '';
+ALTER TABLE founder_profiles ADD COLUMN IF NOT EXISTS experience TEXT NOT NULL DEFAULT '';
+ALTER TABLE founder_profiles ADD COLUMN IF NOT EXISTS skills JSONB NOT NULL DEFAULT '[]';
+ALTER TABLE founder_profiles ADD COLUMN IF NOT EXISTS previous_startups TEXT NOT NULL DEFAULT '';
+ALTER TABLE founder_profiles ADD COLUMN IF NOT EXISTS startup_role TEXT NOT NULL DEFAULT '';
+ALTER TABLE founder_profiles ADD COLUMN IF NOT EXISTS background TEXT NOT NULL DEFAULT '';
+ALTER TABLE founder_profiles ADD COLUMN IF NOT EXISTS expertise JSONB NOT NULL DEFAULT '[]';
+ALTER TABLE founder_profiles ADD COLUMN IF NOT EXISTS photo_path TEXT;
+ALTER TABLE investor_profiles ADD COLUMN IF NOT EXISTS first_name TEXT NOT NULL DEFAULT '';
+ALTER TABLE investor_profiles ADD COLUMN IF NOT EXISTS last_name TEXT NOT NULL DEFAULT '';
+ALTER TABLE investor_profiles ADD COLUMN IF NOT EXISTS phone TEXT NOT NULL DEFAULT '';
+ALTER TABLE investor_profiles ADD COLUMN IF NOT EXISTS headline TEXT NOT NULL DEFAULT '';
+ALTER TABLE investor_profiles ADD COLUMN IF NOT EXISTS investor_type TEXT NOT NULL DEFAULT '';
+ALTER TABLE investor_profiles ADD COLUMN IF NOT EXISTS experience TEXT NOT NULL DEFAULT '';
+ALTER TABLE investor_profiles ADD COLUMN IF NOT EXISTS focus TEXT NOT NULL DEFAULT '';
+ALTER TABLE investor_profiles ADD COLUMN IF NOT EXISTS expertise JSONB NOT NULL DEFAULT '[]';
+ALTER TABLE investor_profiles ADD COLUMN IF NOT EXISTS photo_path TEXT;
+ALTER TABLE app_users ADD COLUMN IF NOT EXISTS deletion_requested_at TIMESTAMPTZ;
+ALTER TABLE app_users ADD COLUMN IF NOT EXISTS deletion_reason TEXT;
+ALTER TABLE projects ADD COLUMN IF NOT EXISTS logo_path TEXT;
+
+-- Funding rounds and investment allocations. Separate from project_interests (interest is not an
+-- investment) and from the investor's private portfolio ledger (investments). Money is NUMERIC.
+CREATE TABLE IF NOT EXISTS funding_rounds (
+    id                   BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+    project_id           BIGINT NOT NULL REFERENCES projects (id) ON DELETE CASCADE,
+    created_by           TEXT NOT NULL,
+    name                 TEXT NOT NULL,
+    round_type           TEXT NOT NULL DEFAULT 'seed' CHECK (round_type IN ('pre_seed', 'seed', 'series_a', 'series_b', 'series_c', 'bridge', 'other')),
+    instrument           TEXT NOT NULL DEFAULT 'equity' CHECK (instrument IN ('equity', 'safe', 'convertible_note', 'other')),
+    target_amount        NUMERIC(18, 2) NOT NULL CHECK (target_amount > 0),
+    min_ticket           NUMERIC(18, 2) CHECK (min_ticket IS NULL OR min_ticket > 0),
+    max_ticket           NUMERIC(18, 2) CHECK (max_ticket IS NULL OR max_ticket > 0),
+    pre_money_valuation  NUMERIC(18, 2) CHECK (pre_money_valuation IS NULL OR pre_money_valuation > 0),
+    post_money_valuation NUMERIC(18, 2) CHECK (post_money_valuation IS NULL OR post_money_valuation > 0),
+    valuation_cap        NUMERIC(18, 2) CHECK (valuation_cap IS NULL OR valuation_cap > 0),
+    discount_pct         NUMERIC(5, 2) CHECK (discount_pct IS NULL OR (discount_pct >= 0 AND discount_pct < 100)),
+    currency             TEXT NOT NULL DEFAULT 'INR' CHECK (currency = 'INR'),
+    status               TEXT NOT NULL DEFAULT 'draft' CHECK (status IN ('draft', 'open', 'closed', 'cancelled')),
+    opens_on             DATE,
+    closes_on            DATE,
+    disclose_progress    BOOLEAN NOT NULL DEFAULT TRUE,
+    created_at           TIMESTAMPTZ NOT NULL DEFAULT now(),
+    updated_at           TIMESTAMPTZ NOT NULL DEFAULT now(),
+    CHECK (min_ticket IS NULL OR max_ticket IS NULL OR min_ticket <= max_ticket),
+    CHECK (opens_on IS NULL OR closes_on IS NULL OR opens_on <= closes_on)
+);
+CREATE INDEX IF NOT EXISTS funding_rounds_project_idx ON funding_rounds (project_id, created_at DESC);
+CREATE UNIQUE INDEX IF NOT EXISTS funding_rounds_one_open_idx ON funding_rounds (project_id) WHERE status = 'open';
+CREATE TABLE IF NOT EXISTS round_investments (
+    id                     BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+    round_id               BIGINT NOT NULL REFERENCES funding_rounds (id) ON DELETE CASCADE,
+    project_id             BIGINT NOT NULL REFERENCES projects (id) ON DELETE CASCADE,
+    investor_id            TEXT,
+    firm_id                BIGINT REFERENCES firms (id) ON DELETE SET NULL,
+    external_investor_name TEXT,
+    instrument             TEXT NOT NULL CHECK (instrument IN ('equity', 'safe', 'convertible_note', 'other')),
+    proposed_amount        NUMERIC(18, 2) CHECK (proposed_amount IS NULL OR proposed_amount > 0),
+    committed_amount       NUMERIC(18, 2) CHECK (committed_amount IS NULL OR committed_amount > 0),
+    currency               TEXT NOT NULL DEFAULT 'INR' CHECK (currency = 'INR'),
+    status                 TEXT NOT NULL CHECK (status IN ('proposed', 'accepted', 'committed', 'partially_funded', 'funded', 'rejected', 'cancelled')),
+    agreed_equity_pct      NUMERIC(7, 4) CHECK (agreed_equity_pct IS NULL OR (agreed_equity_pct > 0 AND agreed_equity_pct <= 100)),
+    agreed_valuation       NUMERIC(18, 2) CHECK (agreed_valuation IS NULL OR agreed_valuation > 0),
+    discount_pct           NUMERIC(5, 2) CHECK (discount_pct IS NULL OR (discount_pct >= 0 AND discount_pct < 100)),
+    terms                  TEXT NOT NULL DEFAULT '',
+    investor_note          TEXT NOT NULL DEFAULT '',
+    founder_note           TEXT NOT NULL DEFAULT '',
+    committed_on           DATE,
+    created_by             TEXT NOT NULL,
+    created_at             TIMESTAMPTZ NOT NULL DEFAULT now(),
+    updated_at             TIMESTAMPTZ NOT NULL DEFAULT now(),
+    CHECK (investor_id IS NOT NULL OR external_investor_name IS NOT NULL)
+);
+CREATE INDEX IF NOT EXISTS round_investments_round_idx ON round_investments (round_id, status);
+CREATE INDEX IF NOT EXISTS round_investments_investor_idx ON round_investments (investor_id, created_at DESC);
+CREATE UNIQUE INDEX IF NOT EXISTS round_investments_one_active_idx ON round_investments (round_id, investor_id)
+    WHERE investor_id IS NOT NULL AND status NOT IN ('rejected', 'cancelled');
+CREATE TABLE IF NOT EXISTS round_investment_transactions (
+    id                     BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+    allocation_id          BIGINT NOT NULL REFERENCES round_investments (id) ON DELETE CASCADE,
+    type                   TEXT NOT NULL DEFAULT 'receipt' CHECK (type IN ('receipt', 'refund')),
+    amount                 NUMERIC(18, 2) NOT NULL CHECK (amount > 0),
+    received_on            DATE NOT NULL,
+    reference              TEXT NOT NULL DEFAULT '',
+    recorded_by            TEXT NOT NULL,
+    investor_confirmed_at  TIMESTAMPTZ,
+    created_at             TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS round_investment_transactions_alloc_idx ON round_investment_transactions (allocation_id, received_on);
+CREATE TABLE IF NOT EXISTS round_investment_events (
+    id             BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+    allocation_id  BIGINT REFERENCES round_investments (id) ON DELETE CASCADE,
+    round_id       BIGINT REFERENCES funding_rounds (id) ON DELETE CASCADE,
+    actor_id       TEXT NOT NULL,
+    action         TEXT NOT NULL,
+    from_status    TEXT,
+    to_status      TEXT,
+    details        JSONB NOT NULL DEFAULT '{}',
+    created_at     TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS round_investment_events_alloc_idx ON round_investment_events (allocation_id, created_at);

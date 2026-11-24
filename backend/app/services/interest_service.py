@@ -1,6 +1,7 @@
 import logging
 from datetime import datetime, timezone
 from typing import List, Dict, Any, Optional, Union
+from app.services.settings_service import email_allowed
 from app.database import postgres as pg
 
 logger = logging.getLogger(__name__)
@@ -122,6 +123,7 @@ class InterestService:
             # Everyone on the startup's team (owner and co-founders) hears about it.
             for member_id in await TeamService.team_user_ids(canonical_project_id) or [founder_id]:
                 await NotificationService.create_notification(
+                    category="investor_interest",
                     target_role="FOUNDER",
                     user_id=member_id,
                     title=f"Intro Request: {investor_name}",
@@ -138,14 +140,15 @@ class InterestService:
             if not doc["founder_email"]:
                 raise ValueError("founder has no email on file")
             from app.services.email_service import EmailService
-            EmailService.send_intro_request_email(
-                founder_email=doc["founder_email"],
-                founder_name=founder_name,
-                investor_name=investor_name,
-                investor_firm=investor_firm,
-                project_title=project_title,
-                message=message,
-            )
+            if await email_allowed(founder_id, "investor_interest"):
+                EmailService.send_intro_request_email(
+                    founder_email=doc["founder_email"],
+                    founder_name=founder_name,
+                    investor_name=investor_name,
+                    investor_firm=investor_firm,
+                    project_title=project_title,
+                    message=message,
+                )
         except Exception as e:
             logger.warning("Failed to dispatch founder intro email: %s", e)
 
@@ -198,6 +201,10 @@ class InterestService:
             ) or {}
             emails = await cls._account_emails([founder_id, investor_id])
             founder_email = emails.get(founder_id) or current.get("founder_email")
+            from app.services.settings_service import privacy as _privacy
+            founder_privacy = await _privacy(founder_id, "FOUNDER") if founder_id else {}
+            if not founder_privacy.get("show_email", True):
+                founder_email = None  # the founder chose not to share their email
             if founder_email:
                 update_fields["founder_email"] = founder_email
             if emails.get(investor_id):
@@ -208,7 +215,7 @@ class InterestService:
                 "unlocked_at": now.isoformat(),
                 "founder_name": founder_name,
                 "founder_email": founder_email,
-                "founder_linkedin": profile.get("linkedin") or None,
+                "founder_linkedin": (profile.get("linkedin") or None) if founder_privacy.get("show_linkedin", True) else None,
                 "founder_website": profile.get("website") or None,
                 "pitch_deck_url": p_doc.get("pitch_deck_url") or None,
             }
@@ -223,6 +230,7 @@ class InterestService:
                     raise _SkipNotice()
                 from app.services.notification_service import NotificationService
                 await NotificationService.create_notification(
+                    category="founder_responses",
                     target_role="INVESTOR",
                     user_id=investor_id,
                     title=f"🎉 Deal Room Unlocked: {project_title}",
@@ -244,13 +252,14 @@ class InterestService:
                 if not investor_email:
                     raise ValueError("investor has no email on file")
                 from app.services.email_service import EmailService
-                EmailService.send_dealroom_unlocked_email(
-                    investor_email=investor_email,
-                    investor_name=investor_name,
-                    founder_name=founder_name,
-                    project_title=project_title,
-                    room_id=f"room-{project_id}",
-                )
+                if await email_allowed(investor_id, "founder_responses"):
+                    EmailService.send_dealroom_unlocked_email(
+                        investor_email=investor_email,
+                        investor_name=investor_name,
+                        founder_name=founder_name,
+                        project_title=project_title,
+                        room_id=f"room-{project_id}",
+                    )
             except _SkipNotice:
                 pass
             except Exception as e:
@@ -260,6 +269,7 @@ class InterestService:
             try:
                 from app.services.notification_service import NotificationService
                 await NotificationService.create_notification(
+                    category="founder_responses",
                     target_role="INVESTOR",
                     user_id=investor_id,
                     title=f"Introduction Update: {project_title}",

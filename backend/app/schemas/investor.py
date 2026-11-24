@@ -132,6 +132,12 @@ class DiscoverItem(BaseModel):
     interest_status: Optional[str] = None
     interest_initiated_by: Optional[str] = None
     company_verified: bool = False
+    has_logo: bool = False
+    problem: Optional[str] = None
+    solution: Optional[str] = None
+    demo_url: Optional[str] = None
+    # The startup's open funding round: name, type, instrument, target, tickets, and progress if disclosed.
+    open_round: Optional[Dict[str, Any]] = None
     # Partners in your firm already pursuing this startup: [{name, status, initiated_by}]
     partners: List[Dict[str, Any]] = Field(default_factory=list)
     room_id: Optional[str] = None

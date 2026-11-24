@@ -319,6 +319,7 @@ class TeamService:
                 from app.services.notification_service import NotificationService
                 what = f"join {label} as a co-founder" if kind == "project" else f"join {label} as a {role}"
                 await NotificationService.create_notification(
+                    category="account",
                     target_role="FOUNDER" if kind == "project" else "INVESTOR", user_id=invitee,
                     title=f"{inviter_name} invited you to {what}"[:200], desc="Accept or decline the invitation.",
                     badge="Invitation", badge_variant="primary", link=f"/invite/{invite['id']}",
@@ -430,6 +431,7 @@ class TeamService:
         try:
             from app.services.notification_service import NotificationService
             await NotificationService.create_notification(
+                category="account",
                 target_role="FOUNDER" if inv["kind"] == "project" else "INVESTOR", user_id=inv["invited_by"],
                 title=f"{user.name or user.email} joined your team", desc="Your invitation was accepted.",
                 badge="Team", badge_variant="success",

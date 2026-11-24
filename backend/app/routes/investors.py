@@ -75,6 +75,9 @@ async def discover(
     matched_only: bool = False,
     saved_only: bool = False,
     verified_only: bool = False,
+    round_status: Optional[Literal["open", "none"]] = None,
+    ticket_min: Optional[float] = Query(None, ge=0),
+    ticket_max: Optional[float] = Query(None, ge=0),
     sort: Literal["fit", "newest", "raise_asc", "raise_desc"] = "fit",
     page: int = Query(1, ge=1, le=1000),
     page_size: int = Query(12, ge=1, le=50),
@@ -85,13 +88,20 @@ async def discover(
         user.id, q=q, industries=industry[:20], stages=stage[:10], business_models=business_model[:20],
         countries=country[:40], regions=region[:10], min_raise=min_raise, max_raise=max_raise,
         min_monthly_revenue=min_monthly_revenue, min_customers=min_customers, live_product=live_product,
-        matched_only=matched_only, saved_only=saved_only, verified_only=verified_only, sort=sort, page=page,
+        matched_only=matched_only, saved_only=saved_only, verified_only=verified_only, round_status=round_status,
+        ticket_min=ticket_min, ticket_max=ticket_max, sort=sort, page=page,
         page_size=page_size, limited=not await VerificationService.investor_is_verified(user.id),
     )
     from app.services.team_service import TeamService
     activity = await TeamService.partner_activity(user.id, [i["id"] for i in page_data["items"]])
+    from app.services.funding_service import FundingService
+    rounds = await FundingService.open_round_progress([i["id"] for i in page_data["items"]])
+    limited = not await VerificationService.investor_is_verified(user.id)
     for item in page_data["items"]:
         item["partners"] = activity.get(item["id"], [])
+        item["open_round"] = rounds.get(item["id"])
+        if limited:
+            item["demo_url"] = None
     return page_data
 
 

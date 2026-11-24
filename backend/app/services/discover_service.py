@@ -9,7 +9,7 @@ from app.services.criteria import REGIONS, _STAGE_ALIASES, has_criteria, thesis_
 
 # Only public facts leave this service: never readiness scores, AI feedback or contact details.
 _PUBLIC = (
-    "p.id, p.title, p.tagline, p.description, p.industry, p.stage, p.funding_required, p.business_model, "
+    "p.id, p.title, p.tagline, p.description, p.problem, p.solution, p.demo_url, p.industry, p.stage, p.funding_required, p.business_model, "
     "p.target_market, p.website, p.country, p.city, p.monthly_revenue, p.customer_count, p.product_status, "
     "p.team_size, p.technical_founder, p.repeat_founder, p.domain_expertise, p.full_time_team, p.ip_protected, "
     "p.created_at"
@@ -55,6 +55,9 @@ class DiscoverService:
         matched_only: bool = False,
         saved_only: bool = False,
         verified_only: bool = False,
+        round_status: Optional[str] = None,
+        ticket_min: Optional[float] = None,
+        ticket_max: Optional[float] = None,
         sort: str = "fit",
         page: int = 1,
         page_size: int = 12,
@@ -100,10 +103,10 @@ class DiscoverService:
             where.append("p.funding_required <= %s")
             params.append(max_raise)
         if min_monthly_revenue is not None:
-            where.append("p.monthly_revenue >= %s")
+            where.append("p.monthly_revenue >= %s AND COALESCE((fps.settings->'privacy'->>'share_traction')::boolean, TRUE)")
             params.append(min_monthly_revenue)
         if min_customers is not None:
-            where.append("p.customer_count >= %s")
+            where.append("p.customer_count >= %s AND COALESCE((fps.settings->'privacy'->>'share_traction')::boolean, TRUE)")
             params.append(min_customers)
         if live_product:
             where.append("p.product_status IN ('launched', 'scaling')")
@@ -113,6 +116,19 @@ class DiscoverService:
             where.append("s.project_id IS NOT NULL")
         if verified_only:
             where.append("cv.status = 'verified'")
+        if round_status == "open":
+            where.append("fr.id IS NOT NULL")
+        elif round_status == "none":
+            where.append("fr.id IS NULL")
+        if ticket_min is not None or ticket_max is not None:
+            # Startups whose open round accepts a ticket inside the investor's range.
+            where.append("fr.id IS NOT NULL")
+            if ticket_min is not None:
+                where.append("(fr.max_ticket IS NULL OR fr.max_ticket >= %s)")
+                params.append(ticket_min)
+            if ticket_max is not None:
+                where.append("(fr.min_ticket IS NULL OR fr.min_ticket <= %s)")
+                params.append(ticket_max)
 
         order = SORTS.get(sort, SORTS["fit"])
         sql = f"""
@@ -122,9 +138,13 @@ class DiscoverService:
                    i.id AS interest_id, i.status AS interest_status, i.initiated_by AS interest_initiated_by,
                    d.id AS room_id, d.stage AS deal_stage,
                    COALESCE(cv.status = 'verified', FALSE) AS company_verified,
+                   (p.logo_path IS NOT NULL) AS has_logo,
+                   COALESCE((fps.settings->'privacy'->>'share_traction')::boolean, TRUE) AS share_traction,
                    count(*) OVER () AS total
             FROM projects p
             LEFT JOIN company_verifications cv ON cv.project_id = p.id
+            LEFT JOIN founder_profiles fps ON fps.user_id = p.founder_id
+            LEFT JOIN funding_rounds fr ON fr.project_id = p.id AND fr.status = 'open'
             LEFT JOIN matches m ON m.project_id = p.id AND m.investor_id = %s
             LEFT JOIN saved_opportunities s ON s.project_id = p.id AND s.investor_id = %s
             LEFT JOIN project_interests i ON i.project_id = p.id AND i.investor_id = %s
@@ -143,6 +163,8 @@ class DiscoverService:
             total = int(await pg.fetch_val(
                 "SELECT count(*) AS n FROM projects p "
                 "LEFT JOIN company_verifications cv ON cv.project_id = p.id "
+                "LEFT JOIN founder_profiles fps ON fps.user_id = p.founder_id "
+                "LEFT JOIN funding_rounds fr ON fr.project_id = p.id AND fr.status = 'open' "
                 "LEFT JOIN matches m ON m.project_id = p.id AND m.investor_id = %s "
                 "LEFT JOIN saved_opportunities s ON s.project_id = p.id AND s.investor_id = %s "
                 f"WHERE {' AND '.join(where)}",
@@ -152,6 +174,13 @@ class DiscoverService:
             r.pop("total", None)
             if limited:
                 r["website"] = None
+            if not r.pop("share_traction", True):
+                r["monthly_revenue"] = None
+                r["customer_count"] = None
+                r["reasons"] = [
+                    {**x, "explanation": "The founder keeps traction figures private."} if x.get("category") == "Traction" else x
+                    for x in (r.get("reasons") or [])
+                ]
         pref = await pg.fetch_one("SELECT * FROM investor_preferences WHERE investor_id = %s", [investor_id])
         criteria_set = has_criteria(thesis_from_row(pref)) if pref else False
         return {
@@ -202,7 +231,7 @@ class DiscoverService:
         interests = await pg.fetch_all(
             """
             SELECT i.id AS interest_id, i.project_id, i.status AS interest_status, i.created_at, i.updated_at,
-                   i.response_note, i.founder_email, i.initiated_by, i.pass_reason, i.message,
+                   i.response_note, i.founder_email, i.founder_id, i.initiated_by, i.pass_reason, i.message,
                    i.founder_name AS requester_name,
                    COALESCE(p.title, i.project_title) AS title, COALESCE(p.industry, i.project_industry) AS industry,
                    p.stage, p.funding_required, p.tagline
@@ -252,6 +281,7 @@ class DiscoverService:
                 "message": i["message"] if i["initiated_by"] == "founder" else None,
                 "founder_name": i["requester_name"] if i["initiated_by"] == "founder" else None,
                 "founder_email": i["founder_email"] if i["interest_status"] == "accepted" else None,
+                "_founder_id": i.get("founder_id"),
                 "requested_at": i["created_at"],
                 "last_activity": i["updated_at"],
             }
@@ -286,6 +316,11 @@ class DiscoverService:
                 "last_activity": s["saved_at"],
             }
 
+        from app.services.settings_service import privacy as _privacy
+        for item in items.values():
+            fid = item.pop("_founder_id", None)
+            if item.get("founder_email") and fid and not (await _privacy(fid, "FOUNDER")).get("show_email", True):
+                item["founder_email"] = None
         out = []
         for pid, item in items.items():
             stage = item.get("deal_stage")

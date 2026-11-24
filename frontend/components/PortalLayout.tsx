@@ -26,6 +26,7 @@ import {
   X,
 } from "lucide-react";
 import { api, MeResponse } from "@/lib/api";
+import { applyServerPreferences, getDisplayPrefs } from "@/lib/displayPrefs";
 import { authClient, clearApiToken } from "@/lib/auth/client";
 import { BrandMark } from "@/components/BrandMark";
 import { cx } from "@/components/ui";
@@ -43,6 +44,8 @@ interface PortalLayoutProps {
   title?: string;
   subtitle?: string;
   actions?: React.ReactNode;
+  /** Full-width page without the sidebar; the workspace sections move to a compact top bar. */
+  wide?: boolean;
 }
 
 interface NavItem {
@@ -52,11 +55,28 @@ interface NavItem {
   icon: React.ComponentType<{ className?: string }>;
 }
 
-export function PortalLayout({ role, children, activeItem, onSelectItem, title }: PortalLayoutProps) {
+export function PortalLayout({ role, children, activeItem, onSelectItem, title, wide = false }: PortalLayoutProps) {
   const router = useRouter();
   const [me, setMe] = useState<MeResponse | null>(null);
   const [unread, setUnread] = useState(0);
   const [drawerOpen, setDrawerOpen] = useState(false);
+  // Starts from the locally cached preference so the first paint matches; the server copy follows.
+  const [showBadge, setShowBadge] = useState(() => getDisplayPrefs().showUnreadBadge);
+
+  useEffect(() => {
+    let active = true;
+    api
+      .getMySettings()
+      .then((s) => {
+        if (!active) return;
+        applyServerPreferences(s.settings.preferences);
+        setShowBadge(getDisplayPrefs().showUnreadBadge);
+      })
+      .catch(() => undefined);
+    return () => {
+      active = false;
+    };
+  }, []);
 
   useEffect(() => {
     let active = true;
@@ -111,7 +131,23 @@ export function PortalLayout({ role, children, activeItem, onSelectItem, title }
       .join("") || "?";
 
   const signOut = async () => {
-    await authClient.signOut();
+    // The session lives with the sign-in service (Neon Auth). If it can't be reached, retry once,
+    // then say so: leaving the page would look signed out while the session is still active.
+    const attempt = async () => {
+      const res = (await authClient.signOut()) as { error?: { message?: string } | null } | undefined;
+      if (res?.error) throw new Error(res.error.message || "Sign-out failed");
+    };
+    try {
+      try {
+        await attempt();
+      } catch {
+        await new Promise((r) => setTimeout(r, 1000));
+        await attempt();
+      }
+    } catch {
+      window.alert("We couldn't reach the sign-in service to sign you out. Check your connection and try again in a moment.");
+      return;
+    }
     clearApiToken();
     router.replace("/login");
     router.refresh();
@@ -179,20 +215,20 @@ export function PortalLayout({ role, children, activeItem, onSelectItem, title }
       <aside
         className={cx(
           "fixed inset-y-0 left-0 z-50 w-60 border-r border-sidebar-line bg-sidebar transition-transform duration-200",
-          "md:sticky md:top-0 md:h-screen md:translate-x-0",
+          !wide && "md:sticky md:top-0 md:h-screen md:translate-x-0",
           drawerOpen ? "translate-x-0" : "-translate-x-full"
         )}
       >
         {sidebar}
       </aside>
       {drawerOpen && (
-        <div className="fixed inset-0 z-40 bg-ink/40 md:hidden" onClick={() => setDrawerOpen(false)} aria-hidden="true" />
+        <div className={cx("fixed inset-0 z-40 bg-ink/40", !wide && "md:hidden")} onClick={() => setDrawerOpen(false)} aria-hidden="true" />
       )}
 
       <div className="flex min-w-0 flex-1 flex-col bg-canvas md:min-h-screen">
         {/* Top bar */}
         <header className="sticky top-0 z-30 flex h-14 items-center justify-between gap-3 border-b border-line bg-canvas/90 px-4 backdrop-blur sm:px-8">
-          <div className="flex items-center gap-2 md:hidden">
+          <div className={cx("flex items-center gap-2", wide ? "lg:hidden" : "md:hidden")}>
             <button
               type="button"
               onClick={() => setDrawerOpen(true)}
@@ -206,7 +242,31 @@ export function PortalLayout({ role, children, activeItem, onSelectItem, title }
               <span className="font-serif text-base font-medium">VentureX</span>
             </Link>
           </div>
-          <div className="hidden md:block" />
+          {wide ? (
+            <div className="hidden min-w-0 items-center gap-6 lg:flex">
+              <Link href="/" className="flex shrink-0 items-center gap-2">
+                <BrandMark size={26} className="border-transparent" />
+                <span className="font-serif text-[17px] font-medium">VentureX</span>
+              </Link>
+              <nav aria-label="Workspace" className="flex items-center gap-1 overflow-x-auto">
+                {primary.map((item) => (
+                  <Link
+                    key={item.id}
+                    href={item.href}
+                    aria-current={activeItem === item.id ? "page" : undefined}
+                    className={cx(
+                      "whitespace-nowrap rounded-md px-2.5 py-1.5 text-sm transition-colors",
+                      activeItem === item.id ? "bg-sidebar text-white" : "text-ink-2 hover:bg-subtle hover:text-ink"
+                    )}
+                  >
+                    {item.label}
+                  </Link>
+                ))}
+              </nav>
+            </div>
+          ) : (
+            <div className="hidden md:block" />
+          )}
 
           <div className="flex items-center gap-1.5">
             <Link
@@ -220,7 +280,7 @@ export function PortalLayout({ role, children, activeItem, onSelectItem, title }
               )}
             >
               <Bell className="w-5 h-5" />
-              {unread > 0 && (
+              {unread > 0 && showBadge && (
                 <span className="absolute -right-0.5 -top-0.5 min-w-[18px] rounded-full bg-accent px-1 text-center text-[10px] font-semibold leading-[18px] text-white ring-2 ring-canvas">
                   {unread > 99 ? "99+" : unread}
                 </span>
@@ -231,8 +291,8 @@ export function PortalLayout({ role, children, activeItem, onSelectItem, title }
               name={me?.name}
               email={me?.email}
               workspace={isFounder ? "Founder" : "Investor"}
-              profileHref={`${base}?tab=profile`}
-              settingsHref={`${base}?tab=settings`}
+              profileHref={isFounder ? "/founder/profile" : "/investor/profile"}
+              settingsHref={isFounder ? "/founder/settings" : "/investor/settings"}
               isAdmin={!!me?.is_admin}
               onSignOut={signOut}
             />
@@ -240,7 +300,7 @@ export function PortalLayout({ role, children, activeItem, onSelectItem, title }
         </header>
 
         <main className="flex-1">
-          <div className="mx-auto w-full max-w-6xl px-4 py-6 sm:px-8 sm:py-10">
+          <div className={cx("mx-auto w-full px-4 py-6 sm:px-8 sm:py-10", wide ? "max-w-[1400px]" : "max-w-6xl")}>
             <InvitationsBanner />
             {activeItem !== "verification" && <InvestorVerificationBanner me={me} />}
             {children}

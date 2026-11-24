@@ -642,7 +642,7 @@ def _clamp(value: float) -> float:
 
 class AnalysisService:
     @classmethod
-    async def analyze(cls, project: Dict[str, Any], engine: Optional[str] = None) -> Dict[str, Any]:
+    async def analyze(cls, project: Dict[str, Any], engine: Optional[str] = None, notify: bool = True) -> Dict[str, Any]:
         """Run an analysis for a project row, store it, mirror it onto the project, return it."""
         engine = engine or settings.analysis_engine
         gathered = await _gather(project)
@@ -687,6 +687,8 @@ class AnalysisService:
             "updated_at": datetime.now(timezone.utc),
         }, "id = %s", [project["id"]])
         logger.info("Analysis %s for project %s: %s (%s)", row["id"], project["id"], overall, engine)
+        if notify:  # not for the automatic baseline check when a project is created
+            await _notify_analysis_done(project, overall)
         return row
 
     @classmethod
@@ -703,3 +705,19 @@ class AnalysisService:
             "FROM project_analyses WHERE project_id = %s ORDER BY created_at DESC, id DESC LIMIT %s",
             [project_id, limit],
         )
+
+
+async def _notify_analysis_done(project: Dict[str, Any], score: Any) -> None:
+    """In-app notice to the founding team that a readiness analysis finished (category ai_analysis)."""
+    try:
+        from app.services.notification_service import NotificationService
+        from app.services.team_service import TeamService
+        for uid in await TeamService.team_user_ids(project["id"]):
+            await NotificationService.create_notification(
+                category="ai_analysis", target_role="FOUNDER", user_id=uid,
+                title=f"Readiness analysis finished: {project.get('title', 'your project')}",
+                desc=f"Overall readiness {round(float(score))}/100. Open the report to see what to improve.",
+                badge="Analysis", badge_variant="primary", link=f"/founder/projects/{project['id']}",
+            )
+    except Exception as e:
+        logger.warning("Could not notify about analysis for project %s: %s", project.get("id"), e)

@@ -143,7 +143,7 @@ with sync_playwright() as p:
         i.screenshot(path=str(OUT / "tm_3_firm.png"), full_page=True)
         i.goto(B + "/investor/discover", wait_until="networkidle")
         i.get_by_role("searchbox", name="Search startups").fill(MINE)
-        i.get_by_text("from your firm is already on this", exact=False).first.wait_for(timeout=20000)
+        i.get_by_text("from your firm is already talking to them", exact=False).first.wait_for(timeout=20000)
         ok("Discover warns that a partner is already on this startup", True)
 
         # ---- founders see the partners on the investor's profile
