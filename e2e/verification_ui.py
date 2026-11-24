@@ -94,7 +94,7 @@ with sync_playwright() as p:
         ok("unverified investor sees the verification banner", True)
         i.get_by_role("searchbox", name="Search startups").fill(TITLE)
         i.get_by_role("link", name="Verify to request").first.wait_for(timeout=20000)
-        ok("Discover offers 'Verify to request' instead of Request intro", i.get_by_role("button", name="Request intro").count() == 0)
+        ok("Discover offers 'Verify to request' instead of Express interest", i.get_by_role("button", name="Express interest").count() == 0)
         i.screenshot(path=str(OUT / "vf_1_discover_limited.png"), full_page=True)
 
         i.goto(B + "/investor/verification", wait_until="networkidle")
@@ -123,7 +123,7 @@ with sync_playwright() as p:
         ok("investor sees Verified", True)
         i.goto(B + "/investor/discover", wait_until="networkidle")
         i.get_by_role("searchbox", name="Search startups").fill(TITLE)
-        i.get_by_role("button", name="Request intro").first.wait_for(timeout=20000)
+        i.get_by_role("button", name="Express interest").first.wait_for(timeout=20000)
         ok("verified investor can request intros; banner gone",
            i.get_by_text("Verify your investor account").count() == 0)
 
@@ -169,6 +169,7 @@ with sync_playwright() as p:
 
         # ---- badges and filters
         i.goto(B + "/investor/discover", wait_until="networkidle")
+        i.get_by_role("button", name=re.compile("More filters")).click()
         i.get_by_text("Verified startups only", exact=True).click()
         i.get_by_role("searchbox", name="Search startups").fill("E2E Verify")
         i.get_by_role("link", name=TITLE2).first.wait_for(timeout=20000)

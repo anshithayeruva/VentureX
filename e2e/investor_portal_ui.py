@@ -63,7 +63,7 @@ with sync_playwright() as p:
     # ---- discover
     q.goto(B + "/investor/discover", wait_until="networkidle")
     q.get_by_text("startup", exact=False).first.wait_for(timeout=15000)
-    count_text = q.locator("p[aria-live=polite]").first.inner_text()
+    count_text = q.locator("[aria-live=polite]").first.inner_text()
     ok("discover shows a result count", "startup" in count_text, count_text)
     q.screenshot(path=str(OUT / "2_discover.png"), full_page=True)
     first_save = q.get_by_role("button", name="Save ").first

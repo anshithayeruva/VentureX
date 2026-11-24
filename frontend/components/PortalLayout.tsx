@@ -131,7 +131,23 @@ export function PortalLayout({ role, children, activeItem, onSelectItem, title, 
       .join("") || "?";
 
   const signOut = async () => {
-    await authClient.signOut();
+    // The session lives with the sign-in service (Neon Auth). If it can't be reached, retry once,
+    // then say so: leaving the page would look signed out while the session is still active.
+    const attempt = async () => {
+      const res = (await authClient.signOut()) as { error?: { message?: string } | null } | undefined;
+      if (res?.error) throw new Error(res.error.message || "Sign-out failed");
+    };
+    try {
+      try {
+        await attempt();
+      } catch {
+        await new Promise((r) => setTimeout(r, 1000));
+        await attempt();
+      }
+    } catch {
+      window.alert("We couldn't reach the sign-in service to sign you out. Check your connection and try again in a moment.");
+      return;
+    }
     clearApiToken();
     router.replace("/login");
     router.refresh();
