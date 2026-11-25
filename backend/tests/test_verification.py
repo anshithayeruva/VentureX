@@ -119,13 +119,23 @@ def test_unverified_investor_explores_in_limited_form(client, world, as_user):
     ({"linkedin_url": "https://example.com/me"}, "bad_linkedin"),
     ({"website": "linkedin.com/company/vf"}, "bad_website"),
     ({"website": "not a url"}, "bad_firm_website"),
-    ({"past_investments": [{"company": " "}]}, "missing_past_investments"),
 ])
 def test_investor_evidence_is_checked(client, world, as_user, bad, code):
     as_user(INVESTOR)
     res = client.post("/api/investors/verification", json={**EVIDENCE, **bad})
     assert res.status_code == 422, res.text
     assert res.json()["detail"]["code"] == code
+
+
+def test_past_investments_are_optional(client, world, as_user):
+    """A first-time angel can ask for review without past investments; blank rows are ignored."""
+    as_user(INVESTOR)
+    for past in ([], [{"company": " "}]):
+        res = client.post("/api/investors/verification", json={**EVIDENCE, "past_investments": past})
+        assert res.status_code == 200, res.text
+        assert res.json()["status"] == "pending"
+    res = client.post("/api/investors/verification", json={k: v for k, v in EVIDENCE.items() if k != "past_investments"})
+    assert res.status_code == 200, res.text
 
 
 def test_admin_only(client, world, as_user):

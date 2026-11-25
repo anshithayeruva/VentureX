@@ -19,7 +19,7 @@ def _err(e: VerificationError) -> HTTPException:
 class InvestorEvidence(BaseModel):
     linkedin_url: str = Field(..., max_length=300)
     website: str = Field(..., max_length=300)
-    past_investments: List[PortfolioEntry] = Field(..., min_length=1, max_length=20)
+    past_investments: List[PortfolioEntry] = Field(default_factory=list, max_length=20)  # optional
 
 
 class CodeRequest(BaseModel):

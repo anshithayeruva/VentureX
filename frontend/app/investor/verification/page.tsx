@@ -99,7 +99,7 @@ export default function InvestorVerificationPage() {
                   </div>
                   <div>
                     <dt className="text-muted">Past investments</dt>
-                    <dd className="text-ink">{data.past_investments.map((d) => d.company).join(", ")}</dd>
+                    <dd className="text-ink">{data.past_investments.length ? data.past_investments.map((d) => d.company).join(", ") : "None listed"}</dd>
                   </div>
                 </dl>
               </div>
@@ -112,7 +112,7 @@ export default function InvestorVerificationPage() {
                 <Field label="Firm website" htmlFor="vf-website" hint="Your fund, firm or angel network. Angels can use a personal site.">
                   <input id="vf-website" required className={inputClass} placeholder="https://yourfund.in" value={website} onChange={(e) => setWebsite(e.target.value)} />
                 </Field>
-                <Field label="Past investments" hint="One or two companies you've invested in. They also appear on your profile for founders.">
+                <Field label="Past investments (optional)" hint="One or two companies you've invested in, if any. They also appear on your profile for founders.">
                   <div className="space-y-2">
                     {deals.map((d, i) => (
                       <div key={i} className="grid gap-2 sm:grid-cols-[minmax(0,1fr)_120px_90px_auto]">
@@ -133,7 +133,7 @@ export default function InvestorVerificationPage() {
                   </div>
                 </Field>
                 <div className="flex justify-end">
-                  <Button type="submit" disabled={saving || !deals.some((d) => d.company.trim())}>
+                  <Button type="submit" disabled={saving}>
                     {saving ? "Sending…" : data.status === "pending" ? "Update and resend" : "Send for review"}
                   </Button>
                 </div>
