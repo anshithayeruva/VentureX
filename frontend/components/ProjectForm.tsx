@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState } from "react";
+import React, { useRef, useState } from "react";
 import Link from "next/link";
 import { CheckCircle2, Upload } from "lucide-react";
 import { Card, Field, Toggle, buttonClass, cx, inputClass } from "@/components/ui";
@@ -59,6 +59,9 @@ export const EMPTY_PROJECT: ProjectCreateInput = {
 };
 
 const MAX_DECK_BYTES = 25 * 1024 * 1024;
+const ALLOWED_DECK_EXT = /\.(pdf|pptx|docx)$/i;
+const GITHUB_REPO_RE =
+  /^https?:\/\/(?:www\.)?github\.com\/[A-Za-z0-9-]{1,39}\/[A-Za-z0-9._-]{1,100}(?:\.git)?\/?(?:[#?].*)?$/i;
 
 export interface ProjectFormExtras {
   /** Create mode: publish straight away. */
@@ -95,20 +98,66 @@ export function ProjectForm({
   const [publish, setPublish] = useState(initialPublish);
   const [deck, setDeck] = useState<File | null>(null);
   const [deckError, setDeckError] = useState<string | null>(null);
+  const [websiteError, setWebsiteError] = useState<string | null>(null);
+  const [githubError, setGithubError] = useState<string | null>(null);
+  const deckRef = useRef<HTMLDivElement>(null);
+  const websiteRef = useRef<HTMLInputElement>(null);
+  const githubRef = useRef<HTMLInputElement>(null);
 
   const set = <K extends keyof ProjectCreateInput>(key: K, value: ProjectCreateInput[K]) =>
     setData((prev) => ({ ...prev, [key]: value }));
 
   const text = (key: keyof ProjectCreateInput) => ({
     value: (data[key] as string) ?? "",
-    onChange: (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => set(key, e.target.value as never),
+    onChange: (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
+      if (key === "website" && websiteError) setWebsiteError(null);
+      if (key === "github_url" && githubError) setGithubError(null);
+      set(key, e.target.value as never);
+    },
   });
 
   return (
     <form
       onSubmit={(e) => {
         e.preventDefault();
-        onSubmit(data, { publish, deck });
+        const trimmedWebsite = (data.website || "").trim();
+        const trimmedGithub = (data.github_url || "").trim();
+        const trimmedDeckLink = (data.pitch_deck_url || "").trim();
+        const trimmedDemo = (data.demo_url || "").trim();
+
+        if (mode === "create") {
+          if (!deck) {
+            setDeckError("Please upload your pitch deck (PDF, PPTX or DOCX).");
+            deckRef.current?.scrollIntoView({ behavior: "smooth", block: "center" });
+            return;
+          }
+          if (!/^https?:\/\/\S+$/i.test(trimmedWebsite)) {
+            setWebsiteError("Please enter a valid website URL starting with http:// or https://.");
+            websiteRef.current?.focus();
+            websiteRef.current?.scrollIntoView({ behavior: "smooth", block: "center" });
+            return;
+          }
+          if (!GITHUB_REPO_RE.test(trimmedGithub)) {
+            setGithubError("Enter a valid GitHub repository URL (e.g. https://github.com/you/repo).");
+            githubRef.current?.focus();
+            githubRef.current?.scrollIntoView({ behavior: "smooth", block: "center" });
+            return;
+          }
+        }
+
+        setDeckError(null);
+        setWebsiteError(null);
+        setGithubError(null);
+        onSubmit(
+          {
+            ...data,
+            website: trimmedWebsite,
+            pitch_deck_url: trimmedDeckLink,
+            github_url: trimmedGithub,
+            demo_url: trimmedDemo,
+          },
+          { publish, deck }
+        );
       }}
       className="space-y-6"
     >
@@ -264,17 +313,24 @@ export function ProjectForm({
         description="The AI review reads your deck and public GitHub repo. Everything stays private until you publish."
       >
         {mode === "create" && (
-          <div>
+          <div ref={deckRef}>
             <input
               id="pf-deck"
               type="file"
               accept=".pdf,.pptx,.docx"
+              aria-required="true"
               className="hidden"
               onChange={(e) => {
                 const file = e.target.files?.[0];
                 if (!file) return;
+                if (!ALLOWED_DECK_EXT.test(file.name)) {
+                  setDeckError("Unsupported file type. Upload a PDF, PPTX or DOCX pitch deck.");
+                  e.target.value = "";
+                  return;
+                }
                 if (file.size > MAX_DECK_BYTES) {
                   setDeckError("The pitch deck must be 25 MB or smaller.");
+                  e.target.value = "";
                   return;
                 }
                 setDeckError(null);
@@ -283,7 +339,10 @@ export function ProjectForm({
             />
             <label
               htmlFor="pf-deck"
-              className="flex cursor-pointer items-center gap-3 rounded-lg border border-dashed border-line-strong px-4 py-4 hover:bg-canvas"
+              className={cx(
+                "flex cursor-pointer items-center gap-3 rounded-lg border border-dashed px-4 py-4 hover:bg-canvas",
+                deckError ? "border-danger bg-danger-soft/20" : "border-line-strong"
+              )}
             >
               {deck ? (
                 <CheckCircle2 className="h-5 w-5 shrink-0 text-positive" />
@@ -293,24 +352,54 @@ export function ProjectForm({
               <span className="min-w-0 text-sm">
                 <span className="block truncate font-medium text-ink">{deck ? deck.name : "Upload your pitch deck"}</span>
                 <span className="block text-muted">
-                  {deck ? `${Math.round(deck.size / 1024)} KB · click to replace` : "PDF, PPTX or DOCX, up to 25 MB. Optional."}
+                  {deck ? `${Math.round(deck.size / 1024)} KB · click to replace` : "PDF, PPTX or DOCX, up to 25 MB. Required."}
                 </span>
               </span>
             </label>
-            {deckError && <p className="mt-1.5 text-sm text-danger">{deckError}</p>}
+            {deckError && (
+              <p role="alert" className="mt-1.5 text-sm text-danger">
+                {deckError}
+              </p>
+            )}
           </div>
         )}
         <div className="grid gap-5 sm:grid-cols-2">
           <Field label="Website" htmlFor="pf-website">
-            <input id="pf-website" type="url" className={inputClass} placeholder="https://" {...text("website")} />
+            <input
+              ref={websiteRef}
+              id="pf-website"
+              type="url"
+              required={mode === "create"}
+              className={inputClass}
+              placeholder="https://"
+              {...text("website")}
+            />
+            {websiteError && (
+              <p role="alert" className="mt-1.5 text-sm text-danger">
+                {websiteError}
+              </p>
+            )}
           </Field>
-          <Field label="Deck link" htmlFor="pf-decklink" hint="If your deck lives on DocSend, Drive or similar.">
+          <Field label="Deck link (optional)" htmlFor="pf-decklink" hint="If your deck lives on DocSend, Drive or similar.">
             <input id="pf-decklink" type="url" className={inputClass} placeholder="https://" {...text("pitch_deck_url")} />
           </Field>
           <Field label="GitHub repository" htmlFor="pf-github" hint="Public repos are read during the review.">
-            <input id="pf-github" type="url" className={inputClass} placeholder="https://github.com/you/repo" {...text("github_url")} />
+            <input
+              ref={githubRef}
+              id="pf-github"
+              type="url"
+              required={mode === "create"}
+              className={inputClass}
+              placeholder="https://github.com/you/repo"
+              {...text("github_url")}
+            />
+            {githubError && (
+              <p role="alert" className="mt-1.5 text-sm text-danger">
+                {githubError}
+              </p>
+            )}
           </Field>
-          <Field label="Demo link" htmlFor="pf-demo">
+          <Field label="Demo link (optional)" htmlFor="pf-demo">
             <input id="pf-demo" type="url" className={inputClass} placeholder="Video or live product" {...text("demo_url")} />
           </Field>
         </div>

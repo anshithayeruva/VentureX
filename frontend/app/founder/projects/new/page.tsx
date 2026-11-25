@@ -29,6 +29,10 @@ export default function NewProjectPage() {
   }, []);
 
   const handleSubmit = async (data: ProjectCreateInput, { publish, deck }: ProjectFormExtras) => {
+    if (!deck || !data.website?.trim() || !data.github_url?.trim()) {
+      setError("Please upload your pitch deck and include your website and GitHub repository links.");
+      return;
+    }
     setSubmitting(true);
     setError(null);
     setDeckWarning(null);
