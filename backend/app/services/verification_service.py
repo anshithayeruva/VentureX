@@ -133,7 +133,8 @@ class VerificationService:
     @classmethod
     async def submit_investor(cls, user_id: str, linkedin_url: str, website: str,
                               past_investments: List[Dict[str, Any]]) -> Dict[str, Any]:
-        """Send evidence for review. The past investments also appear on the investor's public profile."""
+        """Send evidence for review. Past investments are optional; when given they also appear on the
+        investor's public profile."""
         from app.services.investor_service import InvestorService
         await InvestorService.get_or_create_profile(user_id)
         if await cls.investor_status(user_id) == "verified":
@@ -144,13 +145,14 @@ class VerificationService:
         site = _clean_url(website, "firm website")
         if _host(site).endswith("linkedin.com"):
             raise VerificationError("Add your firm's own website, not a LinkedIn page.", 422, "bad_website")
+        # Past investments are optional (first-time angels may have none). When given, they replace
+        # the portfolio shown on the profile; when left out, the existing portfolio is kept.
         deals = [d for d in past_investments if (d.get("company") or "").strip()]
-        if not deals:
-            raise VerificationError("Add at least one past investment.", 422, "missing_past_investments")
+        fields: Dict[str, Any] = {"portfolio": pg.Jsonb(deals)} if deals else {}
         await pg.update_where("investor_profiles", {
             "linkedin_url": linkedin,
             "website": site,
-            "portfolio": pg.Jsonb(deals),
+            **fields,
             "verification_status": "pending",
             "verification_note": None,
             "verification_submitted_at": _now(),
