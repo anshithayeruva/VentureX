@@ -20,6 +20,13 @@ const nextConfig: NextConfig = {
   async headers() {
     return [{ source: "/(.*)", headers: securityHeaders }];
   },
+  // The investor Firm and Company updates pages were removed; old links (emails, notifications) land on the overview.
+  async redirects() {
+    return [
+      { source: "/investor/firm", destination: "/investor/dashboard", permanent: false },
+      { source: "/investor/updates", destination: "/investor/dashboard", permanent: false },
+    ];
+  },
 };
 
 export default nextConfig;
