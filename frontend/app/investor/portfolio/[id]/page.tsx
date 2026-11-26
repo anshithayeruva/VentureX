@@ -7,7 +7,6 @@ import { ArrowLeft, FileQuestion, Trash2 } from "lucide-react";
 import { PortalLayout } from "@/components/PortalLayout";
 import { ErrorState, MoneyInput, Notice } from "@/components/forms";
 import { Button, ButtonLink, Card, EmptyState, Field, LoadingRows, Tag, cx, inputClass } from "@/components/ui";
-import { CompanyUpdatesPanel } from "@/components/updates";
 import { api } from "@/lib/api";
 import { cleanMoneyInput, formatCurrency, formatDate, formatSigned, gainTone, toNumber, todayISO } from "@/lib/money";
 import { COST_TYPES, SOURCE_LABEL, STATUS_TAG, TXN_LABEL } from "@/lib/portfolio";
@@ -214,7 +213,6 @@ export default function InvestmentPage({ params }: { params: Promise<{ id: strin
             </ul>
           </Card>
 
-          {h.project_id && <CompanyUpdatesPanel projectId={h.project_id} />}
 
           <Card className="space-y-4">
             <div>

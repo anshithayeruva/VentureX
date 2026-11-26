@@ -48,7 +48,7 @@ export default function InvitePage({ params }: { params: Promise<{ id: string }>
         setNotice({ text: "Invitation declined.", ok: true });
         return;
       }
-      router.replace(res.kind === "project" ? `/founder/projects/${res.project_id}` : "/investor/firm");
+      router.replace(res.kind === "project" ? `/founder/projects/${res.project_id}` : "/investor/dashboard");
       router.refresh();
     } catch (err) {
       setNotice({ text: err instanceof Error ? err.message : "That didn't work.", ok: false });

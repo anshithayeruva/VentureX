@@ -1,12 +1,10 @@
 "use client";
 
-import React, { useEffect, useState } from "react";
-import Link from "next/link";
-import { ArrowDownRight, ArrowUpRight, Inbox } from "lucide-react";
-import { Card, cx } from "@/components/ui";
-import { api } from "@/lib/api";
-import { formatMoney, timeAgo } from "@/lib/format";
-import type { InvestorUpdateItem, UpdateMetrics } from "@/types";
+import React from "react";
+import { ArrowDownRight, ArrowUpRight } from "lucide-react";
+import { cx } from "@/components/ui";
+import { formatMoney } from "@/lib/format";
+import type { UpdateMetrics } from "@/types";
 
 /* Shared pieces for founder updates to investors. */
 
@@ -91,49 +89,3 @@ export function TextSection({ title, body }: { title: string; body?: string | nu
   );
 }
 
-/** The latest updates from one portfolio company (on the investor's holding page). */
-export function CompanyUpdatesPanel({ projectId }: { projectId: number }) {
-  const [items, setItems] = useState<InvestorUpdateItem[] | null>(null);
-  useEffect(() => {
-    let active = true;
-    api
-      .getInvestorUpdates({ project_id: projectId })
-      .then((d) => active && setItems(d.items.slice(0, 3)))
-      .catch(() => active && setItems([]));
-    return () => {
-      active = false;
-    };
-  }, [projectId]);
-  if (items === null) return null;
-  return (
-    <Card className="space-y-3">
-      <div className="flex items-center justify-between gap-2">
-        <h2 className="text-lg font-medium text-ink">Company updates</h2>
-        {items.length > 0 && (
-          <Link href={`/investor/updates?project=${projectId}`} className="text-sm text-accent hover:underline">See all</Link>
-        )}
-      </div>
-      {items.length === 0 ? (
-        <p className="flex items-center gap-2 text-sm text-muted">
-          <Inbox className="h-4 w-4" />
-          No updates from this company yet. They arrive here when the founder sends one.
-        </p>
-      ) : (
-        <ul className="divide-y divide-line">
-          {items.map((u) => (
-            <li key={u.id} className="py-2.5">
-              <Link href={`/investor/updates?project=${projectId}&update=${u.id}`} className="flex items-start justify-between gap-3 hover:underline">
-                <span className="min-w-0">
-                  <span className="text-sm font-medium text-ink">{u.period_label}</span>
-                  {!u.read_at && <span className="ml-2 inline-block h-2 w-2 rounded-full bg-accent" aria-label="Unread" />}
-                  <span className="line-clamp-1 text-sm text-muted">{u.highlights || u.challenges}</span>
-                </span>
-                <span className="shrink-0 text-xs text-faint">{u.sent_at ? timeAgo(u.sent_at) : ""}</span>
-              </Link>
-            </li>
-          ))}
-        </ul>
-      )}
-    </Card>
-  );
-}
